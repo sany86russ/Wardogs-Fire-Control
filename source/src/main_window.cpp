@@ -725,6 +725,21 @@ public:
             QJsonObject item{{QStringLiteral("type"), QString::fromLatin1(widget->metaObject()->className())},
                 {QStringLiteral("name"), widget->objectName()}, {QStringLiteral("visible"), widget->isVisible()},
                 {QStringLiteral("width"), widget->width()}, {QStringLiteral("height"), widget->height()}};
+            QRect snapshot_rect(view->mapFromGlobal(widget->mapToGlobal(QPoint{})), widget->size());
+            if (widget->isVisible()) {
+                for (auto* ancestor = widget->parentWidget(); ancestor && ancestor != view;
+                     ancestor = ancestor->parentWidget()) {
+                    if (ancestor->isWindow()) break;
+                    snapshot_rect = snapshot_rect.intersected(
+                        QRect(view->mapFromGlobal(ancestor->mapToGlobal(QPoint{})), ancestor->size()));
+                }
+                snapshot_rect = snapshot_rect.intersected(view->rect());
+            } else {
+                snapshot_rect = {};
+            }
+            item.insert(QStringLiteral("snapshot_rect"), QJsonObject{
+                {QStringLiteral("x"), snapshot_rect.x()}, {QStringLiteral("y"), snapshot_rect.y()},
+                {QStringLiteral("width"), snapshot_rect.width()}, {QStringLiteral("height"), snapshot_rect.height()}});
             for (const auto* property : {"text", "title", "windowTitle", "toolTip", "accessibleName", "placeholderText"}) {
                 const auto value = widget->property(property).toString();
                 if (!value.isEmpty()) item.insert(QString::fromLatin1(property), value);
@@ -748,7 +763,8 @@ public:
         QSaveFile receipt(file.absoluteFilePath() + QStringLiteral(".json"));
         const auto bytes = QJsonDocument(QJsonObject{
             {QStringLiteral("language"), settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru")},
-            {QStringLiteral("mode"), mode}, {QStringLiteral("widgets"), widgets}}).toJson();
+            {QStringLiteral("mode"), mode}, {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
+            {QStringLiteral("widgets"), widgets}}).toJson();
         const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
         return written && view->grab().save(file.absoluteFilePath(), "PNG");
     }

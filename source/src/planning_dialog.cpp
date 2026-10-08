@@ -61,9 +61,12 @@ QLabel* note(const QString& text, QWidget* parent = nullptr) {
 }
 QVBoxLayout* page(QTabWidget* tabs, const QString& title) {
     auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("planningPageScroll"));
+    scroll->viewport()->setObjectName(QStringLiteral("planningPageViewport"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("planningPageContent"));
     content->setAutoFillBackground(true);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(6, 12, 6, 6);
@@ -429,6 +432,24 @@ PlanningDialog::PlanningDialog(Provider provider, Apply apply, QWidget* parent,
     colors.setColor(QPalette::Highlight, QColor("#244b4b"));
     colors.setColor(QPalette::HighlightedText, QColor("#eafbf8"));
     setPalette(colors);
+    // A stylesheet can reset child palettes during polish. Style the planning
+    // surfaces explicitly while keeping the application's control styles.
+    setStyleSheet(QStringLiteral(R"(
+QScrollArea#planningPageScroll { background:#0b1019; border:0; }
+QWidget#planningPageContent,QWidget#planningPageViewport { background:#0b1019; color:#dce6f4; }
+QLabel,QCheckBox { color:#dce6f4; }
+QListWidget#savedFireMissions,QTableWidget#flightMeasurements,QTextBrowser {
+    background:#0d1521; alternate-background-color:#111b28; color:#dce6f4;
+    selection-background-color:#244b4b; selection-color:#eafbf8;
+    border:1px solid #2b3b50;
+}
+QWidget#planningMissionsViewport,QWidget#planningMeasurementsViewport,QWidget#planningSourcesViewport {
+    background:#0d1521; color:#dce6f4;
+}
+QHeaderView::section,QTableCornerButton::section {
+    background:#192638; color:#dce6f4; border:1px solid #2b3b50; padding:6px;
+}
+)"));
     configure_frameless_window(this);
     setWindowTitle(ui_text("Планирование · WARDOGS"));
     setModal(true);
@@ -531,6 +552,7 @@ PlanningDialog::PlanningDialog(Provider provider, Apply apply, QWidget* parent,
     missions_page->addLayout(save_row);
     s.saved = new QListWidget;
     s.saved->setObjectName(QStringLiteral("savedFireMissions"));
+    s.saved->viewport()->setObjectName(QStringLiteral("planningMissionsViewport"));
     s.saved->setMinimumHeight(180);
     missions_page->addWidget(s.saved, 1);
     auto* actions = new QHBoxLayout;
@@ -603,6 +625,7 @@ PlanningDialog::PlanningDialog(Provider provider, Apply apply, QWidget* parent,
     time_page->addWidget(s.record);
     s.times = new QTableWidget(0, 5);
     s.times->setObjectName(QStringLiteral("flightMeasurements"));
+    s.times->viewport()->setObjectName(QStringLiteral("planningMeasurementsViewport"));
     s.times->setHorizontalHeaderLabels({ui_text("Дальность, м"), ui_text("Перепад, м"), ui_text("Время, с"), ui_text("Версия / профиль"), ui_text("Источник")});
     s.times->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     s.times->horizontalHeader()->setStretchLastSection(true);
@@ -622,9 +645,10 @@ PlanningDialog::PlanningDialog(Provider provider, Apply apply, QWidget* parent,
     s.profile_info->setObjectName(QStringLiteral("weaponProfileInfo"));
     profiles_page->addWidget(s.profile_info);
     auto* links = new QTextBrowser;
+    links->viewport()->setObjectName(QStringLiteral("planningSourcesViewport"));
     links->setOpenExternalLinks(true);
     links->setMinimumHeight(150);
-    links->setHtml(QStringLiteral("<p><a href='https://github.com/apollyon-sys/wardogs-calculator/blob/main/data/weapons.json'>Apollyon · weapons.json</a></p>"
+    links->setHtml(QStringLiteral("<style>a { color:#63d8c5; }</style><p><a href='https://github.com/apollyon-sys/wardogs-calculator/blob/main/data/weapons.json'>Apollyon · weapons.json</a></p>"
         "<p><a href='https://github.com/apollyon-sys/wardogs-calculator/blob/main/docs/features.md'>Apollyon · declared limits / table coverage</a></p>"
         "<p><a href='https://wardogs.t0ki.cn/'>t0ki · community calculator</a></p>"
         "<p><a href='https://github.com/Firepanda415/MZ-Wardogs/blob/main/docs/sph2-scale.md'>MZ-Wardogs · SPH-2 scale observations</a></p>"
