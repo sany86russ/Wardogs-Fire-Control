@@ -5,6 +5,7 @@
 #include "app_icon.hpp"
 #include "selection_overlay.hpp"
 #include "settings_dialog.hpp"
+#include "update_ui.hpp"
 #include "ghost_reticle_window.hpp"
 #include "window_title_bar.hpp"
 #include "windows_taskbar.hpp"
@@ -569,6 +570,11 @@ public:
         }
         wardogs::log_info("window.ready");
         wardogs::i18n::watch(this);
+        if (!diagnostic_ && settings_.check_updates_on_start) {
+            QTimer::singleShot(0, this, [this] {
+                if (!closing_ && settings_.check_updates_on_start && updates_) updates_->check(false);
+            });
+        }
     }
 
     ~MainWindow() override {
@@ -760,6 +766,8 @@ public:
             QApplication::processEvents();
         };
         check("first_launch_has_no_fake_base", !base_set_ && !target_ && distance_->text() == QStringLiteral("—"));
+        check("diagnostic_previews_do_not_construct_network_updates", !updates_ &&
+              !findChild<QPushButton*>(QStringLiteral("checkUpdatesButton"))->isEnabled());
         check("game_map_must_be_explicitly_confirmed_for_new_session", !map_confirmed_ &&
               selected_game_map() == wardogs::GameMap::unselected && confirm_map_->isVisible());
         show_result({84, 83});
@@ -1708,6 +1716,7 @@ private:
     bool base_set_{};
     bool base_capture_pending_{};
     bool diagnostic_{};
+    wardogs::updates::Controller* updates_{};
     bool closing_{};
     bool selecting_{};
     bool game_mode_{};
@@ -2103,7 +2112,7 @@ private:
         brand->addWidget(title);
         brand->addWidget(subtitle);
         heading->addLayout(brand, 1);
-        auto* badge = new QLabel(wardogs::i18n::text(QStringLiteral("ОФЛАЙН  ·  v")) + QStringLiteral(WARDOGS_VERSION));
+        auto* badge = new QLabel(QStringLiteral("v") + QStringLiteral(WARDOGS_VERSION));
         badge->setObjectName(QStringLiteral("versionBadge"));
         heading->addWidget(badge);
         language_selector_ = new QComboBox;
@@ -2131,7 +2140,29 @@ private:
         settings_button->setAccessibleName(wardogs::i18n::text(QStringLiteral("Настройки")));
         heading->addWidget(help_button);
         heading->addWidget(settings_button);
+        auto* update_button = new QPushButton(QStringLiteral("↻"));
+        update_button->setObjectName(QStringLiteral("checkUpdatesButton"));
+        update_button->setFixedSize(36, 36);
+        update_button->setToolTip(wardogs::i18n::text(QStringLiteral("Проверить обновления GitHub")));
+        update_button->setAccessibleName(wardogs::i18n::text(QStringLiteral("Проверить обновления GitHub")));
+        update_button->setEnabled(!diagnostic_);
+        heading->addWidget(update_button);
         root->addLayout(heading);
+        if (!diagnostic_) {
+            updates_ = new wardogs::updates::Controller(this, QStringLiteral(WARDOGS_VERSION),
+                QApplication::applicationDirPath());
+            updates_->set_before_install([this] {
+                if (busy_.load() || selecting_) {
+                    QMessageBox::information(this, wardogs::i18n::text(QStringLiteral("Обновления")),
+                        wardogs::i18n::text(QStringLiteral("Завершите захват координат перед установкой обновления.")));
+                    return false;
+                }
+                exit_game_mode();
+                return true;
+            });
+            root->addWidget(updates_->banner_widget());
+            connect(update_button, &QPushButton::clicked, updates_, [this] { updates_->check(true); });
+        }
 
         auto* tools = new QHBoxLayout;
         mode_button_ = new QPushButton;

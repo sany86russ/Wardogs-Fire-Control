@@ -82,6 +82,7 @@ $qtSources = @(
 )
 $required = @(
     'WarDogsDistanceCalculator.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
+    'Qt6Network.dll', 'tls\qschannelbackend.dll', 'Update.ps1',
     'onnxruntime.dll', 'platforms\qwindows.dll', 'models\PP-OCRv6_rec_small.onnx',
     'LICENSE', 'THIRD_PARTY_NOTICES.md', 'TERRAIN_DATA_NOTICE.md',
     'models\LICENSE.PaddleOCR.txt', 'licenses\onnxruntime\LICENSE.txt',

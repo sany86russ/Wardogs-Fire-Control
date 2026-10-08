@@ -69,7 +69,8 @@ if ($LASTEXITCODE -ne 0) {
 if ($Package) {
     & $qtDeploy --release --no-translations --no-opengl-sw `
         --no-system-d3d-compiler `
-        --skip-plugin-types generic,iconengines,imageformats,networkinformation,styles,tls `
+        --skip-plugin-types generic,iconengines,imageformats,networkinformation,styles `
+        --include-plugins qschannelbackend --exclude-plugins qopensslbackend,qcertonlybackend `
         --dir $installDirectory `
         (Join-Path $installDirectory 'WarDogsDistanceCalculator.exe')
     if ($LASTEXITCODE -ne 0) {

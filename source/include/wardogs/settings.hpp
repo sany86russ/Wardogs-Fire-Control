@@ -21,6 +21,7 @@ struct AppSettings {
     static constexpr int current_quick_workflow_version = 1;
 
     UiLanguage language{UiLanguage::russian};
+    bool check_updates_on_start{true};
     std::wstring region_hotkey{L"Alt+R"};
     std::wstring base_hotkey{L"Alt+X"};
     std::wstring target_hotkey{L"Alt+T"};

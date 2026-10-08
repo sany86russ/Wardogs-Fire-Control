@@ -578,5 +578,105 @@
   {
     "ru": "Дальность до цели должна быть конечной и неотрицательной",
     "en": "Target range must be finite and nonnegative"
+  },
+  {
+    "ru": "Обновления",
+    "en": "Updates"
+  },
+  {
+    "ru": "Проверять обновления GitHub при запуске",
+    "en": "Check for GitHub updates on startup"
+  },
+  {
+    "ru": "Новая версия устанавливается только после нажатия «Обновить». Расчёты и OCR работают локально.",
+    "en": "A new version is installed only after you click Update. Calculations and OCR run locally."
+  },
+  {
+    "ru": "Проверить обновления GitHub",
+    "en": "Check for GitHub updates"
+  },
+  {
+    "ru": "Обновить",
+    "en": "Update"
+  },
+  {
+    "ru": "Что нового",
+    "en": "What's new"
+  },
+  {
+    "ru": "Позже",
+    "en": "Later"
+  },
+  {
+    "ru": "Скачать проверенный релиз GitHub, установить и перезапустить приложение",
+    "en": "Download the verified GitHub release, install it and restart the application"
+  },
+  {
+    "ru": "Скрыть уведомление до следующего запуска",
+    "en": "Hide the notification until the next launch"
+  },
+  {
+    "ru": "Доступна версия %1 · установлена %2",
+    "en": "Version %1 is available · installed: %2"
+  },
+  {
+    "ru": "Обновление WARDOGS Fire Control",
+    "en": "WARDOGS Fire Control update"
+  },
+  {
+    "ru": "\nСкачано %1 из %2 МиБ",
+    "en": "\nDownloaded %1 of %2 MiB"
+  },
+  {
+    "ru": "Проверка или установка обновления уже выполняется.",
+    "en": "An update check or installation is already in progress."
+  },
+  {
+    "ru": "Не удалось проверить обновления.\n%1",
+    "en": "Could not check for updates.\n%1"
+  },
+  {
+    "ru": "Установлена последняя доступная версия: %1.",
+    "en": "The latest available version is installed: %1."
+  },
+  {
+    "ru": "Страница релиза: %1",
+    "en": "Release page: %1"
+  },
+  {
+    "ru": "Эта копия не содержит установщика обновлений. Скачайте Windows ZIP со страницы релиза и распакуйте его в отдельную папку.",
+    "en": "This copy does not include the update installer. Download the Windows ZIP from the release page and extract it into a separate folder."
+  },
+  {
+    "ru": "Открыть релиз",
+    "en": "Open release"
+  },
+  {
+    "ru": "Windows PowerShell 5.1 не найден. Скачайте обновление вручную со страницы релиза.",
+    "en": "Windows PowerShell 5.1 was not found. Download the update manually from the release page."
+  },
+  {
+    "ru": "Не удалось создать папку обновления рядом с приложением. Проверьте права записи или скачайте релиз вручную.",
+    "en": "Could not create an update folder beside the application. Check write permissions or download the release manually."
+  },
+  {
+    "ru": "Скачивание и проверка релиза GitHub…",
+    "en": "Downloading and verifying the GitHub release…"
+  },
+  {
+    "ru": "Подготовка обновления и проверка файлов…",
+    "en": "Preparing the update and verifying files…"
+  },
+  {
+    "ru": "Проверка готовности установщика…",
+    "en": "Checking that the installer is ready…"
+  },
+  {
+    "ru": "Не удалось установить обновление. Текущая версия продолжает работать.\n%1",
+    "en": "Could not install the update. The current version is still running.\n%1"
+  },
+  {
+    "ru": "Завершите захват координат перед установкой обновления.",
+    "en": "Finish capturing coordinates before installing the update."
   }
 ]

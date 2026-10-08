@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.7.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.8.0 LANGUAGES C CXX)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -21,6 +21,14 @@ qt_add_resources(wardogs_i18n localization
     FILES translations/main.json translations/dialogs.json
           translations/errors.json translations/common.json translations/qtbase_ru.json
 )
+
+add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)
+target_include_directories(wardogs_updates PUBLIC src)
+target_link_libraries(wardogs_updates PUBLIC wardogs_i18n Qt6::Widgets Qt6::Network)
+target_compile_definitions(wardogs_updates PRIVATE UNICODE _UNICODE NOMINMAX)
+if(MSVC)
+    target_compile_options(wardogs_updates PRIVATE /W4 /permissive- /utf-8)
+endif()
 
 add_library(wardogs_zstd STATIC
     third_party/zstd/common/debug.c
@@ -59,6 +67,7 @@ add_library(wardogs_core
     src/presentation.cpp
     src/vehicle_ballistics.cpp
 )
+target_link_libraries(wardogs_updates PRIVATE wardogs_core)
 target_include_directories(wardogs_core PUBLIC include)
 target_compile_definitions(wardogs_core PUBLIC UNICODE _UNICODE NOMINMAX)
 target_include_directories(wardogs_core PRIVATE third_party/onnxruntime/include)
@@ -99,7 +108,7 @@ if(WIN32)
     )
     target_compile_options(WarDogsDistanceCalculator PRIVATE /W4 /permissive- /utf-8)
     target_link_libraries(WarDogsDistanceCalculator PRIVATE
-        wardogs_core wardogs_terrain wardogs_i18n Qt6::Widgets dwmapi gdi32 user32 windowsapp
+        wardogs_core wardogs_terrain wardogs_i18n wardogs_updates Qt6::Widgets dwmapi gdi32 user32 windowsapp
         shell32 ole32 propsys
     )
     add_custom_command(TARGET WarDogsDistanceCalculator POST_BUILD
@@ -107,7 +116,13 @@ if(WIN32)
             "$<TARGET_FILE:Qt6::Core>"
             "$<TARGET_FILE:Qt6::Gui>"
             "$<TARGET_FILE:Qt6::Widgets>"
+            "$<TARGET_FILE:Qt6::Network>"
             "$<TARGET_FILE_DIR:WarDogsDistanceCalculator>"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:WarDogsDistanceCalculator>/tls"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:Qt6::QSchannelBackendPlugin>"
+            "$<TARGET_FILE_DIR:WarDogsDistanceCalculator>/tls"
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:WarDogsDistanceCalculator>/platforms"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -125,6 +140,7 @@ if(WIN32)
 endif()
 
 install(TARGETS WarDogsDistanceCalculator RUNTIME DESTINATION .)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/tools/Update.ps1" DESTINATION .)
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.dll"
     "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
@@ -179,6 +195,23 @@ install(FILES
 )
 
 enable_testing()
+add_executable(wardogs_update_tests tests/update_service_tests.cpp)
+target_link_libraries(wardogs_update_tests PRIVATE wardogs_updates)
+target_compile_options(wardogs_update_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_update_tests COMMAND wardogs_update_tests)
+add_executable(wardogs_update_probe tools/update_probe.cpp)
+target_link_libraries(wardogs_update_probe PRIVATE wardogs_updates)
+target_compile_options(wardogs_update_probe PRIVATE /W4 /permissive- /utf-8)
+add_executable(wardogs_update_ui_tests tests/update_ui_tests.cpp)
+target_link_libraries(wardogs_update_ui_tests PRIVATE wardogs_updates)
+target_compile_options(wardogs_update_ui_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_update_ui_tests COMMAND wardogs_update_ui_tests)
+set_tests_properties(wardogs_update_ui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+add_test(NAME wardogs_update_installer_tests COMMAND powershell.exe
+    -NoProfile -NonInteractive -ExecutionPolicy Bypass
+    -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/update_installer_tests.ps1"
+    -ExecutablePath "$<TARGET_FILE:WarDogsDistanceCalculator>")
+set_tests_properties(wardogs_update_installer_tests PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
 add_executable(wardogs_tests tests/core_tests.cpp)
 target_link_libraries(wardogs_tests PRIVATE wardogs_core)
 if(MSVC)

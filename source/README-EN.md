@@ -1,4 +1,4 @@
-# WARDOGS Fire Control 2.7.0 — source
+# WARDOGS Fire Control 2.8.0 — source
 
 [Русский](README.md) · [Project overview and downloads](../README.en.md)
 
@@ -7,6 +7,8 @@ A native C++20 / Qt Widgets artillery assistant **for the game WARDOGS**. It cal
 Russian is the default. The **RU / EN** header selector changes the interface immediately, saves the preference and preserves coordinates, the map, selected arc and calculation. Translations are embedded in the EXE from `translations/*.json`.
 
 ## Using the application
+
+Version 2.8.0 checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
 
 1. Confirm the current map. Training-ground and unknown-map selections use an explicit mode without heights.
 2. Open the map with **M**, select the gun through **right-click → Mark Coordinates**, then press **Alt+X**. You do not need to send the coordinates to chat.

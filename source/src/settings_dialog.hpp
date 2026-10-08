@@ -38,6 +38,7 @@ private:
 
     QComboBox* backend_{};
     QCheckBox* automatic_chat_region_{};
+    QCheckBox* check_updates_on_start_{};
     QKeySequenceEdit* region_key_{};
     QKeySequenceEdit* base_key_{};
     QKeySequenceEdit* target_key_{};

@@ -22,6 +22,8 @@ Alternatively, download `WardogsFireControl-v<version>-source.zip` from Releases
 
 ## Building and testing
 
+Qt must include **Widgets**, **Network** and the **Schannel** TLS plugin. The public package includes `Qt6Network.dll`, `tls/qschannelbackend.dll` and the `Update.ps1` helper; TLS uses Windows certificate validation.
+
 Set the installed Qt SDK path:
 
 ```powershell

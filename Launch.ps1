@@ -22,6 +22,15 @@ try {
         'models\PP-OCRv6_rec_small.onnx', 'msvcp140.dll', 'msvcp140_1.dll',
         'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
     )
+    # The source checkout may still have an accepted 2.7.x App installed.
+    # Require updater dependencies only for executables that use them.
+    if (Test-Path -LiteralPath $executable -PathType Leaf) {
+        $launchVersionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($executable)
+        if ($launchVersionInfo.FileMajorPart -gt 2 -or
+                ($launchVersionInfo.FileMajorPart -eq 2 -and $launchVersionInfo.FileMinorPart -ge 8)) {
+            $required += @('Qt6Network.dll', 'tls\qschannelbackend.dll', 'Update.ps1')
+        }
+    }
     foreach ($relative in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $launchDirectory $relative) -PathType Leaf)) {
             if ($launchEnglish) {
