@@ -35,6 +35,7 @@ $helperSource = Join-Path $sourceRoot 'tools\Update.ps1'
 . $helperSource
 Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -56,9 +57,19 @@ public static class WardogsRestartSmokeWindows
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr window, StringBuilder text, int capacity);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, StringBuilder text, int capacity);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr window);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -66,13 +77,40 @@ public static class WardogsRestartSmokeWindows
 
     public static int LastPostMessageError { get; private set; }
 
+    public sealed class WindowCandidate
+    {
+        public long Handle { get; set; }
+        public uint ProcessId { get; set; }
+        public string Title { get; set; }
+        public string ClassName { get; set; }
+        public long ExtendedStyle { get; set; }
+        public bool IsToolWindow { get; set; }
+        public bool IsOwned { get; set; }
+        public bool IsVisible { get; set; }
+        public bool Eligible { get; set; }
+    }
+
+    public static long ExtendedStyle(IntPtr window)
+    {
+        return GetWindowLongPtr(window, -20).ToInt64();
+    }
+
+    public static string WindowClass(IntPtr window)
+    {
+        var text = new StringBuilder(256);
+        GetClassName(window, text, text.Capacity);
+        return text.ToString();
+    }
+
     public static bool OwnsMainWindow(IntPtr window, uint processId)
     {
-        if (window == IntPtr.Zero || !IsWindow(window) || GetWindow(window, 4) != IntPtr.Zero)
-            return false;
+        // Qt::Tool ghost/overlay windows can inherit the application's caption.
+        // They must never qualify as the application's main window.
+        if (window == IntPtr.Zero || !IsWindow(window)) return false;
         uint ownerProcess;
         GetWindowThreadProcessId(window, out ownerProcess);
         if (ownerProcess != processId) return false;
+        if (GetWindow(window, 4) != IntPtr.Zero || (ExtendedStyle(window) & 0x80) != 0) return false;
         var title = new StringBuilder(256);
         GetWindowText(window, title, title.Capacity);
         return title.ToString() == "WARDOGS Fire Control";
@@ -80,14 +118,41 @@ public static class WardogsRestartSmokeWindows
 
     public static IntPtr FindMainWindow(uint processId)
     {
-        IntPtr result = IntPtr.Zero;
+        IntPtr visible = IntPtr.Zero;
+        IntPtr hidden = IntPtr.Zero;
         EnumWindows(delegate(IntPtr window, IntPtr parameter)
         {
             if (!OwnsMainWindow(window, processId)) return true;
-            result = window;
-            return false;
+            if (IsWindowVisible(window))
+            {
+                if (visible == IntPtr.Zero) visible = window;
+            }
+            else if (hidden == IntPtr.Zero) hidden = window;
+            return true;
         }, IntPtr.Zero);
-        return result;
+        return visible != IntPtr.Zero ? visible : hidden;
+    }
+
+    public static WindowCandidate[] WindowCandidates(uint processId)
+    {
+        var results = new List<WindowCandidate>();
+        EnumWindows(delegate(IntPtr window, IntPtr parameter)
+        {
+            uint ownerProcess;
+            GetWindowThreadProcessId(window, out ownerProcess);
+            if (ownerProcess != processId) return true;
+            var title = new StringBuilder(256);
+            GetWindowText(window, title, title.Capacity);
+            long style = ExtendedStyle(window);
+            results.Add(new WindowCandidate {
+                Handle = window.ToInt64(), ProcessId = ownerProcess, Title = title.ToString(),
+                ClassName = WindowClass(window), ExtendedStyle = style,
+                IsToolWindow = (style & 0x80) != 0, IsOwned = GetWindow(window, 4) != IntPtr.Zero,
+                IsVisible = IsWindowVisible(window), Eligible = OwnsMainWindow(window, processId)
+            });
+            return true;
+        }, IntPtr.Zero);
+        return results.ToArray();
     }
 
     public static bool RequestClose(IntPtr window, uint processId)
@@ -240,6 +305,9 @@ function Close-SmokeApplication {
     $attempt = [ordered]@{
         process_id = $Process.Id; startup_window = $Window.ToInt64(); close_window = $currentWindow.ToInt64()
         started_utc = [DateTime]::UtcNow.ToString('o'); request_delivered = $false; exited = $false
+        close_window_class = [WardogsRestartSmokeWindows]::WindowClass($currentWindow)
+        close_window_extended_style = [WardogsRestartSmokeWindows]::ExtendedStyle($currentWindow)
+        window_candidates = @([WardogsRestartSmokeWindows]::WindowCandidates([uint32]$Process.Id))
     }
     $receipt.close_attempts += $attempt
     if ($currentWindow -eq [IntPtr]::Zero -or -not [WardogsRestartSmokeWindows]::OwnsMainWindow($currentWindow, [uint32]$Process.Id)) {
@@ -365,6 +433,9 @@ try {
     Assert-SmokeProcessPath $oldProcess $executable
     $receipt.old_runtime_modules = @(Get-SmokeRuntimeModules $oldProcess)
     $receipt.old_main_window = $oldWindow.ToInt64()
+    $receipt.old_main_window_class = [WardogsRestartSmokeWindows]::WindowClass($oldWindow)
+    $receipt.old_main_window_extended_style = [WardogsRestartSmokeWindows]::ExtendedStyle($oldWindow)
+    $receipt.old_window_candidates = @([WardogsRestartSmokeWindows]::WindowCandidates([uint32]$oldProcess.Id))
 
     $prepareProcess = Start-SmokeHelper $helperSource 'Prepare' $oldProcess.Id
     if (-not $prepareProcess.WaitForExit(90000) -or $prepareProcess.ExitCode -ne 0) { throw 'Real package preparation failed or timed out.' }
@@ -430,6 +501,9 @@ try {
     $receipt.new_process_id = $newProcess.Id
     $receipt.new_process_start_utc = $newProcess.StartTime.ToUniversalTime().ToString('o')
     $receipt.new_main_window = $newWindow.ToInt64()
+    $receipt.new_main_window_class = [WardogsRestartSmokeWindows]::WindowClass($newWindow)
+    $receipt.new_main_window_extended_style = [WardogsRestartSmokeWindows]::ExtendedStyle($newWindow)
+    $receipt.new_window_candidates = @([WardogsRestartSmokeWindows]::WindowCandidates([uint32]$newProcess.Id))
     $receipt.new_runtime_modules = @(Get-SmokeRuntimeModules $newProcess)
     Close-SmokeApplication $newProcess $executable $newWindow
     # Both logs are now closed and rotation is complete: latest belongs to the new
