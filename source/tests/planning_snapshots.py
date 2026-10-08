@@ -137,7 +137,7 @@ def verify_snapshot(path, language, mode, require_geometry=True):
     if receipt.get('language') != language or receipt.get('mode') != mode:
         errors.append('Screenshot receipt language or mode mismatch')
     dpr = receipt.get('snapshot_dpr')
-    if not isinstance(dpr, (int, float)) or not 0 < dpr <= 4:
+    if type(dpr) not in (int, float) or not 0 < dpr <= 4:
         if require_geometry:
             errors.append('Missing or invalid native snapshot DPI metadata')
         return {'file': path.name, 'width': width, 'height': height, 'surfaces': surfaces,
@@ -159,10 +159,17 @@ def verify_snapshot(path, language, mode, require_geometry=True):
             errors.append(f'{name}: expected exactly one visible actual application surface')
             continue
         bounds = matches[0].get('snapshot_rect', {})
-        if not all(isinstance(bounds.get(key), int) for key in ('x', 'y', 'width', 'height')):
+        if not all(type(bounds.get(key)) is int for key in ('x', 'y', 'width', 'height')):
             errors.append(f'{name}: native visible geometry is missing')
             continue
-        rectangle = tuple(round(bounds[key] * dpr) for key in ('x', 'y', 'width', 'height'))
+        # The diagnostic geometry is nonnegative. Match Qt's nearest-integer
+        # pixel rounding and scale endpoints, so fractional DPI cannot add a
+        # stray pixel by rounding origin and extent independently.
+        left = int(bounds['x'] * dpr + .5)
+        top = int(bounds['y'] * dpr + .5)
+        right = int((bounds['x'] + bounds['width']) * dpr + .5)
+        bottom = int((bounds['y'] + bounds['height']) * dpr + .5)
+        rectangle = (left, top, right - left, bottom - top)
         verify_surface(name, rectangle, foreground=foreground, white_bound=not foreground)
     return {'file': path.name, 'width': width, 'height': height, 'surfaces': surfaces,
             'geometry_available': True, 'errors': errors}
@@ -175,7 +182,7 @@ def verify_directory(evidence, require_geometry):
             path = evidence / f'{language}-{mode}.png'
             try:
                 result = verify_snapshot(path, language, mode, require_geometry)
-            except (OSError, ValueError, TypeError, KeyError) as error:
+            except (OSError, ValueError, TypeError, KeyError, zlib.error, struct.error) as error:
                 result = {'file': path.name, 'errors': [str(error)]}
             results.append(result)
             for error in result['errors']:
