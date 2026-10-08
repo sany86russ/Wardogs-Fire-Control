@@ -33,6 +33,68 @@ if (-not (Test-Path -LiteralPath $runnerRoot -PathType Container) -or $runnerRoo
 }
 $helperSource = Join-Path $sourceRoot 'tools\Update.ps1'
 . $helperSource
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class WardogsRestartSmokeWindows
+{
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private delegate bool EnumWindowsCallback(IntPtr window, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr window, uint command);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr window, StringBuilder text, int capacity);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(IntPtr window);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    public static bool OwnsMainWindow(IntPtr window, uint processId)
+    {
+        if (window == IntPtr.Zero || !IsWindow(window) || GetWindow(window, 4) != IntPtr.Zero)
+            return false;
+        uint ownerProcess;
+        GetWindowThreadProcessId(window, out ownerProcess);
+        if (ownerProcess != processId) return false;
+        var title = new StringBuilder(256);
+        GetWindowText(window, title, title.Capacity);
+        return title.ToString() == "WARDOGS Fire Control";
+    }
+
+    public static IntPtr FindMainWindow(uint processId)
+    {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr window, IntPtr parameter)
+        {
+            if (!OwnsMainWindow(window, processId)) return true;
+            result = window;
+            return false;
+        }, IntPtr.Zero);
+        return result;
+    }
+
+    public static bool RequestClose(IntPtr window, uint processId)
+    {
+        return OwnsMainWindow(window, processId) &&
+            PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero);
+    }
+}
+'@
 foreach ($path in @($ArchivePath, $PreviousArchivePath, $EvidenceDirectory, $runnerRoot)) {
     [void](Assert-WardogsPathWithoutReparse $path)
 }
@@ -122,7 +184,10 @@ function Wait-SmokeWindow {
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     do {
         Assert-SmokeProcessPath $Process $ExpectedPath
-        if ($Process.MainWindowHandle -ne [IntPtr]::Zero) { return }
+        $window = [WardogsRestartSmokeWindows]::FindMainWindow([uint32]$Process.Id)
+        if ($window -ne [IntPtr]::Zero -and [WardogsRestartSmokeWindows]::OwnsMainWindow($window, [uint32]$Process.Id)) {
+            return $window
+        }
         if ([DateTime]::UtcNow -ge $deadline) { throw 'The portable GUI did not create its main window.' }
         Start-Sleep -Milliseconds 100
     } while ($true)
@@ -162,9 +227,9 @@ function Copy-SmokeSessionLog {
 }
 
 function Close-SmokeApplication {
-    param([Diagnostics.Process]$Process, [string]$ExpectedPath)
+    param([Diagnostics.Process]$Process, [string]$ExpectedPath, [IntPtr]$Window)
     Assert-SmokeProcessPath $Process $ExpectedPath
-    if (-not $Process.CloseMainWindow() -or -not $Process.WaitForExit(10000)) {
+    if (-not [WardogsRestartSmokeWindows]::RequestClose($Window, [uint32]$Process.Id) -or -not $Process.WaitForExit(10000)) {
         throw 'The known portable application did not close gracefully.'
     }
     if ($Process.ExitCode -ne 0) { throw "Portable application exited with code $($Process.ExitCode)." }
@@ -235,8 +300,8 @@ try {
     if ($profileSettingsExisted) { Copy-Item -LiteralPath $profileSettings -Destination $originalSettingsBackup }
     New-Item -ItemType Directory -Path $profileRoot -Force | Out-Null
     $settingsText = "[settings]`r`nquick_workflow_version=1`r`nui_language=en`r`ncheck_updates_on_start=0`r`ngame_integration_enabled=0`r`nmiddle_mouse_enabled=0`r`nmouse_capture_delay_ms=417`r`nsmoke_user_sentinel=$sentinel`r`n[ci-preserved]`r`nvalue=$sentinel`r`n"
-    [IO.File]::WriteAllText($profileSettings, $settingsText, [Text.Encoding]::Unicode)
     $profileSettingsPrepared = $true
+    [IO.File]::WriteAllText($profileSettings, $settingsText, [Text.Encoding]::Unicode)
     $profileSettingsHash = Get-WardogsFileHash $profileSettings
     $profileTerrainMarker = Join-Path $profileRoot ('terrain-packs\smoke-preserved-' + $sentinel + '.wdt')
     Write-SmokeFile $profileTerrainMarker ('persistent-user-height-data-' + $sentinel)
@@ -251,11 +316,11 @@ try {
 
     $oldProcess = Start-Process -FilePath $executable -WorkingDirectory $installRoot -WindowStyle Hidden -PassThru
     $receipt.old_process_id = $oldProcess.Id
-    Wait-SmokeWindow $oldProcess $executable
+    $oldWindow = Wait-SmokeWindow $oldProcess $executable
     Start-Sleep -Seconds 2
     Assert-SmokeProcessPath $oldProcess $executable
     $receipt.old_runtime_modules = @(Get-SmokeRuntimeModules $oldProcess)
-    $receipt.old_main_window = $oldProcess.MainWindowHandle.ToInt64()
+    $receipt.old_main_window = $oldWindow.ToInt64()
 
     $prepareProcess = Start-SmokeHelper $helperSource 'Prepare' $oldProcess.Id
     if (-not $prepareProcess.WaitForExit(90000) -or $prepareProcess.ExitCode -ne 0) { throw 'Real package preparation failed or timed out.' }
@@ -264,19 +329,28 @@ try {
     $receipt.install_helper_id = $installProcess.Id
     $readyPath = Join-Path $workRoot 'install-ready.json'
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    while (-not (Test-Path -LiteralPath $readyPath -PathType Leaf)) {
+    $ready = $null
+    while (-not $ready) {
         if (Test-Path -LiteralPath (Join-Path $workRoot 'error.log')) { throw ([IO.File]::ReadAllText((Join-Path $workRoot 'error.log'))) }
         if ($installProcess.HasExited) { throw 'Installer exited before declaring readiness.' }
+        if (Test-Path -LiteralPath $readyPath -PathType Leaf) {
+            # The helper's JSON write can be observed between file creation and completion.
+            # A transient sharing/parse error does not authorize shutdown; retry until a complete receipt is valid.
+            try {
+                $candidateReady = [IO.File]::ReadAllText($readyPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+                if ($candidateReady.state -ceq 'ready' -and $candidateReady.parent_id -eq $oldProcess.Id) {
+                    $ready = $candidateReady
+                }
+            } catch { }
+        }
+        if ($ready) { break }
         if ([DateTime]::UtcNow -ge $deadline) { throw 'Installer readiness timed out.' }
         Start-Sleep -Milliseconds 100
     }
-    $ready = [IO.File]::ReadAllText($readyPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
-    if ($ready.state -cne 'ready' -or $ready.parent_id -ne $oldProcess.Id) { throw 'Readiness does not match the known old process.' }
     $approvalTemporary = Join-Path $workRoot 'install-approved.tmp'
     Write-WardogsJson $approvalTemporary ([ordered]@{ state = 'approved'; parent_id = $oldProcess.Id })
     Move-Item -LiteralPath $approvalTemporary -Destination (Join-Path $workRoot 'install-approved.json')
-    Close-SmokeApplication $oldProcess $executable
-    Copy-SmokeSessionLog $oldManifest.version $oldProcess.Id 'old-session.log'
+    Close-SmokeApplication $oldProcess $executable $oldWindow
     if (-not $installProcess.WaitForExit(90000) -or $installProcess.ExitCode -ne 0) { throw 'Real installation/restart failed or timed out.' }
     $installed = [IO.File]::ReadAllText((Join-Path $workRoot 'installed.json'), [Text.Encoding]::UTF8) | ConvertFrom-Json
     if ($installed.state -cne 'installed' -or $installed.version -cne $newManifest.version) { throw 'Successful installation receipt is missing.' }
@@ -306,14 +380,17 @@ try {
         if ([DateTime]::UtcNow -ge $deadline) { throw 'The installer did not restart the updated portable executable.' }
         Start-Sleep -Milliseconds 100
     }
-    Wait-SmokeWindow $newProcess $executable
+    $newWindow = Wait-SmokeWindow $newProcess $executable
     Start-Sleep -Seconds 2
     Assert-SmokeProcessPath $newProcess $executable
     $receipt.new_process_id = $newProcess.Id
     $receipt.new_process_start_utc = $newProcess.StartTime.ToUniversalTime().ToString('o')
-    $receipt.new_main_window = $newProcess.MainWindowHandle.ToInt64()
+    $receipt.new_main_window = $newWindow.ToInt64()
     $receipt.new_runtime_modules = @(Get-SmokeRuntimeModules $newProcess)
-    Close-SmokeApplication $newProcess $executable
+    Close-SmokeApplication $newProcess $executable $newWindow
+    # Both logs are now closed and rotation is complete: latest belongs to the new
+    # process and latest.previous to the old process, without a read/rename race.
+    Copy-SmokeSessionLog $oldManifest.version $oldProcess.Id 'old-session.log'
     Copy-SmokeSessionLog $newManifest.version $newProcess.Id 'new-session.log'
     if ((Get-WardogsFileHash $profileSettings) -ine $profileSettingsHash) { throw 'Persistent profile preferences changed after restarted GUI shutdown.' }
     if ((Get-WardogsFileHash $profileTerrainMarker) -ine $profileTerrainHash) { throw 'Persistent user height data changed after restarted GUI shutdown.' }
@@ -352,7 +429,8 @@ try {
             try {
                 $process.Refresh()
                 if (-not $process.HasExited -and $process.Path -ieq $expected) {
-                    if (-not $process.CloseMainWindow() -or -not $process.WaitForExit(5000)) {
+                    $window = [WardogsRestartSmokeWindows]::FindMainWindow([uint32]$process.Id)
+                    if (-not [WardogsRestartSmokeWindows]::RequestClose($window, [uint32]$process.Id) -or -not $process.WaitForExit(5000)) {
                         Stop-Process -Id $process.Id -Force -ErrorAction Stop
                         $receipt.cleanup_process_ids += $process.Id
                     }
