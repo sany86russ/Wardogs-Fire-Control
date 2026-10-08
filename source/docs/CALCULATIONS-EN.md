@@ -30,15 +30,73 @@ All 139 rows were checked again on October 7, 2026 against the then-current t0ki
 
 In the high table, both 610 and 620 MIL have a range of 2629 m, while 630 MIL has 2628 m. The inverse conversion is therefore ambiguous: exactly 2629 m selects the original first row, 610 MIL. Between these rows, reverse conversion can differ by up to 1 m; this is a property of the preserved observations.
 
+### Profile provenance and conflicting sources
+
+On October 8, 2026, all 71 L81 rows and 139 SPH-2 rows in this application were compared again with [Apollyon, commit `87e3cf3579c88499b16dfd1e29ed56c70bc0bc7b`](https://github.com/apollyon-sys/wardogs-calculator/blob/87e3cf3579c88499b16dfd1e29ed56c70bc0bc7b/data/weapons.json): the retained rows matched. The last change to `weapons.json` itself was commit `e5b801ee17bbd2bdf49f8f9ac474173c65573b62` on September 7. This identifies the source revision, not a verified WARDOGS patch. [t0ki](https://wardogs.t0ki.cn/credits.html) also describes the data as community measurements and credits Apollyon; agreement between these projects does not constitute an independent in-game trial.
+
+The L81 source file contains **84 rows**, including **80 m → 950 MIL** and **697 m → 120 MIL**. However, the same file explicitly sets operating limits of **132–684 m** and **150–850 MIL**. The [author's documentation](https://github.com/apollyon-sys/wardogs-calculator/blob/87e3cf3579c88499b16dfd1e29ed56c70bc0bc7b/docs/features.md) distinguishes table coverage from the weapon's permitted operating range. Fire Control retains the 71 rows within those declared limits; the existence of a 950 MIL row does not extend this profile down to 80 m.
+
+For SPH-2, the source configuration declares **780–2629 m / 20–1390 MIL**, although the table includes the endpoint **735 m / 1400 MIL**. This application retains both tables and the sight limit of 1400 MIL previously confirmed by SoNiX. Additional [Firepanda observations from September 22](https://github.com/Firepanda415/MZ-Wardogs/blob/main/docs/sph2-scale.md) show slightly different labels: 20 MIL → 1186 m and 610 MIL → 2630 m. Mechanical stops are estimated from the central reticle's position. The author explicitly distinguishes these sight readings from impact measurements and actual barrel angles. Those observations do not replace the active profile.
+
+[MetaForge](https://metaforge.app/wardogs/map) publishes 80–684 m for L81, 600–2600 m for L52, and an L52 example at 2000 m: 251 MIL / 12.3 s or 1048 MIL / 33 s. The inspected pages provide neither a patch number nor a reproducible calibration method. SPH-2 names the vehicle, while L52 names the gun in that source; equivalence of their sight scales and profiles has not been established. MetaForge's map calculator labels L81 ammunition as `120x800mm`, while its separate [ammunition card](https://metaforge.app/wardogs/database/ammunition/81mm) lists `81mm` for the buildable mortar. These conflicts remain limits of external comparison; MetaForge's closed code and datasets have not been imported into the application.
+
+**Sight MIL and physical launch angle are different inputs.** An SI milliradian is 0.001 radian ([BIPM](https://www.bipm.org/en/measurement-units/si-prefixes)), but the unit definition does not establish that the game's sight value equals the barrel angle. The main calculation uses the selected weapon's table. A `MIL / 1000` convention in a separate mathematical model must be identified explicitly as a model assumption.
+
 ## Elevation and platform tilt
 
 The retained elevation correction model uses an assumed SPH-2 maximum range of **2629 m** and the two solutions of one approximate trajectory. Elevation is in meters: a positive difference means the target is above the gun. After correction and platform rotation, the result is converted back to the sight table. An unreachable target, unsupported angle or final value outside the sight table produces an error.
+
+In this model, `R = 2629 m`, `x` is horizontal range, and `z` is target height relative to the gun. The angle follows `tan(θ) = (R ± √(R² − x² − 2Rz)) / x`: minus gives the low arc, plus the high arc. For the low arc, the code uses an equivalent expression that avoids subtracting nearly equal numbers. A negative radicand means the target is unreachable under the model. The arc profile is `z(x) = x·tan(θ) − x² / (2R·cos²(θ))`. This is a drag-free parabola, rather than recovered WARDOGS physics.
+
+The model determines only the ratio `R = v² / g`. A range table alone therefore does not determine speed `v`, acceleration `g`, or flight time. The [NASA Glenn equations](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ballistic-flight-equations/) for drag-free motion are `x = v·cos(θ)·t` and `z = v·sin(θ)·t − g·t²/2`. Calculating seconds requires an independently specified `g` or a measured flight-time profile; choosing Earth's gravity is an assumption, not an in-game measurement. Projectile mass alone does not resolve this ambiguity.
+
+The open [Apollyon numerical solver](https://github.com/apollyon-sys/wardogs-calculator/blob/87e3cf3579c88499b16dfd1e29ed56c70bc0bc7b/js/workers/terrain-height-solver.js) also separates its estimated model from internal game constants. Its model families are fitted for elevation corrections and return `certified: false / estimated: true`; they do not provide verified flight times. Their fitted coefficients have not been adopted as WARDOGS speed or gravity.
 
 To interpret an observed impact, the model permits a mathematical continuation down to 0 m / 0 MIL for the low trajectory and 0 m / π·500 MIL for the high trajectory. These values are needed for calibration; they do not extend the supported range of the final game sight setting.
 
 Terrain packages contain a 2 m grid with 0.1 m height resolution; bilinear interpolation is used between four vertices. Connection checks SHA-256, mapId and geometry; reading checks decompressed block sizes and CRC. A negative Y scale preserves coordinate alignment. A point outside coverage is not assigned zero elevation. Selecting a map is mandatory and confirmation is required at launch; changing the map clears coordinates and corrections. The selected map's heights apply to both SPH-2 trajectories and the impact location. For the training ground and an unknown map, the user explicitly selects a mode without heights; L81 keeps its existing table without an elevation model. Local import atomically writes verified bytes to the persistent user data directory.
 
-Flight time, dispersion, wind, target movement and obstacles along the trajectory are not modeled. The elevation model is an approximation, not recovered internal game constants. The experimental fitted-drag model from upstream 1.4.1 was not imported: limited in-game observations do not justify a promise of greater accuracy.
+In 2.9.0, a separate planning window displays an estimated arc, sampled ground checks and time from user measurements or an explicitly enabled model. This does not change the retained sight table. Dispersion, wind, target movement and above-ground objects are not modeled. The experimental fitted-drag model from upstream 1.4.1 was not imported: limited in-game observations do not justify a promise of greater accuracy.
+
+## Planning in 2.9.0
+
+Five additions use the accepted gun position and target: spotter commands, named points, measured flight times, a flight/terrain profile and source information. Analysis and target changes are blocked until the map is confirmed and coordinate review is complete. Aiming in this window is the **nominal calculation without local Alt+I corrections**. Selecting an analysis arc does not switch the in-game aiming arc through F4.
+
+### Spotter commands
+
+Left, Right, Closer and Farther buttons move the accepted target by **10/25/50/100 m**. The forward axis points from the gun to the current target. For its unit vector `u = (uₓ, uᵧ)`, the right axis is `(uᵧ, −uₓ)` and the new point is:
+
+`target′ = target + [L·(uᵧ, −uₓ) + A·u] / 100`.
+
+Positive `L` means right, positive `A` means farther; dividing by 100 converts meters to map units. Each click rebuilds the frame from the current target. Coincident gun and target points cannot define this frame and are rejected. The change follows the ordinary manual-input path and invalidates outdated OCR. It moves a point; it neither records an actual impact nor adjusts MIL directly.
+
+### Named positions and targets
+
+A record stores exact coordinates, name, map, weapon and point kind. The list shows only the current map and weapon; restoring requires a confirmed map. Restoring a gun position clears the previous target and calibration; a target follows the ordinary manual-input path. Map, weapon and corrections are not restored automatically on launch.
+
+`%LOCALAPPDATA%\WardogsFireControl\fire-missions.json` is outside the application directory. Limits are **500** records, **120** UTF-16 code units per name and **1 MiB** per file. Names within the same map, weapon and point kind must be unique without regard to case. Writes are atomic after locking, rereading and validation; unknown formats, damage or inaccessible files produce an error instead of replacement with an empty list. This collection is separate from the last 12 targets of the current session.
+
+### Flight time and user measurements
+
+Without a matching observation or an enabled physical assumption, flight time is **unknown**. Each observation stores range, time, uncertainty, weapon, arc, elevation difference, a Version / profile label and source. In the UI, ammunition and charge are identified through that user label: enter a different label after changing the game version, ammunition or charge. The application does not detect them in the game.
+
+A profile applies only to the same weapon, arc, exact label and elevation difference; height comparison has a numerical tolerance of **10⁻⁶ m**, not a claim about terrain measurement accuracy. At an observed range, its time is used; between two points, time is linearly interpolated. There is no extrapolation beyond measured coverage. A new observation at the same range with the same profile identity replaces the previous one. `±s` is the absolute uncertainty entered by the user; interpolating these bounds is not a statistical confidence interval. A matching measured profile takes priority over model time.
+
+Observations are stored in `%LOCALAPPDATA%\WardogsFireControl\flight-profiles.json`: **256** records in total, time up to **600 s** and file size up to **256 KiB**. Recording requires available nominal MIL and a known elevation difference. If the current map requires terrain but heights are missing or do not cover the points, recording is unavailable. An explicitly selected no-height mode assumes zero elevation difference.
+
+Enable assumed speed and gravity is initially unchecked; later choices are saved in `planning.ini`. When enabled, SPH-2 uses the entered `g` and `v = √(2629·g)`, followed by `t = x / (v·cosθ)`. **9.80665 m/s²** is an Earth-gravity assumption, not measured game gravity. L81 additionally requires a positive user-entered speed: its initial value is missing, and an independent high vacuum arc is used. Neither model treats the displayed MIL as a physical barrel angle or changes the sight table. Model time is explicitly labeled an estimate, including when measured coverage does not include the current range.
+
+### Ground profile and estimated arc
+
+SPH-2 displays the retained geometric parabola even without assuming `g`; that assumption is still needed for seconds. L81 displays ground without an arc until the user supplies a speed and `g` model. A measured total time alone does not determine the arc shape or timing at intermediate points.
+
+Green is ground height relative to the gun position; orange is the estimated arc. Checks use a step of approximately **2 m** and include the analytic apex, with a limit of **8192** points. Interior points are checked for intersections. Ground contact at the gun and impact endpoints is expected and is not treated as an obstacle, but an arc endpoint below known ground produces a warning; only numerical roundoff is tolerated. Results report the first sampled crossing, minimum clearance and actual step. Missing heights remain gaps and the result is marked incomplete. No intersections at checked points does not guarantee clear flight between them.
+
+UI positions are taken at ground level: actual barrel height is not entered separately. Buildings, roofs, bridges, trees and other above-ground objects are absent from the height package. Warnings describe an approximate arc and sampled ground, rather than detection of an actual in-game obstacle.
+
+### Profile sources
+
+Profiles and sources shows the retained limits and links for comparison. It does not automatically download another project's table or change the selected weapon. L81 850/950 MIL, SPH-2 1390/1400 MIL and SPH-2/L52 naming conflicts are explained above. A game update requires new table checks and measurements, rather than relabeling old seconds as a new version.
 
 ## Direct calculation and optional correction
 

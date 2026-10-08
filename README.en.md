@@ -15,6 +15,16 @@ The app transfers map points into an aiming calculation: **Alt+X** reads the gun
 
 **Version 2.8.0:** GitHub release updates inside the app. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
+**2.9.0 source — next release in preparation:** a **Planning** window has been added. The stable download above still points to 2.8.0. Building the current source provides:
+
+- **Profiles and sources:** L81/SPH-2 operating limits, table provenance and conflicting external calculator data.
+- **Spotter corrections:** left, right, drop and add by 10/25/50/100 m in the gun → target frame, followed by a new aiming calculation.
+- **Named positions and targets:** exact coordinates saved by map and weapon, restored explicitly after confirming the map.
+- **Flight time:** personal observations with game version, source and uncertainty; interpolation within measured coverage only. A separate assumed physical model requires explicitly selected parameters.
+- **Terrain profile:** ground along the path and an estimated arc. Missing heights remain gaps; ground-intersection checks do not establish clearance of buildings, bridges or trees.
+
+Game projectile speed and gravity are unverified, so time is unknown by default. Assumed-model seconds are distinguished from observations and do not change table MIL. See the [calculation reference](source/docs/CALCULATIONS-EN.md) and [guide](source/docs/QUICKSTART-EN.md).
+
 ![WARDOGS Fire Control main window in English](docs/screenshots/en-main.png)
 
 > This is an unofficial community utility for the **WARDOGS game**. It is not affiliated with BULKHEAD and is not intended for real weapons. Developer approval for OCR, global hotkeys and overlays has not been confirmed; freedom from sanctions is not guaranteed. Read the [interaction limits and rules](source/docs/ANTICHEAT-EN.md) before using game features.
@@ -310,6 +320,8 @@ Capture geometry targets known WARDOGS fields and has limited scaling adaptation
 
 ## Local data and privacy
 
+In the 2.9.0 source, **fire-missions.json**, **flight-profiles.json** and **planning.ini** retain named points, timing observations and planning parameters beside settings in the Windows user profile. They remain local, survive updates and are excluded from the application archive.
+
 - Calculations, OCR and terrain reading run **on your computer**.
 - Calculating requires no account, API key or cloud subscription.
 - The app does not read game process memory, inject DLLs, control the sight or fire.
@@ -379,7 +391,7 @@ The repository contains app source, tests, the OCR model, used components and li
 
 ## Limitations and feedback
 
-The app does not model wind, dispersion, time of flight, target motion or obstacles along the trajectory. The SPH-2 elevation model is approximate; L81 has no elevation correction. Retained community tables may differ from the current game's readouts. First-shot accuracy and any hit percentage are not guaranteed.
+The app does not model wind, dispersion or target motion. In 2.9.0, flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. First-shot accuracy and any hit percentage are not guaranteed.
 
 Automated checks cover calculations, extreme values, OCR on fixtures, rejection without state corruption, terrain, settings and localization. The 2.7.0 interface review included RU/EN at Windows scales of 100/150/200%. These results establish software behavior; they do not replace measured in-game firing trials, every HUD test or a developer decision on utility approval.
 

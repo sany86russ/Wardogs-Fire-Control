@@ -1,4 +1,8 @@
-# WARDOGS Fire Control 2.7.0 — architecture and development
+# WARDOGS Fire Control — architecture and development
+
+The 2.9.0 source adds local planning; the published stable release is currently 2.8.0.
+
+**firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores named points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides spotter corrections, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
 
 A native assistant for L81 and SPH-2 in **the game WARDOGS**. It works with manual coordinates, an active chat draft and two coordinate fields near the map cursor. It displays distance, bearing, MIL, both SPH-2 arcs and corrections from recorded impacts. Recognition and user map packages work locally. BULKHEAD approval has not been obtained; see the [game interaction audit](ANTICHEAT-EN.md).
 

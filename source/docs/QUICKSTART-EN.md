@@ -1,6 +1,6 @@
-# WARDOGS Fire Control 2.7.0 — quick start
+# WARDOGS Fire Control 2.9.0 — quick start
 
-A portable assistant for L81 and SPH-2: distance, bearing and table-based aiming from two points. The main in-game workflow is enabled by default; recognition and calculations run locally.
+A portable assistant for L81 and SPH-2: distance, bearing and table-based aiming from two points. Version 2.9.0 adds quick spotter commands, named positions and targets, measured flight times, a flight/terrain profile and source information. The main in-game workflow is enabled by default; recognition and calculations run locally.
 
 ## Launch and first calculation
 
@@ -68,6 +68,50 @@ Windows reserves registered shortcuts. If a combination is occupied, the applica
 Profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. If it does not exist yet, the previous `%LOCALAPPDATA%\WarDogsDistanceCalculatorCpp\settings.ini` is read without modifying the old file. Profiles without the new-workflow marker are migrated to quick mode: game features, middle mouse capture and automatic detection are enabled; gun capture uses Alt+X and return uses Alt+C, accounting for internal conflicts. After the new profile is saved, any subsequent choice of standalone mode is retained.
 
 Settings are written in Unicode, preserving additional sections and keys. A damaged ANSI version of the standard pattern is repaired automatically. For a rejected custom pattern, use **Restore standard WARDOGS pattern**; complex expressions are not accepted. Windows OCR remains an optional source; automatic reading of the two map fields uses the main bundled model.
+
+## Planning: five additions to the calculation
+
+Return to the main window with **Alt+C** and click **Planning · corrections, positions, flight** below the quick-workflow hint. First confirm the map, accept the gun and target, and finish reviewing uncertain coordinates. Calculation actions are unavailable while a new gun capture or target review is unresolved.
+
+### 1. Quick spotter commands
+
+In **Flight and terrain**, select a **10, 25, 50 or 100 m** step and click **Left / Right / Closer / Farther**. Directions are relative to gun-to-target: right does not mean east on the map. A click immediately moves the target and recalculates aiming; repeated clicks apply to the new point. This is a spotter command that changes the target, rather than an Alt+I impact record. Outdated OCR results are invalidated.
+
+### 2. Named positions and targets
+
+Open **Positions and targets**, enter a name and click **Save gun** or **Save target**. A selected record can be renamed, deleted or applied with **Restore selected**. Only the current map and weapon are shown. Set a gun before restoring a target; restoring a gun clears the previous target and corrections. Points are not automatically applied after restarting: first confirm the map and select the weapon.
+
+The collection holds up to **500** points, with names up to **120** UTF-16 code units. These persistent records are separate from the last 12 targets of the current session. Names within the same map, weapon and point kind must not duplicate each other, even with different capitalization.
+
+### 3. Measured flight times
+
+In **Time measurements**, enter **Version / profile**, **Source**, time from firing to impact and **Measurement uncertainty ±s**, then click **Record time for current target**. An example label is `0.1.2 / 155 HE / normal charge`; it must describe your own conditions. Enter a different label after changing the patch, ammunition or charge. The application does not detect them or start a shot stopwatch.
+
+Recording requires available nominal MIL and a known elevation difference. Up to **256** observations with time up to **600 s** can be stored. Recording the same range and profile again replaces the previous observation. You can delete a selected observation. Uncertainty must not exceed time.
+
+**Flight and terrain** shows a user observation or interpolation between observations of the same weapon, arc, elevation difference and label. The profile supplies no time outside measured coverage. With no observations and the model assumption disabled, the result is **Flight time unknown**. L81 uses the high arc; for SPH-2 select the desired arc in the planning window. This choice is for analysis; F4 switches aiming in the main window.
+
+### 4. Flight and terrain profile
+
+In **Flight and terrain**, green is ground and orange is the estimated arc. SPH-2 uses the retained geometric model; L81 displays available ground without an arc unless an additional model is supplied. Missing heights remain gaps. A crossing warning gives the approximate range of the first sampled model/ground intersection. Even a complete graph without crossings does not guarantee clear flight: checks sample points about every 2 m.
+
+For estimated time, explicitly select **Enable assumed speed and gravity**. It is initially unchecked; your later choice is saved. **Assumed g, m/s²** initially reads **9.80665**, an Earth-gravity assumption rather than measured WARDOGS physics. SPH-2 derives speed as `v = √(2629·g)`; L81 additionally requires **L81 speed, m/s**, initially missing. Matching user measurements take priority; other seconds are explicitly labeled model estimates. Neither speed nor `g` changes the sight table's MIL.
+
+Install a height package for the selected map to check ground. On the training ground or an unknown map, explicitly selecting no-height mode assumes equal endpoint elevations and does not check ground. Buildings, roofs, bridges, trees and actual barrel height are absent from the graph. Displayed MIL is nominal aiming without local Alt+I refinement; measuring time does not validate the arc shape.
+
+### 5. Profiles and sources
+
+**Profiles and sources** shows retained weapon limits, table provenance and links. L81 remains within **132–684 m / 850–150 MIL**: another table's rows up to 950 MIL do not extend its working range. SPH-2 preserves both tables, including the previously confirmed 1400 MIL. MetaForge's L52 is not established as the same profile as SPH-2; its seconds are not substituted into your calculation. See [calculations](CALCULATIONS-EN.md) for the full equations, source versions and conflicts.
+
+Planning data is outside the portable application and survives updates:
+
+| File in `%LOCALAPPDATA%\WardogsFireControl` | Contents |
+| --- | --- |
+| `fire-missions.json` | Named gun positions and targets |
+| `flight-profiles.json` | Measured flight times |
+| `planning.ini` | Assumed-model parameters and the latest profile fields |
+
+To move data to another PC, copy these files with the application closed; connect the appropriate terrain package separately. For the two JSON stores, damaged or unknown formats produce an error instead of automatic replacement with empty data.
 
 ## SPH-2: aim immediately, refine optionally
 
