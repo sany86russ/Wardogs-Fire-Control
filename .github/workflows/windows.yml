@@ -123,7 +123,7 @@ jobs:
           The separate `*-source.zip` contains the complete application source, tests and build scripts. The `qtbase-*` and `qttranslations-*` archives provide corresponding Qt 6.8.3 source. `SHA256SUMS.txt` verifies release downloads; `package-manifest.json` lists SHA-256 hashes for each portable application file.
 
           See the repository README for usage, calculations, limitations and third-party licenses. CI checks do not establish game publisher approval or real in-game hit accuracy.
-          
+
           Build provenance: `gh attestation verify <downloaded-file> --repo sany86russ/Wardogs-Fire-Control`.
           NOTES
           gh release create "$RELEASE_TAG" release/* --verify-tag --title "WARDOGS Fire Control $RELEASE_TAG" --notes-file release-notes.md
