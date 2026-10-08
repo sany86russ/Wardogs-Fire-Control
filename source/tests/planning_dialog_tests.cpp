@@ -194,9 +194,22 @@ double luminance(const QColor& colour) {
 
 void assert_dark_surface(QWidget* surface, QPalette::ColorRole text_role,
                          const QString& name, bool page_gutter) {
-    require(surface && surface->isVisible() && !surface->visibleRegion().isEmpty(),
+    require(surface && surface->isVisible() && surface->width() > 12 && surface->height() > 12,
             "contrast acceptance inspects a visible native surface");
-    const auto image = surface->grab().toImage();
+    // visibleRegion() describes unobscured painting of the widget itself. A
+    // viewport covered by its opaque content can therefore have an empty
+    // region while grab() correctly renders that visible content. Verify the
+    // shown ancestor geometry and sample only its actual clipped screen area.
+    QRect visible_geometry(surface->mapToGlobal(QPoint{}), surface->size());
+    for (auto* ancestor = surface->parentWidget(); ancestor; ancestor = ancestor->parentWidget()) {
+        require(ancestor->isVisible(), "a sampled native surface has visible ancestors");
+        visible_geometry = visible_geometry.intersected(
+            QRect(ancestor->mapToGlobal(QPoint{}), ancestor->size()));
+    }
+    require(visible_geometry.width() > 12 && visible_geometry.height() > 12,
+            "the sampled surface occupies a visible area inside the shown dialog");
+    const QRect clipped(surface->mapFromGlobal(visible_geometry.topLeft()), visible_geometry.size());
+    const auto image = surface->grab(clipped).toImage();
     require(!image.isNull() && image.width() > 12 && image.height() > 12,
             "contrast acceptance samples actual rendered pixels");
     // Page content has a six-pixel layout gutter. Item views have one retained
