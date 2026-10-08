@@ -19,6 +19,7 @@
 #include <QListWidget>
 #include <QLockFile>
 #include <QPainter>
+#include <QPalette>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QScreen>
@@ -63,6 +64,7 @@ QVBoxLayout* page(QTabWidget* tabs, const QString& title) {
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto* content = new QWidget;
+    content->setAutoFillBackground(true);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(6, 12, 6, 6);
     layout->setSpacing(12);
@@ -413,6 +415,20 @@ PlanningDialog::PlanningDialog(Provider provider, Apply apply, QWidget* parent,
     auto& s = *state_;
     s.context = s.provider();
     setObjectName(QStringLiteral("planningDialog"));
+    // The application stylesheet supplies light text, but an unstyled scroll
+    // viewport/list otherwise inherits Fusion's white Base. Keep all planning
+    // surfaces and item views readable, including standalone diagnostics.
+    auto colors = palette();
+    colors.setColor(QPalette::Window, QColor("#0b1019"));
+    colors.setColor(QPalette::Base, QColor("#0d1521"));
+    colors.setColor(QPalette::AlternateBase, QColor("#111b28"));
+    colors.setColor(QPalette::WindowText, QColor("#dce6f4"));
+    colors.setColor(QPalette::Text, QColor("#dce6f4"));
+    colors.setColor(QPalette::Button, QColor("#192638"));
+    colors.setColor(QPalette::ButtonText, QColor("#dce6f4"));
+    colors.setColor(QPalette::Highlight, QColor("#244b4b"));
+    colors.setColor(QPalette::HighlightedText, QColor("#eafbf8"));
+    setPalette(colors);
     configure_frameless_window(this);
     setWindowTitle(ui_text("Планирование · WARDOGS"));
     setModal(true);

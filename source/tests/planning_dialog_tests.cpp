@@ -4,6 +4,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -21,6 +22,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLockFile>
+#include <QPalette>
 #include <QPixmap>
 #include <QPushButton>
 #include <QRawFont>
@@ -53,6 +55,7 @@ int failures{};
 QString evidence_directory;
 QJsonArray screenshots;
 QJsonArray fixtures;
+QJsonArray surface_contrast;
 
 void check(bool condition, const char* message) {
     ++assertions;
@@ -183,6 +186,66 @@ bool has_colour(const QImage& image, QRgb colour) {
             if ((image.pixel(x, y) & 0x00ffffffU) == (colour & 0x00ffffffU) && ++count > 4)
                 return true;
     return false;
+}
+
+double luminance(const QColor& colour) {
+    return .2126 * colour.red() + .7152 * colour.green() + .0722 * colour.blue();
+}
+
+void assert_dark_surface(QWidget* surface, QPalette::ColorRole text_role,
+                         const QString& name, bool page_gutter) {
+    require(surface && surface->isVisible() && !surface->visibleRegion().isEmpty(),
+            "contrast acceptance inspects a visible native surface");
+    const auto image = surface->grab().toImage();
+    require(!image.isNull() && image.width() > 12 && image.height() > 12,
+            "contrast acceptance samples actual rendered pixels");
+    // Page content has a six-pixel layout gutter. Item views have one retained
+    // row and blank space beneath it. Median samples avoid text, selection and
+    // borders without assuming any implementation-specific background colour.
+    const int offset = std::max(2, static_cast<int>(2 * image.devicePixelRatio()));
+    const int x = page_gutter ? offset : image.width() - offset - 1;
+    std::vector<QColor> samples;
+    for (int i = 0; i < 7; ++i) {
+        const int y = static_cast<int>(image.height() * (.2 + .1 * i));
+        samples.push_back(image.pixelColor(x, y));
+    }
+    std::sort(samples.begin(), samples.end(), [](const auto& a, const auto& b) {
+        return luminance(a) < luminance(b);
+    });
+    const auto background = samples[samples.size() / 2];
+    const auto foreground = surface->palette().color(QPalette::Active, text_role);
+    const double background_luminance = luminance(background);
+    const double contrast = luminance(foreground) - background_luminance;
+    check(background_luminance < 80,
+          "rendered pages, lists and tables keep a dark background instead of Fusion white");
+    check(contrast >= 100,
+          "the native text colour has clear luminance contrast against the rendered background");
+    int contrasting_pixels{};
+    for (int y = 0; y < image.height() && contrasting_pixels < 20; ++y)
+        for (int column = 0; column < image.width() && contrasting_pixels < 20; ++column)
+            if (luminance(image.pixelColor(column, y)) - background_luminance >= 100)
+                ++contrasting_pixels;
+    check(contrasting_pixels >= 20, "real native surfaces visibly render contrasting foreground content");
+    surface_contrast.append(QJsonObject{{"surface", name}, {"background", background.name()},
+        {"foreground", foreground.name()}, {"background_luminance", background_luminance},
+        {"luminance_difference", contrast}, {"contrasting_pixels_at_least", contrasting_pixels}});
+}
+
+void inspect_page_contrast(PlanningDialog& dialog, const QString& name) {
+    auto* tabs = child<QTabWidget>(dialog, "planningTabs");
+    auto* page = qobject_cast<QScrollArea*>(tabs->currentWidget());
+    require(page != nullptr, "contrast acceptance inspects the current real tab viewport");
+    assert_dark_surface(page->viewport(), QPalette::WindowText, name + QStringLiteral("-page"), true);
+    if (tabs->currentIndex() == 1) {
+        auto* list = child<QListWidget>(dialog, "savedFireMissions");
+        make_visible(dialog, list);
+        assert_dark_surface(list->viewport(), QPalette::Text, name + QStringLiteral("-list"), false);
+    }
+    if (tabs->currentIndex() == 2) {
+        auto* table = child<QTableWidget>(dialog, "flightMeasurements");
+        make_visible(dialog, table);
+        assert_dark_surface(table->viewport(), QPalette::Text, name + QStringLiteral("-table"), false);
+    }
 }
 
 void inspect_english(PlanningDialog& dialog) {
@@ -662,6 +725,7 @@ void language_suite(wardogs::UiLanguage language, const QString& code) {
             if (tab == 2) focus = child<QTableWidget>(dialog, "flightMeasurements");
             if (tab == 3) focus = child<QLabel>(dialog, "weaponProfileInfo");
             screenshot(dialog, code + QStringLiteral("-tab-%1").arg(tab + 1), focus);
+            inspect_page_contrast(dialog, code + QStringLiteral("-tab-%1").arg(tab + 1));
             for (auto* button : dialog.findChildren<QPushButton*>()) {
                 if (!button->isVisible() || button->visibleRegion().isEmpty()) continue;
                 check(button->fontMetrics().horizontalAdvance(button->text()) + 12 <= button->width(),
@@ -731,6 +795,7 @@ int main(int argc, char** argv) {
     }
     const QJsonObject receipt{{"assertions", assertions}, {"failures", failures},
         {"platform", QApplication::platformName()}, {"screenshots", screenshots},
+        {"surface_contrast", surface_contrast},
         {"isolated_storage_directories", fixtures},
         {"boundary", "Native planning dialog and temporary local data only; no game capture, global hotkeys or long-term gameplay proof."}};
     QFile output(QDir(evidence_directory).filePath(QStringLiteral("planning-ui-receipt.json")));
