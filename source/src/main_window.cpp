@@ -617,6 +617,7 @@ public:
             target_input_->setText(QStringLiteral("84 83"));
             manual_target();
         }
+        std::unique_ptr<QTemporaryDir> planning_snapshot_data;
         std::unique_ptr<QDialog> dialog;
         QWidget* view = this;
         if (mode == QStringLiteral("settings") || mode.startsWith(QStringLiteral("recognition"))) {
@@ -626,6 +627,22 @@ public:
         }
         else if (mode == QStringLiteral("tutorial") || mode == QStringLiteral("tutorial-bottom")) dialog.reset(make_help_dialog(false));
         else if (mode == QStringLiteral("notice")) dialog.reset(make_help_dialog(true));
+        else if (mode.startsWith(QStringLiteral("planning"))) {
+            planning_snapshot_data = std::make_unique<QTemporaryDir>();
+            if (!planning_snapshot_data->isValid()) return false;
+            if (!vehicle_mode_) toggle_mode();
+            target_input_->setText(QStringLiteral("100 80"));
+            manual_target();
+            dialog = std::make_unique<PlanningDialog>([this] { return planning_context(); },
+                [this](auto kind, auto point, auto map, auto weapon) {
+                    apply_planning_point(kind, point, map, weapon);
+                }, this, std::filesystem::path(planning_snapshot_data->path().toStdWString()));
+            if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("planningTabs"))) {
+                if (mode == QStringLiteral("planning-positions")) tabs->setCurrentIndex(1);
+                else if (mode == QStringLiteral("planning-times")) tabs->setCurrentIndex(2);
+                else if (mode == QStringLiteral("planning-profiles")) tabs->setCurrentIndex(3);
+            }
+        }
         else if (mode == QStringLiteral("folder")) {
             dialog = make_terrain_folder_dialog();
         } else if (mode == QStringLiteral("error")) {
@@ -4634,7 +4651,9 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("pinned-menu-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),
-                            QStringLiteral("folder-ui"), QStringLiteral("error-ui")}) {
+                            QStringLiteral("folder-ui"), QStringLiteral("error-ui"),
+                            QStringLiteral("planning-ui"), QStringLiteral("planning-positions-ui"),
+                            QStringLiteral("planning-times-ui"), QStringLiteral("planning-profiles-ui")}) {
         const auto flag = QStringLiteral("--") + mode + QStringLiteral("-snapshot");
         QString path = argument_value(flag);
         if (path.isEmpty()) {

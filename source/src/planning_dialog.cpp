@@ -224,6 +224,8 @@ void write_observations(const QString& path, const std::vector<Observation>& val
             {"uncertainty_s", v.uncertainty}, {"game_version", v.version}, {"source", v.source}});
     }
     const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"observations", entries}}).toJson();
+    if (bytes.size() > maximum_observations_bytes)
+        throw std::runtime_error("Файл измерений времени полёта слишком большой.");
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
         throw std::runtime_error("Не удалось сохранить измерения времени полёта.");
@@ -665,6 +667,7 @@ void PlanningDialog::refresh() {
     auto& s = *state_;
     if (s.loading) return;
     s.context = s.provider();
+    s.message({});
     const bool l81 = s.context.weapon == wardogs::AnalysisWeapon::l81;
     s.arc->setEnabled(!l81);
     if (l81) { QSignalBlocker block(s.arc); s.arc->setCurrentIndex(1); }
@@ -720,7 +723,7 @@ void PlanningDialog::refresh() {
         s.analysis = wardogs::analyze_firing(request);
         const auto& result = *s.analysis;
         QString summary = ui_text("Дальность %1 м · азимут %2°").arg(result.distance_m, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2);
-        summary += result.nominal_mil ? ui_text("\nТабличный MIL: %1").arg(*result.nominal_mil, 0, 'f', 2)
+        summary += result.nominal_mil ? ui_text("\nMIL без поправки Alt+I: %1").arg(*result.nominal_mil, 0, 'f', 2)
                                       : ui_text("\nТабличная наводка недоступна");
         if (result.flight_time) {
             const auto& time = *result.flight_time;

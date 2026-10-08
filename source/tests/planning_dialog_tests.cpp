@@ -31,6 +31,7 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextBrowser>
+#include <QUuid>
 
 #include <algorithm>
 #include <bit>
@@ -213,7 +214,7 @@ void inspect_english(PlanningDialog& dialog) {
 
 bool time_unknown(PlanningDialog& dialog) {
     return child<QLabel>(dialog, "flightTimeResult")->text().contains(
-        translated("Время полёта неизвестно: добавьте замеры или явно включите модель."));
+        translated("\nВремя полёта неизвестно: добавьте замеры или явно включите модель."));
 }
 
 void assert_error(PlanningDialog& dialog) {
@@ -556,6 +557,77 @@ void corruption_tests(Harness& harness, const QString& language) {
     dialog.close();
 }
 
+void timing_byte_limit_tests(const QString& language) {
+    QTemporaryDir storage(QDir::tempPath() + QStringLiteral("/wardogs-planning-byte-limit-XXXXXX"));
+    require(storage.isValid(), "timing byte-limit regression has an isolated persistent directory");
+    storage.setAutoRemove(false);
+    fixtures.append(storage.path());
+    constexpr qsizetype byte_limit = 256 * 1024;
+    const QString version(80, QChar(0x6d4b));
+    const QString source(200, QChar(0x8bd5));
+    QJsonArray observations;
+    QByteArray retained;
+    QByteArray over_limit;
+    for (int i = 0; i < 256; ++i) {
+        auto candidate = observations;
+        candidate.append(QJsonObject{
+            {"id", QUuid::createUuid().toString(QUuid::WithoutBraces)},
+            {"weapon", "l81"}, {"arc", "high"}, {"distance_m", 200 + i},
+            {"height_delta_m", 0}, {"seconds", 10}, {"uncertainty_s", .5},
+            {"game_version", version}, {"source", source}});
+        const auto bytes = QJsonDocument(QJsonObject{{"schema", 1}, {"observations", candidate}}).toJson();
+        if (bytes.size() > byte_limit) {
+            over_limit = bytes;
+            break;
+        }
+        observations = std::move(candidate);
+        retained = bytes;
+    }
+    require(!retained.isEmpty() && retained.size() <= byte_limit && !over_limit.isEmpty() &&
+            observations.size() < 256, "valid multibyte observations reach the byte limit before the entry limit");
+    require(version.toUtf8().size() == 240 && source.toUtf8().size() == 600,
+            "the fixture tests real UTF-8 bytes with valid 80/200-character field lengths");
+    const QString path = storage.path() + QStringLiteral("/flight-profiles.json");
+    write_bytes(path, retained);
+    Harness harness;
+    harness.context.target = wardogs::Point{6.5, 0}; // Unique 650 m, inside the retained L81 table.
+    {
+        PlanningDialog dialog(harness.provider(), harness.apply(), nullptr, native_path(storage.path()));
+        dialog.show();
+        settle();
+        choose_tab(dialog, 2);
+        auto* table = child<QTableWidget>(dialog, "flightMeasurements");
+        require(table->rowCount() == observations.size(), "the real dialog reads the valid near-limit timing file");
+        child<QLineEdit>(dialog, "flightGameVersion")->setText(version);
+        child<QLineEdit>(dialog, "flightMeasurementSource")->setText(source);
+        child<QDoubleSpinBox>(dialog, "measuredFlightSeconds")->setValue(10);
+        child<QDoubleSpinBox>(dialog, "flightUncertainty")->setValue(.5);
+        dialog.refresh();
+        require(child<QPushButton>(dialog, "recordFlightTime")->isEnabled(),
+                "the byte-limit regression uses an enabled real Record button with a valid firing solution");
+        click(dialog, "recordFlightTime");
+        assert_error(dialog);
+        check(child<QLabel>(dialog, "planningStatus")->text() ==
+                  translated("Файл измерений времени полёта слишком большой."),
+              "the actual Record button reports the byte limit rather than a count or input-validation error");
+        check(read_bytes(path) == retained && table->rowCount() == observations.size(),
+              "a would-be oversized timing write preserves all previous user bytes and rows");
+        screenshot(dialog, language + QStringLiteral("-timing-byte-limit"));
+        dialog.close();
+    }
+    {
+        PlanningDialog reopened(harness.provider(), harness.apply(), nullptr, native_path(storage.path()));
+        reopened.show();
+        settle();
+        check(child<QTableWidget>(reopened, "flightMeasurements")->rowCount() == observations.size() &&
+              read_bytes(path) == retained,
+              "after rejected oversized save the real reader can still reopen all original observations");
+        reopened.close();
+    }
+    write_bytes(QDir(evidence_directory).filePath(language + QStringLiteral("-timing-byte-limit-preserved.json")),
+                read_bytes(path));
+}
+
 void language_suite(wardogs::UiLanguage language, const QString& code) {
     wardogs::i18n::set_language(language);
     QTemporaryDir storage(QDir::tempPath() + QStringLiteral("/wardogs-planning-ui-XXXXXX"));
@@ -619,6 +691,7 @@ void language_suite(wardogs::UiLanguage language, const QString& code) {
         reopened.close();
     }
     corruption_tests(harness, code);
+    timing_byte_limit_tests(code);
 }
 
 } // namespace

@@ -604,8 +604,8 @@
     "en": "Range %1 m · bearing %2°"
   },
   {
-    "ru": "\nТабличный MIL: %1",
-    "en": "\nTable MIL: %1"
+    "ru": "\nMIL без поправки Alt+I: %1",
+    "en": "\nMIL without the Alt+I correction: %1"
   },
   {
     "ru": "\nТабличная наводка недоступна",
