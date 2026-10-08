@@ -1,0 +1,129 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Windows x64 / Qt 6.8.3
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout public source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Python for the Qt SDK installer
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Read version and validate release tag
+        id: version
+        run: |
+          $match = Select-String -LiteralPath source/CMakeLists.txt -Pattern 'project\(WarDogsDistanceCalculator VERSION ([0-9]+\.[0-9]+\.[0-9]+)'
+          if (-not $match) { throw 'CMake project version was not found.' }
+          $version = $match.Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match the source version v$version."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Install Qt 6.8.3 MSVC 2022 x64
+        run: |
+          python -m pip install --disable-pip-version-check aqtinstall==3.3.0
+          if ($LASTEXITCODE -ne 0) { throw 'The Qt installer could not be installed.' }
+          $sdkDirectory = Join-Path $env:RUNNER_TEMP 'qt-sdk'
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 --outputdir $sdkDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'The Qt SDK could not be installed.' }
+          "QT_ROOT=$(Join-Path $sdkDirectory '6.8.3/msvc2022_64')" >> $env:GITHUB_ENV
+      - name: Build, run all CTest suites and deploy Qt
+        run: ./source/build.ps1 -Configuration Release -ParallelJobs 2 -Package -SkipArchive
+      - name: Package binaries, public source and corresponding Qt source
+        run: ./tools/ci-package.ps1 -IncludeSource -IncludeQtSources
+      - name: Attest the release files
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: source/out/public-release/*
+      - name: Retain test diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-test-results-${{ github.run_number }}
+          path: source/build/release/Testing/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain release files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: WardogsFireControl-v${{ steps.version.outputs.version }}-release
+          path: source/out/public-release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish verified tag
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the tested release files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: WardogsFireControl-*-release
+          path: release
+          merge-multiple: true
+      - name: Create a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          ## Русский
+
+          **WARDOGS Fire Control** — переносимый калькулятор L81 / SPH-2 для Windows x64 с полностью локальными OCR и расчётами, интерфейсом RU / EN и документацией на двух языках.
+
+          Скачайте `WardogsFireControl-*-win-x64.zip`, распакуйте целиком и запустите `Start.cmd` или `Запустить.cmd`. Настройки хранятся в профиле Windows. Высотные данные игры в архив не входят.
+
+          Для высотной модели можно самостоятельно скачать `terrain-packs.zip` из [оригинального релиза v1.4.0](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0), распаковать папку `terrain-packs` и выбрать её через «Подключить локальные данные высот…» в разделе «Игровая карта» главного окна.
+
+          Отдельный `*-source.zip` содержит полные исходники приложения, тесты и сборочные скрипты. Архивы `qtbase-*` и `qttranslations-*` содержат соответствующие исходники Qt 6.8.3. `SHA256SUMS.txt` позволяет проверить файлы; `package-manifest.json` перечисляет SHA-256 каждого файла переносимой программы.
+
+          ## English
+
+          **WARDOGS Fire Control** is a portable L81 / SPH-2 calculator for Windows x64 with local OCR and calculations, a complete RU / EN interface and bilingual documentation.
+
+          Download `WardogsFireControl-*-win-x64.zip`, extract the entire archive and run `Start.cmd`. Settings are stored in your Windows profile. Game terrain data is not included.
+
+          For terrain heights, you can separately download `terrain-packs.zip` from the [original v1.4.0 release](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0), extract its `terrain-packs` folder and select it through **Connect local height data…** in the main window's **Game map** section.
+
+          The separate `*-source.zip` contains the complete application source, tests and build scripts. The `qtbase-*` and `qttranslations-*` archives provide corresponding Qt 6.8.3 source. `SHA256SUMS.txt` verifies release downloads; `package-manifest.json` lists SHA-256 hashes for each portable application file.
+
+          See the repository README for usage, calculations, limitations and third-party licenses. CI checks do not establish game publisher approval or real in-game hit accuracy.
+          
+          Build provenance: `gh attestation verify <downloaded-file> --repo sany86russ/Wardogs-Fire-Control`.
+          NOTES
+          gh release create "$RELEASE_TAG" release/* --verify-tag --title "WARDOGS Fire Control $RELEASE_TAG" --notes-file release-notes.md
