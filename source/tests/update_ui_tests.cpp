@@ -7,6 +7,8 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
+#include <QFont>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -19,8 +21,10 @@
 #include <QProgressDialog>
 #include <QPointer>
 #include <QPushButton>
+#include <QRawFont>
 #include <QRegularExpression>
 #include <QTemporaryDir>
+#include <QStyleFactory>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -258,6 +262,26 @@ void download_cancellation_and_lifetime_tests() {
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     application.setQuitOnLastWindowClosed(false);
+    auto* style = QStyleFactory::create(QStringLiteral("Fusion"));
+    check(style != nullptr, "the screenshot fixture uses the available Fusion widget style");
+    if (style) application.setStyle(style);
+    QFont font(QStringLiteral("Segoe UI"));
+    font.setPixelSize(13);
+    application.setFont(font);
+    const QFontMetrics metrics(application.font());
+    check(metrics.height() > 0 &&
+          metrics.horizontalAdvance(QStringLiteral("Update")) > metrics.horizontalAdvance(QStringLiteral(" ")) &&
+          metrics.horizontalAdvance(QString::fromUtf8("Обновить")) > metrics.horizontalAdvance(QStringLiteral(" ")),
+          "the screenshot font has measurable Latin and Cyrillic text");
+    const QRawFont raw = QRawFont::fromFont(application.font());
+    check(raw.isValid() && raw.supportsCharacter(0x0041U) && raw.supportsCharacter(0x0414U) &&
+          raw.supportsCharacter(0x044FU),
+          "the screenshot font provides real Latin and Cyrillic glyphs instead of missing-character boxes");
+    if (raw.isValid()) {
+        const auto glyphs = raw.glyphIndexesForString(QString::fromUtf8("WARDOGS Доступна"));
+        check(!glyphs.isEmpty() && std::all_of(glyphs.begin(), glyphs.end(), [](quint32 glyph) { return glyph != 0; }),
+              "the rendered update banner text maps to existing font glyphs");
+    }
     banner_and_language_tests();
     current_version_message_test();
     download_cancellation_and_lifetime_tests();

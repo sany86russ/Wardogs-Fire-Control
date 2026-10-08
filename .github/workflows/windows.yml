@@ -71,6 +71,10 @@ jobs:
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           & (Join-Path $probeDirectory 'wardogs_update_probe.exe') --live-check "--download=$(Join-Path $probeDirectory 'verified-download.zip')"
           if ($LASTEXITCODE -ne 0) { throw 'Packaged HTTPS release check/download failed.' }
+      - name: Verify full update and real application restart
+        run: |
+          $zip = Get-ChildItem source/out/public-release -Filter '*-win-x64.zip' | Select-Object -First 1
+          ./source/tests/update_restart_smoke.ps1 -ArchivePath $zip.FullName -PreviousArchivePath (Join-Path $env:RUNNER_TEMP 'updater-runtime-probe/verified-download.zip') -EvidenceDirectory (Join-Path $env:GITHUB_WORKSPACE 'source/build/release/Testing/update-restart')
       - name: Attest the release files
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4

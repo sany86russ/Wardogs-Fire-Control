@@ -206,7 +206,7 @@ add_executable(wardogs_update_ui_tests tests/update_ui_tests.cpp)
 target_link_libraries(wardogs_update_ui_tests PRIVATE wardogs_updates)
 target_compile_options(wardogs_update_ui_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_update_ui_tests COMMAND wardogs_update_ui_tests)
-set_tests_properties(wardogs_update_ui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(wardogs_update_ui_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
 add_test(NAME wardogs_update_installer_tests COMMAND powershell.exe
     -NoProfile -NonInteractive -ExecutionPolicy Bypass
     -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/update_installer_tests.ps1"
