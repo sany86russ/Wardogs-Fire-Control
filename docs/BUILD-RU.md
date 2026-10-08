@@ -22,6 +22,8 @@ Set-Location Wardogs-Fire-Control
 
 ## Сборка и тесты
 
+Qt должен включать модули **Widgets** и **Network**, а также TLS-плагин **Schannel**. Публичный комплект содержит `Qt6Network.dll`, `tls/qschannelbackend.dll` и помощник `Update.ps1`; для TLS используются сертификаты Windows.
+
 Укажите путь к установленному комплекту Qt:
 
 ```powershell

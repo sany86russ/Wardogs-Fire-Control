@@ -2,6 +2,16 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.8.0 — GitHub release updates
+
+- Background stable-release checks at startup, configurable in Settings. Manual checks are available in the header.
+- A new-version banner offers Update, What's new and Later. Download and installation require the user's action.
+- The complete ZIP is verified against its declared size and mandatory GitHub SHA-256 digest. The manifest, every file and the Windows x64 executable version are then checked.
+- The complete portable package is updated, including Qt DLLs and resources. An external helper waits for the app to exit, retains backups and rolls back on replacement/start failure.
+- Settings and imported terrain in the Windows profile are preserved. Current session data is cleared on restart.
+- Diagnostic launches do not check the network. OCR and calculations stay local and work offline.
+- The first upgrade from 2.7.0 is manual; see the [update guide](../../docs/UPDATES-EN.md).
+
 ## 2.7.0 — Russian and English interface
 
 - Russian is the default for a new profile. The **RU / EN** selector beside the version changes the interface immediately and saves the preference for the next launch.

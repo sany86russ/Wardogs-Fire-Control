@@ -55,6 +55,8 @@ int run_settings_tests() {
     AppSettings saved;
     check(saved.language == wardogs::UiLanguage::russian,
           "the default interface language is Russian");
+    check(saved.check_updates_on_start,
+          "fresh profiles check GitHub updates on startup");
     check(saved.last_game_map == wardogs::GameMap::unselected,
           "a new profile cannot imply a current game map");
     check(saved.region_hotkey == L"Alt+R" && saved.base_hotkey == L"Alt+X" &&
@@ -78,6 +80,7 @@ int run_settings_tests() {
           "ghost bearing compensation defaults to zero degrees");
     saved.region_hotkey = L"Ctrl+F8";
     saved.language = wardogs::UiLanguage::english;
+    saved.check_updates_on_start = false;
     saved.last_game_map = wardogs::GameMap::ozeti;
     saved.impact_hotkey = L"Ctrl+Shift+F11";
     saved.game_integration_enabled = true;
@@ -98,6 +101,9 @@ int run_settings_tests() {
     wardogs::save_settings_to(path, saved);
 
     const AppSettings loaded = wardogs::load_settings_from(path);
+    check(!loaded.check_updates_on_start &&
+              ini_value(path, L"settings", L"check_updates_on_start") == L"0",
+          "disabled startup update checks survive the settings round trip");
     check(loaded.language == wardogs::UiLanguage::english &&
               ini_value(path, L"settings", L"ui_language") == L"en",
           "English survives the profile round trip with a stable INI identifier");
@@ -116,6 +122,14 @@ int run_settings_tests() {
     auto russian = wardogs::load_settings_from(language_path);
     check(russian.language == wardogs::UiLanguage::russian,
           "a legacy profile without a language key uses Russian");
+    WritePrivateProfileStringW(L"settings", L"check_updates_on_start", nullptr, language_path.c_str());
+    check(wardogs::load_settings_from(language_path).check_updates_on_start,
+          "a legacy profile without the update preference uses startup checks");
+    for (const wchar_t* invalid : {L"2", L"-1", L"invalid"}) {
+        WritePrivateProfileStringW(L"settings", L"check_updates_on_start", invalid, language_path.c_str());
+        check(wardogs::load_settings_from(language_path).check_updates_on_start,
+              "invalid startup update preferences retain the safe boolean default");
+    }
     wardogs::save_settings_to(language_path, russian);
     const auto retained_language = wardogs::load_settings_from(language_path);
     check(retained_language.language == wardogs::UiLanguage::russian &&

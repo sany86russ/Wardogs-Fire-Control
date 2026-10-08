@@ -56,8 +56,21 @@ jobs:
           "QT_ROOT=$(Join-Path $sdkDirectory '6.8.3/msvc2022_64')" >> $env:GITHUB_ENV
       - name: Build, run all CTest suites and deploy Qt
         run: ./source/build.ps1 -Configuration Release -ParallelJobs 2 -Package -SkipArchive
+      - name: Check RU and EN catalogues
+        run: python source/tools/check_localization.py
       - name: Package binaries, public source and corresponding Qt source
         run: ./tools/ci-package.ps1 -IncludeSource -IncludeQtSources
+      - name: Verify packaged HTTPS updater and real release download
+        run: |
+          $probeDirectory = Join-Path $env:RUNNER_TEMP 'updater-runtime-probe'
+          New-Item -ItemType Directory -Path $probeDirectory | Out-Null
+          $zip = Get-ChildItem source/out/public-release -Filter '*-win-x64.zip' | Select-Object -First 1
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $probeDirectory
+          Copy-Item source/build/release/wardogs_update_probe.exe $probeDirectory
+          $env:QT_PLUGIN_PATH = $probeDirectory
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & (Join-Path $probeDirectory 'wardogs_update_probe.exe') --live-check "--download=$(Join-Path $probeDirectory 'verified-download.zip')"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged HTTPS release check/download failed.' }
       - name: Attest the release files
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
@@ -108,6 +121,8 @@ jobs:
 
           Скачайте `WardogsFireControl-*-win-x64.zip`, распакуйте целиком и запустите `Start.cmd` или `Запустить.cmd`. Настройки хранятся в профиле Windows. Высотные данные игры в архив не входят.
 
+          Начиная с 2.8.0, приложение проверяет стабильные релизы в фоне и обновляет полный комплект по кнопке «Обновить», с проверкой SHA-256 и резервными файлами для отката. Автопроверка выключается в настройках. Пользователям 2.7.0 и более ранних версий нужно один раз скачать новый ZIP вручную.
+
           Для высотной модели можно самостоятельно скачать `terrain-packs.zip` из [оригинального релиза v1.4.0](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0), распаковать папку `terrain-packs` и выбрать её через «Подключить локальные данные высот…» в разделе «Игровая карта» главного окна.
 
           Отдельный `*-source.zip` содержит полные исходники приложения, тесты и сборочные скрипты. Архивы `qtbase-*` и `qttranslations-*` содержат соответствующие исходники Qt 6.8.3. `SHA256SUMS.txt` позволяет проверить файлы; `package-manifest.json` перечисляет SHA-256 каждого файла переносимой программы.
@@ -117,6 +132,8 @@ jobs:
           **WARDOGS Fire Control** is a portable L81 / SPH-2 calculator for Windows x64 with local OCR and calculations, a complete RU / EN interface and bilingual documentation.
 
           Download `WardogsFireControl-*-win-x64.zip`, extract the entire archive and run `Start.cmd`. Settings are stored in your Windows profile. Game terrain data is not included.
+
+          Starting with 2.8.0, the app checks stable releases in the background and updates the full package when you click Update, using SHA-256 verification and retained rollback files. Startup checks can be disabled in Settings. Users of 2.7.0 or earlier need one manual ZIP upgrade.
 
           For terrain heights, you can separately download `terrain-packs.zip` from the [original v1.4.0 release](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0), extract its `terrain-packs` folder and select it through **Connect local height data…** in the main window's **Game map** section.
 

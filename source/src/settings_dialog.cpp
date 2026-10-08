@@ -116,6 +116,14 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     workflow_text->setObjectName(QStringLiteral("quickWorkflowSteps"));
     workflow_layout->addWidget(workflow_text);
     quick_page->addWidget(workflow);
+    auto* updates = new QGroupBox(wardogs::i18n::text(QStringLiteral("Обновления")));
+    auto* update_layout = new QVBoxLayout(updates);
+    check_updates_on_start_ = new QCheckBox(wardogs::i18n::text(QStringLiteral("Проверять обновления GitHub при запуске")));
+    check_updates_on_start_->setObjectName(QStringLiteral("checkUpdatesOnStart"));
+    check_updates_on_start_->setChecked(settings.check_updates_on_start);
+    check_updates_on_start_->setToolTip(wardogs::i18n::text(QStringLiteral("Новая версия устанавливается только после нажатия «Обновить». Расчёты и OCR работают локально.")));
+    update_layout->addWidget(check_updates_on_start_);
+    quick_page->addWidget(updates);
     auto* advanced_page = tab_page(tabs, wardogs::i18n::text(QStringLiteral("Дополнительно")));
     advanced_page->addWidget(explanation(wardogs::i18n::text(QStringLiteral(
         "Эти параметры нужны для своего способа работы. "
@@ -376,6 +384,7 @@ wardogs::AppSettings SettingsDialog::settings() const {
                         ? wardogs::OcrBackend::windows : wardogs::OcrBackend::rapid;
     value.region_hotkey = hotkey_text(region_key_);
     value.automatic_chat_region = automatic_chat_region_->isChecked();
+    value.check_updates_on_start = check_updates_on_start_->isChecked();
     value.base_hotkey = hotkey_text(base_key_);
     value.target_hotkey = hotkey_text(target_key_);
     value.quick_target_hotkey = hotkey_text(quick_target_key_);

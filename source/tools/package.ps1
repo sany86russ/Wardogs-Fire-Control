@@ -115,6 +115,7 @@ $archiveName = "WardogsFireControl-v$version-win-x64.zip"
 $archivePath = Assert-WorkspacePath (Join-Path $distRoot $archiveName)
 $required = @(
     'WarDogsDistanceCalculator.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
+    'Qt6Network.dll', 'tls\qschannelbackend.dll', 'Update.ps1',
     'onnxruntime.dll', 'platforms\qwindows.dll', 'models\PP-OCRv6_rec_small.onnx',
     'LICENSE', 'THIRD_PARTY_NOTICES.md', 'models\LICENSE.PaddleOCR.txt',
     'licenses\onnxruntime\LICENSE.txt', 'licenses\qt\LGPL-3.0.txt',
@@ -226,6 +227,7 @@ try {
         configuration = 'Release'
         visual_cpp_redistributable_version = $redist.version
         generated_utc = [DateTime]::UtcNow.ToString('o')
+        terrain_data_included = $false
         files = $files
     }
     [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))

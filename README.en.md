@@ -2,7 +2,7 @@
 
 **A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.
 
-[![Version](https://img.shields.io/badge/version-2.7.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.8.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-launch)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#language-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
@@ -11,7 +11,7 @@
 
 The app transfers map points into an aiming calculation: **Alt+X** reads the gun position from the active chat draft; the **middle mouse button** reads a target beside the map cursor. Results are available in the main window, an always-on-top mini card and an auxiliary sight overlay. Fully manual operation is also available.
 
-**Version 2.7.0:** the entire interface and help are available in Russian and English. Switch the language in the header without restarting; your choice is saved and the current coordinates and calculation are preserved.
+**Version 2.8.0:** GitHub release updates inside the app. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
 ![WARDOGS Fire Control main window in English](docs/screenshots/en-main.png)
 
@@ -69,7 +69,7 @@ The app calculates aiming commands. Setting the in-game bearing and MIL, decidin
 **Requirements:** Windows 10/11 x64. Normal use does not require app installation, administrator privileges, the Qt SDK, Visual Studio or Python.
 
 1. Open the [latest release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Download **WardogsFireControl-v2.7.0-win-x64.zip** from **Assets**.
+2. Download **WardogsFireControl-v2.8.0-win-x64.zip** from **Assets**.
 3. **Extract the entire ZIP** into its own folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** inside the extracted package.
 
@@ -82,14 +82,24 @@ Use **borderless windowed mode** for the mini card and sight. Overlays in exclus
 Release archives are accompanied by a SHA-256 checksum file. Compare its entry with:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.7.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.8.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 The checksum checks download integrity. With GitHub CLI installed, you can also verify build provenance through GitHub attestations:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.7.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.8.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
+
+### Updating inside the app
+
+Starting with **2.8.0**, the app checks this repository's latest stable release at startup. The check runs in the background: the calculator keeps working without an internet connection. You can disable startup checks in Settings; the manual **Check for updates** button remains available.
+
+The new-version banner offers **Update**, **What's new** and **Later**. Installation starts only after you click Update: the app downloads the full ZIP, verifies its size, SHA-256 and packaged files, exits, replaces the package and restarts. You can cancel the download before installation. Settings and imported terrain in your Windows profile are preserved; current coordinates and session history do not survive the restart.
+
+**Upgrading from 2.7.0 or earlier:** download the new ZIP manually once and extract it in full. Earlier versions do not include the updater. Automatic installation requires the complete Assets package and write access to its folder. On a replacement error the installer restores previous files; backups and diagnostics remain in <code>.wardogs-update-…</code>. See the [update guide](docs/UPDATES-EN.md) for details, limits and manual recovery.
+
+OCR and calculations run locally. Internet access is used only to check/download updates and open external links. Coordinates, screenshots and terrain are not sent to GitHub.
 
 ## Your first calculation
 

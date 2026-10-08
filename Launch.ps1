@@ -18,7 +18,8 @@ try {
     $executable = Join-Path $launchDirectory 'WarDogsDistanceCalculator.exe'
     $required = @(
         'WarDogsDistanceCalculator.exe', 'Qt6Core.dll', 'Qt6Gui.dll',
-        'Qt6Widgets.dll', 'onnxruntime.dll', 'platforms\qwindows.dll',
+        'Qt6Widgets.dll', 'Qt6Network.dll', 'tls\qschannelbackend.dll',
+        'Update.ps1', 'onnxruntime.dll', 'platforms\qwindows.dll',
         'models\PP-OCRv6_rec_small.onnx', 'msvcp140.dll', 'msvcp140_1.dll',
         'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'
     )
