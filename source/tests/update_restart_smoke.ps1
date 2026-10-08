@@ -36,6 +36,7 @@ $helperSource = Join-Path $sourceRoot 'tools\Update.ps1'
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -74,6 +75,10 @@ public static class WardogsRestartSmokeWindows
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
 
     public static int LastPostMessageError { get; private set; }
 
@@ -162,6 +167,14 @@ public static class WardogsRestartSmokeWindows
         bool delivered = PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero);
         if (!delivered) LastPostMessageError = Marshal.GetLastWin32Error();
         return delivered;
+    }
+
+    public static uint ProcessExitCode(IntPtr process)
+    {
+        uint exitCode;
+        if (process == IntPtr.Zero) throw new InvalidOperationException("A retained process handle is required.");
+        if (!GetExitCodeProcess(process, out exitCode)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return exitCode;
     }
 }
 '@
@@ -299,12 +312,17 @@ function Copy-SmokeSessionLog {
 function Close-SmokeApplication {
     param([Diagnostics.Process]$Process, [string]$ExpectedPath, [IntPtr]$Window)
     Assert-SmokeProcessPath $Process $ExpectedPath
+    # Processes obtained through Get-Process otherwise may lose access to the
+    # exit code when their PID disappears. Keep the actual native handle alive.
+    $processHandle = $Process.Handle
+    if ($processHandle -eq [IntPtr]::Zero) { throw 'The known application process handle could not be retained.' }
     # Qt may recreate the native window after the startup probe. Only a freshly
     # enumerated and ownership-checked HWND may receive the shutdown message.
     $currentWindow = [WardogsRestartSmokeWindows]::FindMainWindow([uint32]$Process.Id)
     $attempt = [ordered]@{
         process_id = $Process.Id; startup_window = $Window.ToInt64(); close_window = $currentWindow.ToInt64()
         started_utc = [DateTime]::UtcNow.ToString('o'); request_delivered = $false; exited = $false
+        process_handle_retained = $true
         close_window_class = [WardogsRestartSmokeWindows]::WindowClass($currentWindow)
         close_window_extended_style = [WardogsRestartSmokeWindows]::ExtendedStyle($currentWindow)
         window_candidates = @([WardogsRestartSmokeWindows]::WindowCandidates([uint32]$Process.Id))
@@ -327,8 +345,10 @@ function Close-SmokeApplication {
         $attempt.responding_after_timeout = $Process.Responding
         throw "WARDOGS received WM_CLOSE but did not exit within 30 seconds, PID $($Process.Id)."
     }
-    $attempt.exit_code = $Process.ExitCode
-    if ($Process.ExitCode -ne 0) { throw "Portable application exited with code $($Process.ExitCode)." }
+    $exitCode = [WardogsRestartSmokeWindows]::ProcessExitCode($processHandle)
+    $attempt.exit_code = $exitCode
+    $attempt.exit_code_source = 'GetExitCodeProcess with retained own process handle'
+    if ($null -eq $exitCode -or $exitCode -ne 0) { throw "Portable application exited with code $exitCode." }
 }
 
 function Copy-SmokeFailureLog {
@@ -488,7 +508,12 @@ try {
     while (-not $newProcess) {
         foreach ($candidate in @(Get-Process -Name 'WarDogsDistanceCalculator' -ErrorAction SilentlyContinue)) {
             if ($candidate.Id -ne $oldProcess.Id -and $candidate.Path -ieq $executable -and
-                    $candidate.StartTime.ToUniversalTime() -ge $installStarted) { $newProcess = $candidate; break }
+                    $candidate.StartTime.ToUniversalTime() -ge $installStarted) {
+                if ($candidate.Handle -eq [IntPtr]::Zero) { throw 'The restarted application process handle could not be retained.' }
+                $newProcess = $candidate
+                $receipt.new_process_handle_retained = $true
+                break
+            }
             $candidate.Dispose()
         }
         if ($newProcess) { break }
