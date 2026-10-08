@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.8.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.9.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -19,7 +19,7 @@ qt_add_resources(wardogs_i18n localization
     PREFIX "/i18n"
     BASE translations
     FILES translations/main.json translations/dialogs.json
-          translations/errors.json translations/common.json translations/qtbase_ru.json
+          translations/errors.json translations/common.json translations/planning.json translations/qtbase_ru.json
 )
 
 add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)
@@ -57,6 +57,7 @@ endif()
 add_library(wardogs_core
     src/calculator.cpp
     src/continuous_calibration.cpp
+    src/firing_analysis.cpp
     src/coordinates.cpp
     src/ghost_reticle.cpp
     src/hotkeys.cpp
@@ -78,6 +79,18 @@ target_link_libraries(wardogs_core PRIVATE
 if(MSVC)
     target_compile_options(wardogs_core PRIVATE /W4 /permissive- /utf-8)
 endif()
+
+add_library(wardogs_missions STATIC src/fire_missions.cpp)
+target_include_directories(wardogs_missions PUBLIC include)
+target_link_libraries(wardogs_missions PUBLIC wardogs_core Qt6::Core PRIVATE shell32 ole32)
+target_compile_definitions(wardogs_missions PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_missions PRIVATE /W4 /permissive- /utf-8)
+
+add_library(wardogs_planning_ui STATIC src/planning_dialog.cpp src/window_title_bar.cpp src/app_icon.cpp)
+target_include_directories(wardogs_planning_ui PUBLIC include src)
+target_link_libraries(wardogs_planning_ui PUBLIC wardogs_missions wardogs_i18n Qt6::Widgets PRIVATE dwmapi)
+target_compile_definitions(wardogs_planning_ui PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_planning_ui PRIVATE /W4 /permissive- /utf-8)
 
 if(WIN32)
     configure_file(
@@ -108,7 +121,7 @@ if(WIN32)
     )
     target_compile_options(WarDogsDistanceCalculator PRIVATE /W4 /permissive- /utf-8)
     target_link_libraries(WarDogsDistanceCalculator PRIVATE
-        wardogs_core wardogs_terrain wardogs_i18n wardogs_updates Qt6::Widgets dwmapi gdi32 user32 windowsapp
+        wardogs_core wardogs_terrain wardogs_i18n wardogs_updates wardogs_planning_ui Qt6::Widgets dwmapi gdi32 user32 windowsapp
         shell32 ole32 propsys
     )
     add_custom_command(TARGET WarDogsDistanceCalculator POST_BUILD
@@ -195,6 +208,24 @@ install(FILES
 )
 
 enable_testing()
+
+add_executable(wardogs_firing_analysis_tests tests/firing_analysis_tests.cpp)
+target_link_libraries(wardogs_firing_analysis_tests PRIVATE wardogs_core)
+target_compile_options(wardogs_firing_analysis_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_firing_analysis_tests COMMAND wardogs_firing_analysis_tests)
+
+add_executable(wardogs_fire_missions_tests tests/fire_missions_tests.cpp)
+target_link_libraries(wardogs_fire_missions_tests PRIVATE wardogs_missions)
+target_compile_options(wardogs_fire_missions_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_fire_missions_tests COMMAND wardogs_fire_missions_tests)
+
+add_executable(wardogs_planning_ui_tests tests/planning_dialog_tests.cpp)
+target_link_libraries(wardogs_planning_ui_tests PRIVATE wardogs_planning_ui)
+target_compile_options(wardogs_planning_ui_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_planning_ui_tests COMMAND wardogs_planning_ui_tests
+    --evidence-dir "${CMAKE_CURRENT_BINARY_DIR}/Testing/planning")
+set_tests_properties(wardogs_planning_ui_tests PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=windows" SKIP_RETURN_CODE 77 TIMEOUT 120)
 add_executable(wardogs_update_tests tests/update_service_tests.cpp)
 target_link_libraries(wardogs_update_tests PRIVATE wardogs_updates)
 target_compile_options(wardogs_update_tests PRIVATE /W4 /permissive- /utf-8)

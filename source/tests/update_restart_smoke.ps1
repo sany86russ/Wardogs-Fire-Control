@@ -385,6 +385,7 @@ $profileSettings = $null
 $profileSettingsExisted = $false
 $profileSettingsPrepared = $false
 $profileTerrainMarker = $null
+$planningProfileFiles = @()
 $originalSettingsBackup = Join-Path $EvidenceDirectory 'prior-profile-settings.ini'
 $savedEnvironment = @{}
 foreach ($name in @('PATH', 'QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QT_QPA_PLATFORM')) {
@@ -438,6 +439,16 @@ try {
     $profileTerrainMarker = Join-Path $profileRoot ('terrain-packs\smoke-preserved-' + $sentinel + '.wdt')
     Write-SmokeFile $profileTerrainMarker ('persistent-user-height-data-' + $sentinel)
     $profileTerrainHash = Get-WardogsFileHash $profileTerrainMarker
+    foreach ($name in @('fire-missions.json', 'flight-profiles.json', 'planning.ini')) {
+        $path = Join-Path $profileRoot $name
+        [void](Assert-WardogsPathWithoutReparse $path)
+        $backup = Join-Path $EvidenceDirectory ('prior-' + $name)
+        $existed = Test-Path -LiteralPath $path -PathType Leaf
+        if ($existed) { Copy-Item -LiteralPath $path -Destination $backup }
+        $planningProfileFiles += @{ path = $path; backup = $backup; existed = $existed; name = $name }
+        Write-SmokeFile $path ('persistent-planning-data-' + $name + '-' + $sentinel)
+        $planningProfileFiles[-1].hash = Get-WardogsFileHash $path
+    }
     Copy-Item -LiteralPath $profileSettings -Destination (Join-Path $EvidenceDirectory 'smoke-profile-settings.ini')
     $env:QT_PLUGIN_PATH = $installRoot
     $env:QT_QPA_PLATFORM_PLUGIN_PATH = Join-Path $installRoot 'platforms'
@@ -504,6 +515,9 @@ try {
     }
     if ((Get-WardogsFileHash $profileSettings) -ine $profileSettingsHash) { throw 'Persistent profile preferences changed during update.' }
     if ((Get-WardogsFileHash $profileTerrainMarker) -ine $profileTerrainHash) { throw 'Persistent user height data changed during update.' }
+    foreach ($item in $planningProfileFiles) {
+        if ((Get-WardogsFileHash $item.path) -ine $item.hash) { throw "Persistent planning data changed during update: $($item.name)" }
+    }
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     while (-not $newProcess) {
         foreach ($candidate in @(Get-Process -Name 'WarDogsDistanceCalculator' -ErrorAction SilentlyContinue)) {
@@ -537,9 +551,13 @@ try {
     Copy-SmokeSessionLog $newManifest.version $newProcess.Id 'new-session.log'
     if ((Get-WardogsFileHash $profileSettings) -ine $profileSettingsHash) { throw 'Persistent profile preferences changed after restarted GUI shutdown.' }
     if ((Get-WardogsFileHash $profileTerrainMarker) -ine $profileTerrainHash) { throw 'Persistent user height data changed after restarted GUI shutdown.' }
+    foreach ($item in $planningProfileFiles) {
+        if ((Get-WardogsFileHash $item.path) -ine $item.hash) { throw "Persistent planning data changed after GUI shutdown: $($item.name)" }
+    }
     $receipt.preserved_portable_files = @($preserved.Keys | Sort-Object)
     $receipt.profile_settings_preserved = $true
     $receipt.profile_height_data_preserved = $true
+    $receipt.profile_planning_data_preserved = @($planningProfileFiles | ForEach-Object { $_.name })
     $receipt.state = 'passed'
     Write-Output "PASS real portable update/restart: $($oldManifest.version) -> $($newManifest.version); $($receipt.verified_package_files) package files verified."
 } catch {
@@ -598,6 +616,12 @@ try {
     if ($profileTerrainMarker -and (Test-Path -LiteralPath $profileTerrainMarker -PathType Leaf)) {
         try { Remove-Item -LiteralPath $profileTerrainMarker -Force }
         catch { $receipt.profile_restore_error = $_.Exception.Message }
+    }
+    foreach ($item in $planningProfileFiles) {
+        try {
+            if ($item.existed) { Copy-Item -LiteralPath $item.backup -Destination $item.path -Force }
+            elseif (Test-Path -LiteralPath $item.path -PathType Leaf) { Remove-Item -LiteralPath $item.path -Force }
+        } catch { $receipt.profile_restore_error = $_.Exception.Message }
     }
     if ($workRoot -and (Test-Path -LiteralPath $workRoot -PathType Container)) {
         foreach ($name in @('prepared.json', 'install-ready.json', 'install-approved.json', 'installed.json', 'transaction.json', 'error.log')) {

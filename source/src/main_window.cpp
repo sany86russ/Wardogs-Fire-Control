@@ -5,6 +5,7 @@
 #include "app_icon.hpp"
 #include "selection_overlay.hpp"
 #include "settings_dialog.hpp"
+#include "planning_dialog.hpp"
 #include "update_ui.hpp"
 #include "ghost_reticle_window.hpp"
 #include "window_title_bar.hpp"
@@ -83,6 +84,8 @@
 #include <QStringList>
 #include <QStyleFactory>
 #include <QTimer>
+#include <QTemporaryDir>
+#include <QListWidget>
 #include <QTreeView>
 #include <QVBoxLayout>
 
@@ -1671,6 +1674,68 @@ public:
             ocr_candidates_->currentText() == entered_review && !copy_button_->isEnabled());
         discard_ocr_review();
         language_selector_->setCurrentIndex(language_index(original_language));
+        // Exercise the planning callbacks against the actual main-window state,
+        // including stale OCR epochs, out-of-range cards and gun restoration.
+        if (vehicle_mode_) toggle_mode();
+        terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
+        map_confirmed_ = true;
+        ocr_hold_ = false;
+        accept_manual_base({0, 0});
+        accept_manual_target({5, 0});
+        QTemporaryDir planning_storage;
+        if (!planning_storage.isValid()) throw std::runtime_error("Unable to create isolated planning fixture directory");
+        {
+            PlanningDialog planning([this] { return planning_context(); },
+                [this](auto kind, auto point, auto map, auto weapon) {
+                    apply_planning_point(kind, point, map, weapon);
+                }, this, std::filesystem::path(planning_storage.path().toStdWString()));
+            check("planning_entry_is_available", planning_storage.isValid() &&
+                  findChild<QPushButton*>(QStringLiteral("planningButton")));
+            const auto press = [&](const char* name) {
+                if (auto* button = planning.findChild<QPushButton*>(QString::fromUtf8(name))) button->click();
+                QApplication::processEvents();
+            };
+            const auto epoch = input_epoch_;
+            OcrMessage planning_stale_ocr;
+            planning_stale_ocr.action = OcrAction::target;
+            planning_stale_ocr.input_epoch = epoch;
+            planning_stale_ocr.point = {4, 4};
+            pending_ocr_ = planning_stale_ocr;
+            press("correctRight");
+            check("planning_correction_uses_gun_frame_and_invalidates_old_ocr",
+                target_ && std::abs(target_->x - 5) < 1e-12 &&
+                std::abs(target_->y + .1) < 1e-12 && input_epoch_ > epoch &&
+                !pending_ocr_ && mortar_mil_result_ && history_.front() == *target_);
+            const wardogs::Point precise{std::nextafter(0.1234567890123456, 1.0), -0.0};
+            accept_manual_base(precise);
+            planning.refresh();
+            auto* name = planning.findChild<QLineEdit*>(QStringLiteral("missionName"));
+            name->setText(QStringLiteral("CI exact gun"));
+            press("saveFiringPosition");
+            accept_manual_base({1, 1});
+            accept_manual_target({5, 1});
+            planning.refresh();
+            auto* saved = planning.findChild<QListWidget*>(QStringLiteral("savedFireMissions"));
+            saved->setCurrentRow(0);
+            continuous_calibration_.emplace(base_, wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0});
+            press("restoreFireMission");
+            check("planning_restore_preserves_exact_gun_and_clears_target_and_calibration",
+                base_ == precise && std::signbit(base_.y) && !target_ && !continuous_calibration_ &&
+                !mortar_mil_result_ && !low_result_ && !high_result_);
+            accept_manual_base({0, 0});
+            accept_manual_target({6.7, 0});
+            planning.refresh();
+            planning.findChild<QComboBox*>(QStringLiteral("correctionStep"))->setCurrentIndex(3);
+            press("correctAdd");
+            check("planning_out_of_range_correction_hides_previous_mil",
+                target_ && std::abs(target_->x - 7.7) < 1e-12 &&
+                !mortar_mil_result_ && mortar_mil_->text() == wardogs::i18n::text(QStringLiteral("Вне диапазона")));
+            bool wrong_map_rejected = false;
+            try { apply_planning_point(wardogs::FireMissionKind::target, {5, 0},
+                                      wardogs::GameMap::other, wardogs::AnalysisWeapon::l81); }
+            catch (const std::invalid_argument&) { wrong_map_rejected = true; }
+            check("planning_owner_rechecks_confirmed_map", wrong_map_rejected && target_->x > 7.6);
+        }
         resize(previous_size);
         QApplication::processEvents();
         QApplication::clipboard()->setMimeData(previous_clipboard.release());
@@ -2213,6 +2278,18 @@ private:
         quick_layout->addWidget(quick_guide_);
         quick_layout->addWidget(quick_state_);
         work_layout->addWidget(quick);
+
+        auto* planning_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Планирование · поправки, позиции, полёт")));
+        planning_button->setObjectName(QStringLiteral("planningButton"));
+        planning_button->setToolTip(wardogs::i18n::text(QStringLiteral("Поправки 10/25/50/100 м, сохранённые точки, измерения времени и профиль рельефа")));
+        work_layout->addWidget(planning_button);
+        connect(planning_button, &QPushButton::clicked, this, [this] {
+            PlanningDialog dialog([this] { return planning_context(); },
+                [this](auto kind, auto point, auto map, auto weapon) {
+                    apply_planning_point(kind, point, map, weapon);
+                }, this);
+            dialog.exec();
+        });
 
         manual_toggle_ = new QToolButton;
         manual_toggle_->setObjectName(QStringLiteral("manualControlsToggle"));
@@ -3568,18 +3645,58 @@ private:
     void manual_base() {
         try {
             const auto point = wardogs::parse_manual_coordinate(base_input_->text().toStdWString());
-            advance_input_epoch();
-            ocr_hold_ = false;
-            base_capture_pending_ = false;
-            base_ = point;
-            base_set_ = true;
-            target_.reset();
-            invalidate_corrections();
-            base_input_->clear();
-            update_coordinates();
-            clear_result(wardogs::i18n::text(QStringLiteral("Орудие задано · укажите цель")));
-            set_status(wardogs::i18n::text(QStringLiteral("Орудие: ")) + qtext(wardogs::format_point(base_)));
+            accept_manual_base(point);
         } catch (const std::exception& error) { set_status(error_text(error), true); }
+    }
+
+    void accept_manual_base(wardogs::Point point) {
+        if (!std::isfinite(point.x) || !std::isfinite(point.y))
+            throw std::invalid_argument("Координаты должны быть конечными числами.");
+        advance_input_epoch();
+        ocr_hold_ = false;
+        base_capture_pending_ = false;
+        base_ = point;
+        base_set_ = true;
+        target_.reset();
+        invalidate_corrections();
+        base_input_->clear();
+        update_coordinates();
+        clear_result(wardogs::i18n::text(QStringLiteral("Орудие задано · укажите цель")));
+        set_status(wardogs::i18n::text(QStringLiteral("Орудие: ")) + qtext(wardogs::format_point(base_)));
+    }
+
+    PlanningContext planning_context() {
+        PlanningContext context;
+        context.map = current_game_map_;
+        context.weapon = vehicle_mode_ ? wardogs::AnalysisWeapon::sph2 : wardogs::AnalysisWeapon::l81;
+        context.preferred_arc = settings_.ghost_reticle.preferred_arc;
+        context.map_confirmed = map_confirmed_;
+        context.capture_pending = base_capture_pending_;
+        context.solution_held = ocr_hold_;
+        if (base_set_) context.base = base_;
+        context.target = target_;
+        if (terrain_) {
+            const auto map = current_game_map_;
+            context.terrain = [this, map](wardogs::Point point) -> std::optional<double> {
+                if (!map_confirmed_ || current_game_map_ != map || !terrain_) return std::nullopt;
+                return terrain_->height_at(point);
+            };
+        }
+        return context;
+    }
+
+    void apply_planning_point(wardogs::FireMissionKind kind, wardogs::Point point,
+                              wardogs::GameMap map, wardogs::AnalysisWeapon weapon) {
+        const auto context = planning_context();
+        if (!context.map_confirmed || context.map != map || context.weapon != weapon ||
+            context.capture_pending)
+            throw std::invalid_argument("Подтвердите карту и завершите чтение координат.");
+        if (kind == wardogs::FireMissionKind::firing_position) accept_manual_base(point);
+        else {
+            if (!base_set_) throw std::invalid_argument("Сначала задайте координаты орудия.");
+            if (ocr_hold_) throw std::invalid_argument("Подтвердите карту и завершите чтение координат.");
+            accept_manual_target(point);
+        }
     }
 
     void manual_target() {
