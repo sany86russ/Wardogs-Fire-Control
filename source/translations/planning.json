@@ -1,0 +1,678 @@
+[
+  {
+    "ru": "Не задан файл сохранённых позиций и целей",
+    "en": "No saved positions and targets file is specified"
+  },
+  {
+    "ru": "Не удалось проверить путь хранилища позиций",
+    "en": "Could not verify the position storage path"
+  },
+  {
+    "ru": "Хранилище позиций не поддерживает ссылки и точки перенаправления",
+    "en": "Position storage does not support symbolic links or reparse points"
+  },
+  {
+    "ru": "Не удалось прочитать хранилище позиций",
+    "en": "Could not read position storage"
+  },
+  {
+    "ru": "Вместо файла сохранённых позиций обнаружена папка",
+    "en": "A folder was found where the saved positions file was expected"
+  },
+  {
+    "ru": "Неизвестное орудие сохранённой позиции",
+    "en": "Unknown weapon in a saved position"
+  },
+  {
+    "ru": "Неизвестный тип сохранённой точки",
+    "en": "Unknown saved point type"
+  },
+  {
+    "ru": "Некорректный идентификатор сохранённой точки",
+    "en": "Invalid saved point identifier"
+  },
+  {
+    "ru": "Имя сохранённой точки слишком длинное",
+    "en": "The saved point name is too long"
+  },
+  {
+    "ru": "Имя сохранённой точки содержит скрытые или управляющие символы",
+    "en": "The saved point name contains hidden or control characters"
+  },
+  {
+    "ru": "Имя сохранённой точки содержит некорректный Unicode",
+    "en": "The saved point name contains invalid Unicode"
+  },
+  {
+    "ru": "Задайте имя сохранённой точки",
+    "en": "Enter a name for the saved point"
+  },
+  {
+    "ru": "Координаты сохранённой точки должны быть конечными числами",
+    "en": "Saved point coordinates must be finite numbers"
+  },
+  {
+    "ru": "Не удалось сохранить точные координаты",
+    "en": "Could not save exact coordinates"
+  },
+  {
+    "ru": "Некорректный формат точных координат",
+    "en": "Invalid exact coordinate format"
+  },
+  {
+    "ru": "Некорректные координаты сохранённой точки",
+    "en": "Invalid saved point coordinates"
+  },
+  {
+    "ru": "Хранилище точек содержит неподдерживаемые или отсутствующие поля",
+    "en": "Point storage contains unsupported or missing fields"
+  },
+  {
+    "ru": "В хранилище точек отсутствует обязательное поле",
+    "en": "A required field is missing from point storage"
+  },
+  {
+    "ru": "Достигнут предел сохранённых позиций и целей",
+    "en": "The saved positions and targets limit has been reached"
+  },
+  {
+    "ru": "Хранилище содержит повторяющиеся идентификаторы точек",
+    "en": "Storage contains duplicate point identifiers"
+  },
+  {
+    "ru": "Такое имя уже сохранено для этой карты, орудия и типа точки",
+    "en": "This name is already saved for this map, weapon and point type"
+  },
+  {
+    "ru": "Не удалось открыть сохранённые позиции",
+    "en": "Could not open saved positions"
+  },
+  {
+    "ru": "Файл сохранённых точек превышает предел 1 МиБ",
+    "en": "The saved points file exceeds the 1 MiB limit"
+  },
+  {
+    "ru": "Не удалось прочитать сохранённые позиции",
+    "en": "Could not read saved positions"
+  },
+  {
+    "ru": "Файл сохранённых позиций повреждён: требуется корректный объект JSON",
+    "en": "The saved positions file is damaged: a valid JSON object is required"
+  },
+  {
+    "ru": "Версия или формат хранилища позиций не поддерживается",
+    "en": "The position storage version or format is unsupported"
+  },
+  {
+    "ru": "В хранилище слишком много сохранённых точек",
+    "en": "Storage contains too many saved points"
+  },
+  {
+    "ru": "Некорректная запись сохранённой точки",
+    "en": "Invalid saved point record"
+  },
+  {
+    "ru": "Неизвестное орудие сохранённой точки",
+    "en": "Unknown weapon in a saved point"
+  },
+  {
+    "ru": "Не удалось подготовить сохранение позиций",
+    "en": "Could not prepare to save positions"
+  },
+  {
+    "ru": "Не удалось полностью записать сохранённые позиции",
+    "en": "Could not write all saved positions"
+  },
+  {
+    "ru": "Не удалось заменить файл сохранённых позиций",
+    "en": "Could not replace the saved positions file"
+  },
+  {
+    "ru": "Не удалось создать папку сохранённых позиций",
+    "en": "Could not create the saved positions folder"
+  },
+  {
+    "ru": "Хранилище позиций занято или недоступно; попробуйте ещё раз",
+    "en": "Position storage is busy or unavailable; try again"
+  },
+  {
+    "ru": "Не удалось найти папку профиля для сохранённых позиций",
+    "en": "Could not locate the profile folder for saved positions"
+  },
+  {
+    "ru": "Для сохранённой точки нужна выбранная карта",
+    "en": "Select a map before saving a point"
+  },
+  {
+    "ru": "Имя сохранённой точки не соответствует формату хранилища",
+    "en": "The saved point name does not match the storage format"
+  },
+  {
+    "ru": "Сначала явно подтвердите текущую карту",
+    "en": "First explicitly confirm the current map"
+  },
+  {
+    "ru": "Сохранённая точка относится к другой карте",
+    "en": "The saved point belongs to another map"
+  },
+  {
+    "ru": "Сохранённая точка относится к другому орудию",
+    "en": "The saved point belongs to another weapon"
+  },
+  {
+    "ru": "Сохранённая точка больше не существует",
+    "en": "The saved point no longer exists"
+  },
+  {
+    "ru": "Данные рельефа содержат неконечную высоту",
+    "en": "Terrain data contains a non-finite height"
+  },
+  {
+    "ru": "Неизвестное орудие или траектория анализа",
+    "en": "Unknown analysis weapon or arc"
+  },
+  {
+    "ru": "Разница высот должна быть конечной",
+    "en": "The elevation difference must be finite"
+  },
+  {
+    "ru": "Высота ствола над землёй должна быть конечной и неотрицательной",
+    "en": "Barrel height above ground must be finite and nonnegative"
+  },
+  {
+    "ru": "Высота цели над землёй должна быть конечной и неотрицательной",
+    "en": "Target height above ground must be finite and nonnegative"
+  },
+  {
+    "ru": "Шаг проверки траектории должен быть конечным и положительным",
+    "en": "The trajectory sampling step must be finite and positive"
+  },
+  {
+    "ru": "Запас над рельефом должен быть конечным и неотрицательным",
+    "en": "The terrain clearance margin must be finite and nonnegative"
+  },
+  {
+    "ru": "Параметр g для SPH-2 нельзя применить к L81",
+    "en": "The SPH-2 g parameter cannot be applied to L81"
+  },
+  {
+    "ru": "Предполагаемая гравитация должна быть конечной и положительной",
+    "en": "Assumed gravity must be finite and positive"
+  },
+  {
+    "ru": "Профиль скорости L81 нельзя применить к SPH-2",
+    "en": "An L81 speed profile cannot be applied to SPH-2"
+  },
+  {
+    "ru": "Предполагаемая скорость должна быть конечной и положительной",
+    "en": "Assumed speed must be finite and positive"
+  },
+  {
+    "ru": "Укажите источник предположений скорости и гравитации",
+    "en": "Specify the source of the speed and gravity assumptions"
+  },
+  {
+    "ru": "Параметры модели не дают конечную траекторию",
+    "en": "The model parameters do not produce a finite trajectory"
+  },
+  {
+    "ru": "Шаг проверки создаёт слишком много точек траектории",
+    "en": "The sampling step creates too many trajectory points"
+  },
+  {
+    "ru": "Параметры модели не дают конечное время полёта",
+    "en": "The model parameters do not produce a finite flight time"
+  },
+  {
+    "ru": "Высоты рельефа слишком велики для проверки траектории",
+    "en": "Terrain heights are too large for trajectory checks"
+  },
+  {
+    "ru": "Неизвестное орудие или траектория профиля времени",
+    "en": "Unknown weapon or arc in the time profile"
+  },
+  {
+    "ru": "Разница высот профиля должна быть конечной",
+    "en": "The profile elevation difference must be finite"
+  },
+  {
+    "ru": "Профиль времени требует боеприпас, версию игры и источник измерений",
+    "en": "A time profile requires ammunition, game version and measurement source"
+  },
+  {
+    "ru": "Профиль времени должен содержать от 1 до 256 измерений",
+    "en": "A time profile must contain between 1 and 256 observations"
+  },
+  {
+    "ru": "Дальность измерения должна быть конечной и положительной",
+    "en": "Observation range must be finite and positive"
+  },
+  {
+    "ru": "Время измерения должно быть конечным и положительным",
+    "en": "Observed time must be finite and positive"
+  },
+  {
+    "ru": "Дальности профиля должны строго возрастать без повторений",
+    "en": "Profile ranges must be strictly increasing without duplicates"
+  },
+  {
+    "ru": "Погрешность времени должна быть конечной и неотрицательной",
+    "en": "Time uncertainty must be finite and nonnegative"
+  },
+  {
+    "ru": "Погрешность времени не должна превышать само время",
+    "en": "Time uncertainty must not exceed the time itself"
+  },
+  {
+    "ru": "Разница высот слишком велика для расчёта",
+    "en": "The elevation difference is too large for calculation"
+  },
+  {
+    "ru": "Сохранённая геометрическая модель SPH-2: R = 2629 м",
+    "en": "Retained SPH-2 geometric model: R = 2629 m"
+  },
+  {
+    "ru": "Параметры модели не дают конечную скорость",
+    "en": "The model parameters do not produce a finite speed"
+  },
+  {
+    "ru": "Предположение пользователя: SPH-2, v²/g = 2629 м",
+    "en": "User assumption: SPH-2, v²/g = 2629 m"
+  },
+  {
+    "ru": "Параметры модели не дают конечную дальность",
+    "en": "The model parameters do not produce a finite range"
+  },
+  {
+    "ru": "Боковая поправка должна быть конечной",
+    "en": "The lateral correction must be finite"
+  },
+  {
+    "ru": "Поправка дальности должна быть конечной",
+    "en": "The range correction must be finite"
+  },
+  {
+    "ru": "Для поправки задайте цель отдельно от орудия",
+    "en": "Set a target different from the gun position before correcting"
+  },
+  {
+    "ru": "Поправки слишком велики для координат цели",
+    "en": "The corrections are too large for the target coordinates"
+  },
+  {
+    "ru": "Планирование · поправки, позиции, полёт",
+    "en": "Planning · corrections, positions, flight"
+  },
+  {
+    "ru": "Поправки 10/25/50/100 м, сохранённые точки, измерения времени и профиль рельефа",
+    "en": "10/25/50/100 m corrections, saved points, time measurements and terrain profile"
+  },
+  {
+    "ru": "Координаты должны быть конечными числами.",
+    "en": "Coordinates must be finite numbers."
+  },
+  {
+    "ru": "Подтвердите карту и завершите чтение координат.",
+    "en": "Confirm the map and finish reading coordinates."
+  },
+  {
+    "ru": "Задайте орудие и цель",
+    "en": "Set the gun and target"
+  },
+  {
+    "ru": "Дальность, м · высота относительно орудия, м",
+    "en": "Range, m · height relative to gun, m"
+  },
+  {
+    "ru": "Данные рельефа недоступны",
+    "en": "Terrain data is unavailable"
+  },
+  {
+    "ru": "Не удалось прочитать измерения времени полёта.",
+    "en": "Could not read flight-time observations."
+  },
+  {
+    "ru": "Файл измерений времени полёта слишком большой.",
+    "en": "The flight-time observations file is too large."
+  },
+  {
+    "ru": "Повреждён файл измерений времени полёта.",
+    "en": "The flight-time observations file is damaged."
+  },
+  {
+    "ru": "Неизвестный формат измерений времени полёта.",
+    "en": "Unknown flight-time observations format."
+  },
+  {
+    "ru": "Слишком много измерений времени полёта.",
+    "en": "Too many flight-time observations."
+  },
+  {
+    "ru": "Повреждена запись времени полёта.",
+    "en": "A flight-time observation is damaged."
+  },
+  {
+    "ru": "Не удалось сохранить измерения времени полёта.",
+    "en": "Could not save flight-time observations."
+  },
+  {
+    "ru": "Сначала задайте координаты для сохранения.",
+    "en": "First set the coordinates to save."
+  },
+  {
+    "ru": "Позиция сохранена",
+    "en": "Position saved"
+  },
+  {
+    "ru": "Не удалось создать папку планирования.",
+    "en": "Could not create the planning folder."
+  },
+  {
+    "ru": "Измерения времени полёта сейчас заняты.",
+    "en": "Flight-time observations are currently in use."
+  },
+  {
+    "ru": "Для измерения нужен доступный расчёт и известный перепад высот.",
+    "en": "Recording requires an available calculation and a known elevation difference."
+  },
+  {
+    "ru": "Укажите версию игры и источник измерения.",
+    "en": "Specify the game version and measurement source."
+  },
+  {
+    "ru": "Погрешность не должна превышать измеренное время.",
+    "en": "Uncertainty must not exceed the measured time."
+  },
+  {
+    "ru": "Измерение удалено",
+    "en": "Observation deleted"
+  },
+  {
+    "ru": "Измерение сохранено",
+    "en": "Observation saved"
+  },
+  {
+    "ru": "Планирование · WARDOGS",
+    "en": "Planning · WARDOGS"
+  },
+  {
+    "ru": "Полёт и рельеф",
+    "en": "Flight and terrain"
+  },
+  {
+    "ru": "Быстрые поправки",
+    "en": "Quick corrections"
+  },
+  {
+    "ru": "Шаг поправки",
+    "en": "Correction step"
+  },
+  {
+    "ru": "Левее",
+    "en": "Left"
+  },
+  {
+    "ru": "Правее",
+    "en": "Right"
+  },
+  {
+    "ru": "Ближе",
+    "en": "Closer"
+  },
+  {
+    "ru": "Дальше",
+    "en": "Farther"
+  },
+  {
+    "ru": "Цель скорректирована",
+    "en": "Target corrected"
+  },
+  {
+    "ru": "Лево/право задаются от орудия к цели. Ближе/дальше смещают саму цель; это команда корректировщика, а не калибровка по попаданию Alt+I.",
+    "en": "Left/right are relative to gun-to-target. Closer/farther move the target itself; this is a spotter command, not Alt+I impact calibration."
+  },
+  {
+    "ru": "Зелёный — поверхность земли, оранжевый — оценочная дуга. Пробелы означают отсутствие данных. Дома, крыши, мосты, деревья и высота ствола в файле рельефа не представлены.",
+    "en": "Green is ground; orange is the estimated arc. Gaps mean missing data. Buildings, roofs, bridges, trees and barrel height are not represented in the terrain file."
+  },
+  {
+    "ru": "Включить предположение о скорости и гравитации",
+    "en": "Enable assumed speed and gravity"
+  },
+  {
+    "ru": "Не задана",
+    "en": "Not set"
+  },
+  {
+    "ru": "Предполагаемая g, м/с²",
+    "en": "Assumed g, m/s²"
+  },
+  {
+    "ru": "Скорость L81, м/с",
+    "en": "L81 speed, m/s"
+  },
+  {
+    "ru": "9,80665 м/с² — выбранное земное предположение, не установленная гравитация WARDOGS. SPH-2: v = √(2629·g); L81: скорость задайте сами. Модель без сопротивления воздуха не меняет табличный MIL и не подтверждает попадание.",
+    "en": "9.80665 m/s² is an Earth-gravity assumption, not established WARDOGS gravity. SPH-2: v = √(2629·g); L81: enter speed yourself. The vacuum model does not change table MIL or confirm an impact."
+  },
+  {
+    "ru": "Позиции и цели",
+    "en": "Positions and targets"
+  },
+  {
+    "ru": "Записи привязаны к подтверждённой карте и орудию. После перезапуска ничего не восстанавливается автоматически. Восстановление орудия сбрасывает прежнюю цель и калибровку.",
+    "en": "Records belong to the confirmed map and weapon. Nothing is restored automatically after restarting. Restoring a gun clears the previous target and calibration."
+  },
+  {
+    "ru": "Название позиции или цели",
+    "en": "Position or target name"
+  },
+  {
+    "ru": "Сохранить орудие",
+    "en": "Save gun"
+  },
+  {
+    "ru": "Сохранить цель",
+    "en": "Save target"
+  },
+  {
+    "ru": "Восстановить выбранное",
+    "en": "Restore selected"
+  },
+  {
+    "ru": "Переименовать",
+    "en": "Rename"
+  },
+  {
+    "ru": "Удалить",
+    "en": "Delete"
+  },
+  {
+    "ru": "Позиция восстановлена",
+    "en": "Position restored"
+  },
+  {
+    "ru": "Название сохранено",
+    "en": "Name saved"
+  },
+  {
+    "ru": "Запись удалена",
+    "en": "Record deleted"
+  },
+  {
+    "ru": "Измерения времени",
+    "en": "Time measurements"
+  },
+  {
+    "ru": "Измерьте время от выстрела до попадания. Запись относится к текущей цели, орудию, траектории, перепаду высот и версии игры. Между измеренными дальностями используется интерполяция, за пределами — время неизвестно. При смене боеприпаса используйте отдельную метку версии/профиля.",
+    "en": "Measure time from firing to impact. The observation applies to the current target, weapon, arc, elevation difference and game version. Time is interpolated between measured ranges and unknown outside them. Use a separate version/profile label when changing ammunition."
+  },
+  {
+    "ru": "Версия игры / боеприпас / заряд",
+    "en": "Game version / ammunition / charge"
+  },
+  {
+    "ru": "Например, собственный замер по видеозаписи",
+    "en": "For example, your own measurement from a video"
+  },
+  {
+    "ru": "Версия / профиль",
+    "en": "Version / profile"
+  },
+  {
+    "ru": "Источник",
+    "en": "Source"
+  },
+  {
+    "ru": "Измеренное время, с",
+    "en": "Measured time, s"
+  },
+  {
+    "ru": "Погрешность замера ±с",
+    "en": "Measurement uncertainty ±s"
+  },
+  {
+    "ru": "Записать время для текущей цели",
+    "en": "Record time for current target"
+  },
+  {
+    "ru": "Дальность, м",
+    "en": "Range, m"
+  },
+  {
+    "ru": "Перепад, м",
+    "en": "Elevation difference, m"
+  },
+  {
+    "ru": "Время, с",
+    "en": "Time, s"
+  },
+  {
+    "ru": "Удалить выбранный замер",
+    "en": "Delete selected observation"
+  },
+  {
+    "ru": "Профили и источники",
+    "en": "Profiles and sources"
+  },
+  {
+    "ru": "Источники сообщества не являются официальной спецификацией игры. L52 в MetaForge не подтверждён как тот же профиль, что SPH-2. Разные калькуляторы и замеры шкалы расходятся; обновление игры может изменить баллистику.",
+    "en": "Community sources are not the game's official specification. MetaForge's L52 is not established as the same profile as SPH-2. Calculators and sight observations disagree; a game update may change ballistics."
+  },
+  {
+    "ru": "Орудие: %1",
+    "en": "Gun: %1"
+  },
+  {
+    "ru": "Орудие не задано",
+    "en": "Gun not set"
+  },
+  {
+    "ru": "Цель: %1",
+    "en": "Target: %1"
+  },
+  {
+    "ru": "Цель не задана",
+    "en": "Target not set"
+  },
+  {
+    "ru": "L81 · 71 точка · 132–684 м · 850–150 MIL\nИсточник: Apollyon, таблица получена 03.10.2026. Строки 80–131 м и выше 684 м не входят в заявленный рабочий диапазон. MIL — команда прицела; её связь с физическим углом не подтверждена. Штатная высотная модель и время полёта неизвестны.",
+    "en": "L81 · 71 points · 132–684 m · 850–150 MIL\nSource: Apollyon, table obtained October 3, 2026. Rows at 80–131 m and above 684 m are outside the declared working range. MIL is a sight command; its relationship to physical angle is unconfirmed. The game's elevation model and flight time are unknown."
+  },
+  {
+    "ru": "SPH-2 · настильная: 1181–2629 м, 20–600 MIL; навесная: 735–2629 м, 1400–610 MIL\nИсточник: t0ki, таблица получена 11.09.2026. Перепад высот и дуга используют геометрическую модель R=2629 м. Это оценка, а не официальная игровая физика; локальные поправки Alt+I анализируются отдельно.",
+    "en": "SPH-2 · low: 1181–2629 m, 20–600 MIL; high: 735–2629 m, 1400–610 MIL\nSource: t0ki, table obtained September 11, 2026. Elevation difference and arc use the geometric model R=2629 m. This is an estimate, not official game physics; local Alt+I corrections are analyzed separately."
+  },
+  {
+    "ru": "Профиль рельефа не рассчитан",
+    "en": "Terrain profile not calculated"
+  },
+  {
+    "ru": "Время полёта неизвестно",
+    "en": "Flight time unknown"
+  },
+  {
+    "ru": "Подтвердите карту и задайте орудие и цель. Неподтверждённый захват блокирует анализ.",
+    "en": "Confirm the map and set the gun and target. An unconfirmed capture blocks analysis."
+  },
+  {
+    "ru": "Установите рельеф текущей карты; перепад высот неизвестен.",
+    "en": "Install terrain for the current map; the elevation difference is unknown."
+  },
+  {
+    "ru": "Дальность %1 м · азимут %2°",
+    "en": "Range %1 m · bearing %2°"
+  },
+  {
+    "ru": "\nMIL без поправки Alt+I: %1",
+    "en": "\nMIL without the Alt+I correction: %1"
+  },
+  {
+    "ru": "\nТабличная наводка недоступна",
+    "en": "\nTable aiming is unavailable"
+  },
+  {
+    "ru": "\nВремя полёта: %1 с · %2",
+    "en": "\nFlight time: %1 s · %2"
+  },
+  {
+    "ru": "собственный замер",
+    "en": "user measurement"
+  },
+  {
+    "ru": "интерполяция собственных замеров",
+    "en": "interpolated user measurements"
+  },
+  {
+    "ru": "оценка предположенной модели",
+    "en": "assumed-model estimate"
+  },
+  {
+    "ru": " · ±%1 с",
+    "en": " · ±%1 s"
+  },
+  {
+    "ru": "\nВерсия / профиль: %1",
+    "en": "\nVersion / profile: %1"
+  },
+  {
+    "ru": "\nВремя полёта неизвестно: добавьте замеры или явно включите модель.",
+    "en": "\nFlight time unknown: add observations or explicitly enable the model."
+  },
+  {
+    "ru": "\nДля модели L81 задайте скорость снаряда.",
+    "en": "\nEnter projectile speed for the L81 model."
+  },
+  {
+    "ru": "\nВершина оценочной дуги: +%1 м на дальности %2 м",
+    "en": "\nEstimated arc apex: +%1 m at range %2 m"
+  },
+  {
+    "ru": "Модель пересекает землю примерно на %1 м.",
+    "en": "The model crosses ground at approximately %1 m."
+  },
+  {
+    "ru": "В проверенных точках пересечений с землёй нет. Это не гарантия свободного полёта.",
+    "en": "No ground crossings at the checked points. This does not guarantee clear flight."
+  },
+  {
+    "ru": "Проверка неполная: отсутствуют высоты в %1 точках. Свободный полёт не подтверждён.",
+    "en": "Incomplete check: heights are missing at %1 points. Clear flight is unconfirmed."
+  },
+  {
+    "ru": "Траектория неизвестна; пересечения с рельефом не проверены.",
+    "en": "The trajectory is unknown; terrain crossings were not checked."
+  },
+  {
+    "ru": "Рельеф не проверен: данные поверхности отсутствуют.",
+    "en": "Terrain was not checked: ground data is missing."
+  },
+  {
+    "ru": "\nМинимальный зазор в выборке: %1 м · шаг %2 м",
+    "en": "\nMinimum sampled clearance: %1 m · step %2 m"
+  },
+  {
+    "ru": "\nИсточник замера: %1",
+    "en": "\nMeasurement source: %1"
+  }
+]

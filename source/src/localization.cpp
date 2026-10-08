@@ -245,7 +245,7 @@ public:
     Localizer() {
         initialize_translation_resources();
         std::map<QString, QString> unique;
-        for (const auto* name : {"main.json", "dialogs.json", "errors.json", "common.json"}) {
+        for (const auto* name : {"main.json", "dialogs.json", "errors.json", "common.json", "planning.json"}) {
             QFile file(QStringLiteral(":/i18n/") + QString::fromLatin1(name));
             if (!file.open(QIODevice::ReadOnly))
                 throw std::runtime_error("Embedded translation catalog unavailable");

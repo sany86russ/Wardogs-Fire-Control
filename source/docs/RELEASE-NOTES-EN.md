@@ -2,6 +2,16 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.9.0 — planning (release in preparation)
+
+- A Planning window with RU/EN panels for profiles and sources, flight and terrain, named points and personal flight-time observations.
+- Left/right/drop/add corrections by 10/25/50/100 m in the gun → target frame; full recalculation and removal of stale aiming values outside the range.
+- Gun positions and targets saved by map and weapon with exact coordinates. Restoration requires a confirmed map; restoring the gun clears the target and calibration.
+- Local timing observations with game/profile version, source and uncertainty, interpolated without extrapolation. A separate assumed gravity/speed model is clearly marked as an estimate.
+- Ground and estimated-arc plots, ground-intersection warnings and incomplete-coverage states. Buildings, bridges, trees and actual muzzle height are not checked.
+- Retained operating tables and limits. The L81 80/132 m and SPH-2/L52 discrepancies are documented; unverified data does not replace aiming commands.
+- New local data survives application updates.
+
 ## 2.8.0 — GitHub release updates
 
 - Background stable-release checks at startup, configurable in Settings. Manual checks are available in the header.
