@@ -2,7 +2,19 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
-## 2.9.0 — planning (release in preparation)
+## 2.10.0 — map reading and diagnostic history (candidate)
+
+The published stable release remains 2.8.0. The changes below describe the current source and candidate build under validation.
+
+- Complete labeled X/Y are searched in a bounded cursor neighborhood within the game client. Original rectangles remain hints; an unlabeled number is not accepted by position.
+- The first middle-button screenshot waits for the marker to appear, 250 ms by default. Client geometry is pinned at the click; a geometry change during that delay cancels capture. Automatic acceptance needs two matching trustworthy pairs from separate screenshots, with at most four frames per request. Changes to point, window, geometry or epoch invalidate the old request.
+- Incomplete and competing labels lead to review or rejection; there is no silent OCR-engine fallback. A target can be read through M → right-click → Mark Coordinates → Alt+T with automatic detection for additional captures enabled.
+- Up to 32 managed archives in `latest.archive`, plus `latest.log` and `latest.previous.log`, each up to 4 MiB: up to 128 MiB of archives and 8 MiB for current and previous files. Prior bytes are archived before replacement; a failure may retain an additional recovery file of up to 4 MiB. Errors are reported explicitly; unknown files are outside the managed limit and are not deleted.
+- The candidate includes planning prepared in 2.9. The portable package preserves the user profile; launching requires the whole set, including Qt, models, TLS and the updater helper.
+- A failed or cancelled Alt+I restores the unchanged previous SPH-2 target's calculation when no coordinate review is pending; cancellation creates no impact or correction.
+- Five real X/Y pairs and scale/position transformations are retained for regressions. New in-game firing trials have not been performed. Tables and the physical model are unchanged; first-shot accuracy and any hit percentage are not guaranteed.
+
+## 2.9.0 — planning (included in the 2.10.0 candidate)
 
 - A Planning window with RU/EN panels for profiles and sources, flight and terrain, named points and personal flight-time observations.
 - Left/right/drop/add corrections by 10/25/50/100 m in the gun → target frame; full recalculation and removal of stale aiming values outside the range.

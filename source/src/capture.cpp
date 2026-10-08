@@ -159,6 +159,40 @@ MapCoordinateRects make_map_coordinate_rects(RECT client_rect, POINT cursor,
     return {field(20, -46, 160, 12), field(-12, -120, 140, -52)};
 }
 
+MapCoordinateSearch make_map_coordinate_search_rects(RECT client_rect, POINT cursor,
+                                                     double scale) {
+    // Reuse the complete field checks before calculating a wider search.
+    const auto preferred = make_map_coordinate_rects(client_rect, cursor, scale);
+    const auto offset = [scale](int value) -> std::int64_t {
+        const auto scaled = std::round(static_cast<long double>(value) * scale);
+        if (!std::isfinite(scaled) || scaled < std::numeric_limits<LONG>::min() ||
+            scaled > std::numeric_limits<LONG>::max())
+            throw std::invalid_argument("Масштаб поиска координат карты слишком велик.");
+        return static_cast<std::int64_t>(scaled);
+    };
+    const auto left = std::max<std::int64_t>(client_rect.left,
+        std::min({static_cast<std::int64_t>(cursor.x) + offset(-192),
+                  static_cast<std::int64_t>(preferred.x_field.left),
+                  static_cast<std::int64_t>(preferred.y_field.left)}));
+    const auto top = std::max<std::int64_t>(client_rect.top,
+        std::min({static_cast<std::int64_t>(cursor.y) + offset(-224),
+                  static_cast<std::int64_t>(preferred.x_field.top),
+                  static_cast<std::int64_t>(preferred.y_field.top)}));
+    const auto right = std::min<std::int64_t>(client_rect.right,
+        std::max({static_cast<std::int64_t>(cursor.x) + offset(288),
+                  static_cast<std::int64_t>(preferred.x_field.right),
+                  static_cast<std::int64_t>(preferred.y_field.right)}));
+    const auto bottom = std::min<std::int64_t>(client_rect.bottom,
+        std::max({static_cast<std::int64_t>(cursor.y) + offset(128),
+                  static_cast<std::int64_t>(preferred.x_field.bottom),
+                  static_cast<std::int64_t>(preferred.y_field.bottom)}));
+    const auto pixels = detail::checked_capture_pixel_count(right - left, bottom - top);
+    if (right - left > 4096 || bottom - top > 4096 || pixels > 4'000'000)
+        throw std::invalid_argument("Область поиска координат карты слишком велика.");
+    return {{static_cast<LONG>(left), static_cast<LONG>(top),
+             static_cast<LONG>(right), static_cast<LONG>(bottom)}, preferred};
+}
+
 RECT resolve_capture_region(const CaptureRegion& region) {
     SearchContext context{&region.monitor_device, nullptr, false};
     const BOOL enumerated = EnumDisplayMonitors(nullptr, nullptr, find_monitor,

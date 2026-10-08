@@ -285,8 +285,11 @@ bool has_channel_caption(const Image& image, const InkComponent& plate,
 
 std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop,
                                       wchar_t map_axis = 0, bool draft_only = false,
-                                      bool* active_draft_found = nullptr) {
+                                      bool* active_draft_found = nullptr,
+                                      std::size_t maximum_lines = 8,
+                                      const MapOcrSearchLayout* map_layout = nullptr) {
     validate_ocr_image(image);
+    const bool map_search = map_layout != nullptr;
     std::vector<TextLine> found;
     for (const bool neutral : {false, true}) {
         if (draft_only && !neutral) continue;
@@ -306,7 +309,7 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
                 // sharing their ink. Once an enclosed channel caption binds
                 // this draft, exclude the connected background itself, not
                 // unrelated text merely inside its bounding rectangle.
-                if (draft_only) return component.parent == block.parent;
+                if (draft_only || map_search) return component.parent == block.parent;
                 return component.left >= block.left && component.right <= block.right &&
                        component.top >= block.top && component.bottom <= block.bottom;
             });
@@ -381,7 +384,7 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
                 }
             }
             if (matching == rows.end()) {
-                if (rows.size() == 16)
+                if (rows.size() == maximum_lines * 2)
                     throw std::invalid_argument("Слишком много строк для безопасного поиска координат");
                 rows.push_back({glyph});
             }
@@ -392,13 +395,24 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
             for (const auto& glyph : row) heights.push_back(glyph.bottom - glyph.top);
             std::sort(heights.begin(), heights.end());
             const int font = heights[heights.size() / 2];
+            const auto has_prefix_glyph = [&](const InkComponent& component) {
+                return map_search && std::any_of(row.begin(), row.end(), [&](const auto& previous) {
+                    return previous.right <= component.left &&
+                           component.left - previous.right <= font * 2 &&
+                           previous.bottom - previous.top >= std::max(5, font * 3 / 4);
+                });
+            };
             const auto map_cursor_lane = [&](const InkComponent& component) {
                 // Y captures include the vertical cursor line at offset 12
                 // in their 152-pixel field. Only that known narrow lane may
                 // be removed; an arbitrary short white glyph stays evidence.
-                const int lane = static_cast<int>(std::lround(image.width * 12.0 / 152.0));
-                return map_axis == L'y' &&
-                       std::abs(image.width * 68 - image.height * 152) <= 152 &&
+                const int lane = map_search ? map_layout->cursor_x :
+                    static_cast<int>(std::lround(image.width * 12.0 / 152.0));
+                // In a displaced tooltip the cursor can cross a real integer.
+                // Never count away an interior fragment after an axis/glyph.
+                if (has_prefix_glyph(component)) return false;
+                return (map_search || (map_axis == L'y' &&
+                       std::abs(image.width * 68 - image.height * 152) <= 152)) &&
                        component.right - component.left <= std::max(3, font / 5) &&
                        ((component.bottom - component.top) * 4 <= font * 3 ||
                         (component.bottom - component.top) * 2 >= font * 3) &&
@@ -408,7 +422,11 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
             std::vector<InkComponent> map_ping_brackets;
             if (map_axis) for (const auto& component : row) {
                 const int width = component.right - component.left, height = component.bottom - component.top;
-                if (component.left == 0 && height > font * 2 &&
+                const bool cursor_bracket = map_search &&
+                    !has_prefix_glyph(component) &&
+                    component.left >= map_layout->cursor_x - 32 * map_layout->scale &&
+                    component.right <= map_layout->cursor_x + 8 * map_layout->scale;
+                if ((component.left == 0 || cursor_bracket) && height > font * 2 &&
                     width <= font * 3 / 2 && component.area * 3 <= width * height &&
                        std::count_if(row.begin(), row.end(), [&](const auto& glyph) {
                            return glyph.left >= component.right &&
@@ -437,14 +455,17 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
             // should never become an extra coordinate digit or crop margin.
             std::erase_if(row, [&](const auto& glyph) {
                 return map_grid_edge(glyph) || map_cursor_lane(glyph) ||
-                       (glyph.bottom - glyph.top > font * 3 / 2 &&
+                       (!map_search && glyph.bottom - glyph.top > font * 3 / 2 &&
                         glyph.right - glyph.left <= std::max(3, font / 6));
             });
             std::sort(row.begin(), row.end(), [](const auto& a, const auto& b) { return a.left < b.left; });
             for (std::size_t begin = 0; begin < row.size();) {
                 std::size_t end = begin + 1;
                 int right = row[begin].right;
-                while (end < row.size() && row[end].left - right <= font * 2) {
+                // Map neighborhoods contain nearby independent captions and
+                // cursor bracket fragments. A whole font-height gap separates
+                // those runs; ordinary within-coordinate spacing stays intact.
+                while (end < row.size() && row[end].left - right <= font * (map_search ? 1 : 2)) {
                     right = std::max(right, row[end].right); ++end;
                 }
                 ImageRect bounds{row[begin].left, row[begin].top, right, row[begin].bottom};
@@ -462,7 +483,8 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
                         bounds.right = std::max(bounds.right, piece.right);
                         bounds.bottom = std::max(bounds.bottom, piece.bottom);
                     }
-                if (end - begin >= 3 && bounds.right - bounds.left >= font * 2) {
+                if (end - begin >= (map_search ? 2U : 3U) &&
+                    bounds.right - bounds.left >= font * (map_search ? 1 : 2)) {
                     // Detached comma tails/dots at the same x belong to one
                     // glyph. Disjoint horizontal glyph columns stay distinct.
                     std::sort(pieces.begin(), pieces.end(), [](const auto& a, const auto& b) {
@@ -562,7 +584,7 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
                     found.push_back({bounds, font, count,
                         bounds.left == 0 || bounds.top == 0 || bounds.right == image.width ||
                         bounds.bottom == image.height || boundary_fragment, draft});
-                    if (found.size() > 16)
+                    if (found.size() > maximum_lines * 2)
                         throw std::invalid_argument("Слишком много строк для безопасного поиска координат");
                 }
                 begin = end;
@@ -586,7 +608,7 @@ std::vector<TextLine> locate_text_lines(const Image& image, std::stop_token stop
         if (duplicate == unique.end()) unique.push_back(line);
         else duplicate->clipped |= line.clipped;
     }
-    if (unique.size() > 8)
+    if (unique.size() > maximum_lines)
         throw std::invalid_argument("В области слишком много строк для безопасного поиска координат");
     return unique;
 }
@@ -630,6 +652,48 @@ std::optional<std::wstring> complete_decimal(std::wstring_view text) {
         text[i + 1] < L'0' || text[i + 1] > L'9' || text[i + 2] < L'0' || text[i + 2] > L'9')
         return std::nullopt;
     return std::wstring(text);
+}
+
+struct MapAxisValue { std::wstring number; bool labeled{}; };
+std::optional<MapAxisValue> parse_map_axis(std::wstring_view text, wchar_t expected) {
+    while (!text.empty() && (text.front() == L' ' || text.front() == L'\t')) text.remove_prefix(1);
+    while (!text.empty() && (text.back() == L' ' || text.back() == L'\t')) text.remove_suffix(1);
+    bool labeled = false;
+    if (!text.empty()) {
+        const bool x = text.front() == L'x' || text.front() == L'X' ||
+                       text.front() == L'х' || text.front() == L'Х';
+        const bool y = text.front() == L'y' || text.front() == L'Y' ||
+                       text.front() == L'у' || text.front() == L'У';
+        if (x || y) {
+            if ((expected == L'x' && !x) || (expected == L'y' && !y)) return std::nullopt;
+            labeled = true;
+            text.remove_prefix(1);
+        }
+    }
+    const auto number = complete_decimal(text);
+    if (!number) return std::nullopt;
+    return MapAxisValue{*number, labeled};
+}
+
+bool map_axis_prefix(std::wstring_view text) {
+    while (!text.empty() && (text.front() == L' ' || text.front() == L'\t')) text.remove_prefix(1);
+    if (text.empty()) return false;
+    const wchar_t first = text.front();
+    if (first != L'x' && first != L'X' && first != L'х' && first != L'Х' &&
+        first != L'y' && first != L'Y' && first != L'у' && first != L'У') return false;
+    text.remove_prefix(1);
+    while (!text.empty() && (text.front() == L' ' || text.front() == L'\t')) text.remove_prefix(1);
+    if (text.empty()) return false;
+    const auto numeric_glyph = [](wchar_t c) {
+        return (c >= L'0' && c <= L'9') || c == L'l' || c == L'I' || c == L'i' ||
+               c == L'O' || c == L'o' || c == L'|' || c == L'.' || c == L',' ||
+               c == L'-' || c == L'+' || c == L' ' || c == L'\t';
+    };
+    // Confusable OCR strokes such as "ylll" stay damaged numeric evidence.
+    // They are never substituted into a value. YARD/YORK remain ordinary words.
+    return numeric_glyph(text.front()) &&
+        (std::any_of(text.begin(), text.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; }) ||
+         std::all_of(text.begin(), text.end(), numeric_glyph));
 }
 
 OcrResult recognize_text_line(const RapidOcr& ocr, const Image& image,
@@ -953,26 +1017,7 @@ OcrResult RapidOcr::recognize_chat(const Image& image, std::stop_token stop) con
 
 OcrResult RapidOcr::recognize_map_coordinates(const Image& x_field, const Image& y_field,
                                             std::stop_token stop) const {
-    struct AxisValue { std::wstring number; bool labeled{}; };
-    const auto parse_axis = [](std::wstring_view text, wchar_t expected) -> std::optional<AxisValue> {
-        while (!text.empty() && (text.front() == L' ' || text.front() == L'\t')) text.remove_prefix(1);
-        while (!text.empty() && (text.back() == L' ' || text.back() == L'\t')) text.remove_suffix(1);
-        bool labeled = false;
-        if (!text.empty()) {
-            const bool x = text.front() == L'x' || text.front() == L'X' ||
-                           text.front() == L'х' || text.front() == L'Х';
-            const bool y = text.front() == L'y' || text.front() == L'Y' ||
-                           text.front() == L'у' || text.front() == L'У';
-            if (x || y) {
-                if ((expected == L'x' && !x) || (expected == L'y' && !y)) return std::nullopt;
-                labeled = true;
-                text.remove_prefix(1);
-            }
-        }
-        const auto number = complete_decimal(text);
-        if (!number) return std::nullopt;
-        return AxisValue{*number, labeled};
-    };
+    const auto parse_axis = parse_map_axis;
     const auto recognize_axis = [&](auto&& self, const Image& source, wchar_t expected,
                                     bool magnified) -> OcrResult {
         validate_ocr_image(source);
@@ -1135,6 +1180,155 @@ OcrResult RapidOcr::recognize_map_coordinates(const Image& x_field, const Image&
     result.map_axes_labeled = x.map_axes_labeled && y.map_axes_labeled;
     // The two rectangles are in independent axis-capture coordinate spaces;
     // combining them into one misleading bounding box would lose provenance.
+    return result;
+}
+
+OcrResult RapidOcr::recognize_map_neighborhood(const Image& image,
+                                              const MapOcrSearchLayout& layout,
+                                              std::stop_token stop) const {
+    if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
+    validate_ocr_image(image);
+    const auto valid_rect = [&](const ImageRect& rect) {
+        return rect.left >= 0 && rect.top >= 0 && rect.right <= image.width &&
+               rect.bottom <= image.height && rect.right > rect.left && rect.bottom > rect.top;
+    };
+    if (image.width > 4096 || image.height > 4096 ||
+        static_cast<std::size_t>(image.width) * image.height > 4'000'000 ||
+        !valid_rect(layout.x_prior) || !valid_rect(layout.y_prior) ||
+        layout.cursor_x < 0 || layout.cursor_y < 0 ||
+        layout.cursor_x >= image.width || layout.cursor_y >= image.height ||
+        !std::isfinite(layout.scale) || layout.scale <= 0.0 || layout.scale > 16.0)
+        throw std::invalid_argument("Неверная геометрия области поиска координат карты.");
+
+    struct AxisEvidence { OcrResult result; TextLine line; };
+    std::optional<AxisEvidence> x, y;
+    // Finding every line precedes selection: an easy preferred field must not
+    // hide a second intact semantic coordinate elsewhere in this screenshot.
+    auto lines = locate_text_lines(image, stop, L'x', false, nullptr, 24, &layout);
+    std::erase_if(lines, [&](const auto& line) {
+        return line.glyphs < 2 || line.glyphs > 24 ||
+               line.font_height < 5 || line.font_height > 64 * layout.scale ||
+               line.ink.right - line.ink.left > 240 * layout.scale;
+    });
+    if (lines.size() > 12)
+        throw std::invalid_argument("Вокруг отметки слишком много подписей. Переместите курсор и повторите отметку.");
+    const auto overlaps = [](const ImageRect& a, const ImageRect& b) {
+        return std::min(a.right, b.right) > std::max(a.left, b.left) &&
+               std::min(a.bottom, b.bottom) > std::max(a.top, b.top);
+    };
+    // Prefer the known layout for latency only. All remaining rows still run
+    // before a coordinate is returned, including captions at displaced labels.
+    std::stable_sort(lines.begin(), lines.end(), [&](const auto& a, const auto& b) {
+        const bool a_prior = overlaps(a.ink, layout.x_prior) || overlaps(a.ink, layout.y_prior);
+        const bool b_prior = overlaps(b.ink, layout.x_prior) || overlaps(b.ink, layout.y_prior);
+        return a_prior && !b_prior;
+    });
+    for (const auto& line : lines) {
+        if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
+        const int padding = std::max({4, line.font_height / 3,
+                                     (20 - (line.ink.bottom - line.ink.top) + 1) / 2});
+        auto result = recognize(crop_text_line(image, line, padding), stop);
+        const auto labeled_axis = [](const OcrResult& value) -> wchar_t {
+            wchar_t found = 0;
+            for (const wchar_t axis : {L'x', L'y'}) {
+                const auto primary = parse_map_axis(value.text, axis);
+                const auto alternate = parse_map_axis(value.alternate_text, axis);
+                if ((primary && primary->labeled) || (alternate && alternate->labeled)) {
+                    if (found) throw std::invalid_argument("Подпись карты содержит противоречащие оси координат.");
+                    found = axis;
+                }
+            }
+            return found;
+        };
+        const wchar_t axis = labeled_axis(result);
+        if (!axis) {
+            // Buildings, player names and PING are not numeric axes. A row
+            // beginning with X/Y and digits remains damaged competing evidence.
+            if (map_axis_prefix(result.text) || map_axis_prefix(result.alternate_text))
+                throw std::invalid_argument("В области карты найдена неполная подпись X/Y. Повторите отметку.");
+            continue;
+        }
+        const auto agrees = [&](const OcrResult& value) {
+            const auto primary = parse_map_axis(value.text, axis);
+            const auto alternate = parse_map_axis(value.alternate_text, axis);
+            return primary && alternate && primary->labeled && alternate->labeled &&
+                   primary->number == alternate->number &&
+                   visible_characters(value.text) == line.glyphs &&
+                   visible_characters(value.alternate_text) == line.glyphs;
+        };
+        if (!agrees(result) || result.confidence < 0.90F || result.minimum_confidence < 0.65F) {
+            auto retry = recognize(crop_text_line(image, line,
+                std::max(padding + 1, line.font_height / 2)), stop);
+            (void)labeled_axis(retry);
+            if (agrees(retry) && (!agrees(result) || retry.minimum_confidence > result.minimum_confidence)) {
+                const auto chosen = parse_map_axis(retry.text, axis);
+                for (const auto* previous : {&result.text, &result.alternate_text}) {
+                    const auto value = parse_map_axis(*previous, axis);
+                    if (value && chosen && value->number != chosen->number) {
+                        retry.alternate_text = *previous;
+                        break;
+                    }
+                }
+                result = std::move(retry);
+            }
+        }
+        const auto primary = parse_map_axis(result.text, axis);
+        const auto alternate = parse_map_axis(result.alternate_text, axis);
+        if (!primary || !primary->labeled)
+            throw std::invalid_argument("Не удалось прочитать полную подпись X/Y с двумя дробными цифрами.");
+        auto& selected = axis == L'x' ? x : y;
+        if (selected)
+            throw std::invalid_argument("Рядом с отметкой найдены несколько подписей одной оси. Повторите отметку.");
+        result.coordinate_passes_agree = primary && alternate && alternate->labeled &&
+                                        primary->number == alternate->number;
+        result.coordinate_glyph_count_matches = visible_characters(result.text) == line.glyphs &&
+                                                visible_characters(result.alternate_text) == line.glyphs;
+        result.map_axes_labeled = primary->labeled && alternate && alternate->labeled;
+        result.coordinate_boundary_clipped = line.clipped;
+        result.text = primary->number;
+        if (alternate) result.alternate_text = alternate->number;
+        selected = AxisEvidence{std::move(result), line};
+    }
+    if (!x || !y)
+        throw std::invalid_argument("Не найдены обе полные подписи X/Y рядом с отметкой. Уберите всплывающую подпись и повторите отметку.");
+    const auto center_x = [](const auto& r) { return (r.left + r.right) / 2.0; };
+    const auto center_y = [](const auto& r) { return (r.top + r.bottom) / 2.0; };
+    if (overlaps(x->line.ink, y->line.ink) ||
+        std::abs(center_x(x->line.ink) - center_x(y->line.ink)) > 200 * layout.scale ||
+        std::abs(center_y(x->line.ink) - center_y(y->line.ink)) > 240 * layout.scale ||
+        std::min(x->line.font_height, y->line.font_height) * 2 <
+            std::max(x->line.font_height, y->line.font_height))
+        throw std::invalid_argument("Подписи X/Y не образуют одну пару координат рядом с отметкой.");
+    OcrResult result;
+    result.text = L"x" + x->result.text + L",y" + y->result.text;
+    result.alternate_text = L"x" + x->result.alternate_text + L",y" + y->result.alternate_text;
+    const auto x_count = visible_characters(x->result.text), y_count = visible_characters(y->result.text);
+    result.confidence = (x->result.confidence * static_cast<float>(x_count) +
+                         y->result.confidence * static_cast<float>(y_count)) /
+                        static_cast<float>(x_count + y_count);
+    result.minimum_confidence = std::min(x->result.minimum_confidence, y->result.minimum_confidence);
+    result.line_count = 1;
+    result.map_axes_labeled = x->result.map_axes_labeled && y->result.map_axes_labeled;
+    result.isolated_coordinate_pair = parse_ocr_coordinates(result.text).size() == 1;
+    result.coordinate_passes_agree = x->result.coordinate_passes_agree && y->result.coordinate_passes_agree;
+    result.coordinate_glyph_count_matches = x->result.coordinate_glyph_count_matches &&
+                                             y->result.coordinate_glyph_count_matches;
+    result.coordinate_boundary_clipped = x->result.coordinate_boundary_clipped ||
+                                          y->result.coordinate_boundary_clipped;
+    result.map_x_bounds = x->line.ink;
+    result.map_y_bounds = y->line.ink;
+    std::ostringstream evidence;
+    evidence << "ocr.map_neighborhood width=" << image.width << " height=" << image.height
+             << " candidate_lines=" << lines.size() << " confidence=" << result.confidence
+             << " minimum_confidence=" << result.minimum_confidence
+             << " labeled=" << result.map_axes_labeled << " passes_agree=" << result.coordinate_passes_agree
+             << " glyph_count_matches=" << result.coordinate_glyph_count_matches
+             << " clipped=" << result.coordinate_boundary_clipped
+             << " x_bounds=" << result.map_x_bounds->left << ',' << result.map_x_bounds->top << ','
+             << result.map_x_bounds->right << ',' << result.map_x_bounds->bottom
+             << " y_bounds=" << result.map_y_bounds->left << ',' << result.map_y_bounds->top << ','
+             << result.map_y_bounds->right << ',' << result.map_y_bounds->bottom;
+    log_info(evidence.str());
     return result;
 }
 

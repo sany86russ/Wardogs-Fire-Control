@@ -1,6 +1,7 @@
 /.tools/
 /.recovery/
 /App/
+/App.location.txt
 /dist/
 /source/terrain-packs/*.wdt
 /source/build/
@@ -13,3 +14,4 @@ __pycache__/
 /analysis/verification/**/*.obj
 /analysis/verification/**/*.exe
 /analysis/verification/**/*.dll
+/analysis/verification/ocr-resilience-2.10.0/private-evidence/

@@ -1,10 +1,12 @@
-# WARDOGS Fire Control 2.9.0 — quick start
+# WARDOGS Fire Control 2.10.0 — candidate quick start
 
 A portable assistant for L81 and SPH-2: distance, bearing and table-based aiming from two points. Version 2.9.0 adds quick spotter commands, named positions and targets, measured flight times, a flight/terrain profile and source information. The main in-game workflow is enabled by default; recognition and calculations run locally.
 
+This guide covers the **2.10.0 candidate** in the current source: bounded map-label search, confirmation across separate frames and log archives. The published stable ZIP remains **2.8.0**; downloading that release does not provide the candidate features.
+
 ## Launch and first calculation
 
-Extract the entire ZIP and double-click **Запустить.cmd** or **WarDogsDistanceCalculator.exe**. In the working project, **Запустить.cmd** opens the new application from `App`; the original executable in the root is kept separately. Windows 10/11 x64; installation and administrator privileges are not required. Keep the `models` and `platforms` folders and the DLLs beside the executable.
+Extract the entire portable ZIP into a separate folder and double-click **Запустить.cmd**, **Start.cmd** or **WarDogsDistanceCalculator.exe** there. Windows 10/11 x64; installation and administrator privileges are not required. Keep `models`, `platforms`, `tls`, `Launch.ps1`, `Update.ps1`, the manifest and DLLs together; copying only the EXE is insufficient. Settings and imported terrain remain in the Windows profile when the complete package is replaced.
 
 Russian is the default interface language. Select **EN** in the header beside the version to switch to English. You can switch back to **RU** at any time; the preference is saved. See the [language guide](LOCALIZATION.md).
 
@@ -23,7 +25,7 @@ Shortcuts can change after a conflict with another application. The current comb
 
 For the gun, the application checks for an active draft, one complete X/Y pair, agreement between two passes, character confidence and consistency with visible characters. Sent chat history does not replace a damaged draft. The middle mouse button reads separate X and Y fields around the clicked point without consulting chat.
 
-After a failed target reading, the application can make two further brief attempts while the cursor stays at the same point and the active window stays unchanged. If you mark a new point during OCR, only the latest capture remains queued; an outdated result will not be applied. The screen is not read continuously.
+The first middle-button screenshot waits for the marker to appear: **250 ms** by default. Automatic acceptance needs two identical trustworthy complete X/Y pairs from **two separate screenshots** with unchanged cursor, window and geometry. A request is limited to **four frames**; processing one screenshot again does not count as a second observation. Conflicts, incomplete labels or lack of two confirmations lead to review or rejection. If you mark a new point during OCR, only the latest capture remains queued; an outdated result will not be applied. The screen is not read continuously.
 
 Weak, clipped or ambiguous text opens a review card. Return with **Alt+C**, select a pair, correct it if necessary and press **Apply verified coordinates**. Once the gun is accepted, the middle mouse button is ready regardless of how the position was entered or confirmed. During a new reading and until an error is resolved, the previous aiming solution is hidden. An unaccepted new gun capture also blocks new targets, so the calculation cannot use the old gun position. An empty capture is not presented as a successful calculation. **Reject** explicitly restores the previous calculation; manual input cancels the pending review.
 
@@ -31,14 +33,15 @@ Weak, clipped or ambiguous text opens a review card. Return with **Alt+C**, sele
 
 - **Gun:** select Mark Coordinates again, check that the pair is visible in the active chat input, then repeat Alt+X.
 - **Target:** keep the cursor near the labels of the selected point and click the middle mouse button again. Switching windows or moving the cursor stops the previous automatic attempt.
+- **Target fallback through chat:** **M → right-click target → Mark Coordinates → Alt+T**. A full pair must be visible in the active draft; no message needs to be sent. Enable **Auto-detect for additional captures** under **Settings → Advanced**. If disabled, Alt+T reads your saved custom region.
 - If the game is minimized, its window is not recognized or the region extends beyond one monitor, open the game on a single monitor and try again.
 - For an unusual HUD, use **Manual input and diagnostics** or the advanced recognition settings.
 
-Automatic chat detection is limited to the upper-left part of the client window. It accounts for the window's physical position and size, including negative coordinates on another monitor. Fields near the cursor remain within the game client. The application uses the original executable's geometry and a limited scaled retry; it selects complete labels for the required axes within each field and does not treat a cursor fragment at the edge as a digit. These checks do not guarantee recognition of every HUD and resolution.
+Automatic chat detection is limited to the upper-left part of the client window. It accounts for the window's physical position and size, including negative coordinates on another monitor. Map fields are searched in a bounded cursor neighborhood within the game client; original rectangles guide the search, while a complete X or Y label identifies the axis. Unlabeled numbers, clipped pairs and competing labels are not accepted automatically. RapidOCR is the main engine; an error does not silently switch to Windows OCR. These checks do not guarantee recognition of every HUD and resolution.
 
 ## Manual fallback
 
-Diagnostics are stored in `%LOCALAPPDATA%\WardogsFireControl\logs`: `latest.log` contains the current session and `latest.previous.log` contains the previous log. Each file is limited to 4 MiB; earlier history is replaced after several launches. Completed readings and calculations are written immediately. The log records X/Y recognition details and rejection reasons, but no screenshots: the log alone cannot reconstruct an obscured digit or its background.
+Diagnostics are stored in `%LOCALAPPDATA%\WardogsFireControl\logs`: `latest.log` contains the current session, `latest.previous.log` the previous log, and `latest.archive` up to **32** older `session-<number>.log` files. Each is limited to **4 MiB**: up to **128 MiB** of archives and **8 MiB** for current and previous files. A filesystem failure may retain an additional recovery file of up to 4 MiB; unrelated files are outside this limit and are not deleted. The oldest managed archives are replaced when the limit is reached. Completed readings and calculations are written immediately. Logs record X/Y recognition details, separate-frame agreement and rejection reasons, but no screenshots: the log alone cannot reconstruct an obscured digit or its background. Archiving does not recover sessions already lost.
 
 Automatic gun and map reading uses local RapidOCR. The OCR for custom region selection in advanced settings applies to manual capture; a saved Windows OCR choice does not change the quick workflow.
 
@@ -64,6 +67,8 @@ Windows reserves registered shortcuts. If a combination is occupied, the applica
 ## Settings and portability
 
 **Settings → General** contains the workflow and the delay after placing a map marker. **Advanced** contains the standalone calculator, middle mouse button, shortcuts, OCR and custom region. Selecting **Standalone calculator · manual input only** disables game features and is saved between launches.
+
+The default middle-button delay is **250 ms**. In the candidate, the first frame waits at least **80 ms**, even if the setting is zero; later frames are captured separately after a bounded wait. This waits for the label to appear rather than promising a total OCR duration.
 
 Profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. If it does not exist yet, the previous `%LOCALAPPDATA%\WarDogsDistanceCalculatorCpp\settings.ini` is read without modifying the old file. Profiles without the new-workflow marker are migrated to quick mode: game features, middle mouse capture and automatic detection are enabled; gun capture uses Alt+X and return uses Alt+C, accounting for internal conflicts. After the new profile is saved, any subsequent choice of standalone mode is retained.
 
@@ -126,7 +131,7 @@ Select **SPH-2 · Artillery**. Mandatory ranging shots are no longer required: a
 
 Bearing and MIL are estimated separately. Inconsistent impacts limit the estimate's consistency, but do not return an already established correction to zero. Its influence fades smoothly away from the recorded target.
 
-Record an impact **before changing the target or trajectory**. The application saves the displayed bearing/MIL when Alt+I starts, but does not observe the shot or the actual game sight settings. Changing the gun, target, F4 or map cancels an outdated capture. After an OCR error, point at the same location and repeat Alt+I; first confirm or reject uncertain coordinates.
+Record an impact **before changing the target or trajectory**. The application saves the displayed bearing/MIL when Alt+I starts, but does not observe the shot or the actual game sight settings. Changing the gun, target, F4 or map cancels an outdated capture. After an OCR error, point at the same location and repeat Alt+I; first confirm or reject uncertain coordinates. A failed or cancelled Alt+I restores the previous SPH-2 target's guidance only when inputs are unchanged and no coordinate review is pending; this creates no new impact or correction.
 
 Expand **Impact corrections** to enter an actual impact manually or reset refinements. Reset restores the direct calculation; no new ranging shot is needed to continue. After moving the gun, enter its coordinates again. If the vehicle's orientation changes at the same position, reset corrections manually: the application does not observe the hull's orientation.
 
@@ -139,5 +144,7 @@ Vehicle tilt, elevation differences, game dispersion and weapon changes can affe
 ## Validation limits
 
 OCR is checked against control and supplied screenshots; native capture is checked with a dedicated Windows test window. These results are not a test of the live marker during a match. Borderless mode is available for windows above the game; visibility in exclusive fullscreen and impact accuracy require separate verification.
+
+Five real X/Y pairs and scale/position transformations are retained for the 2.10 candidate. New in-game firing trials have not been performed. OCR changes do not change the tables or physical model; first-shot accuracy and any hit percentage are not guaranteed.
 
 The application reads visible pixels and does not modify the game installation. At SoNiX's request, available game logs and public alternatives were examined separately: no ready-made stream of selected X/Y coordinates was found. The application does not watch game files; details are in the [source investigation, in Russian](COORDINATE-SOURCES-INVESTIGATION-RU.md). BULKHEAD approval for OCR/overlays has not been confirmed; invisibility to anti-cheat and freedom from sanctions are not guaranteed. See [technical limits and official rules](ANTICHEAT-EN.md), and [coordinate workflow sources, in Russian](COORDINATE-WORKFLOW-RESEARCH-RU.md).

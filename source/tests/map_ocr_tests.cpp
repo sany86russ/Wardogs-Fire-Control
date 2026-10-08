@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -33,6 +34,25 @@ void paste(wardogs::Image& destination, const wardogs::Image& source, int left, 
     for (int y = 0; y < source.height; ++y)
         std::copy_n(source.bgr.data() + y * source.width * 3, source.width * 3,
                     destination.bgr.data() + ((y + top) * destination.width + left) * 3);
+}
+struct Neighborhood {
+    wardogs::Image image;
+    wardogs::MapOcrSearchLayout layout;
+};
+Neighborhood neighborhood(const wardogs::Image& x, const wardogs::Image& y,
+                          double scale = 1.0, int shift_x = 0, int shift_y = 0) {
+    const auto pixels = [scale](int value) { return static_cast<int>(std::lround(value * scale)); };
+    Neighborhood result;
+    result.image.width = pixels(480); result.image.height = pixels(352);
+    result.image.bgr.assign(static_cast<std::size_t>(result.image.width) * result.image.height * 3, 20);
+    const int xx = pixels(212), xy = pixels(178), yx = pixels(180), yy = pixels(104);
+    result.layout = {{xx, xy, xx + x.width, xy + x.height},
+                     {yx, yy, yx + y.width, yy + y.height}, pixels(192), pixels(224), scale};
+    // Retained native crop pixels are composed into a synthetic neighborhood;
+    // this tests displacement, never claims an unobserved full game screenshot.
+    paste(result.image, x, xx + shift_x, xy + shift_y);
+    paste(result.image, y, yx + shift_x, yy + shift_y);
+    return result;
 }
 wardogs::Image scaled(const wardogs::Image& source, double factor) {
     const int width = static_cast<int>(std::lround(source.width * factor));
@@ -97,6 +117,88 @@ int wmain(int argc, wchar_t** argv) {
               "cursor-bracket fragment and partial PING caption do not corrupt full labeled coordinate evidence");
         check(!result.coordinate_is_chat_draft && !result.coordinate_bounds,
               "separate map-axis fields never masquerade as chat or one joint source rectangle");
+        const auto normal_neighborhood = neighborhood(x, y);
+        const auto neighborhood_result = ocr.recognize_map_neighborhood(
+            normal_neighborhood.image, normal_neighborhood.layout);
+        check(wardogs::parse_ocr_coordinate(neighborhood_result.text) == wardogs::Point{97.79, 111.36} &&
+                  automatic_evidence(neighborhood_result),
+              "one screenshot neighborhood retains the real complete semantic axes");
+        check(neighborhood_result.map_x_bounds && neighborhood_result.map_y_bounds &&
+                  !neighborhood_result.coordinate_bounds && !neighborhood_result.coordinate_is_chat_draft,
+              "both map glyph bounds refer to the same screenshot without claiming chat provenance");
+        auto native_font_layout = normal_neighborhood.layout;
+        native_font_layout.x_prior = {219, 163, 405, 240};
+        native_font_layout.y_prior = {176, 64, 379, 155};
+        native_font_layout.scale = 4.0 / 3.0;
+        const auto native_font_read = ocr.recognize_map_neighborhood(normal_neighborhood.image, native_font_layout);
+        check(wardogs::parse_ocr_coordinate(native_font_read.text) == wardogs::Point{97.79, 111.36} &&
+                  automatic_evidence(native_font_read),
+              "native font pixels remain readable when 1440p preferred geometry uses a different client scale");
+        auto shortened_digit = neighborhood(x, covered(y, {33, 23, 37, 30}, 20));
+        shortened_digit.layout.cursor_x = 216;
+        shortened_digit.layout.x_prior = {236, 178, 376, 236};
+        shortened_digit.layout.y_prior = {204, 104, 356, 172};
+        not_automatic([&] {
+            const auto value = ocr.recognize_map_neighborhood(shortened_digit.image, shortened_digit.layout);
+            if (automatic_evidence(value)) std::wcerr << L"Damaged cursor-lane digit=" << value.text << L'\n';
+            return value;
+        }, "a shortened real integer at the cursor lane cannot be discarded before glyph proof");
+        wardogs::Image signed_x{x.width + 10, x.height, {}};
+        signed_x.bgr.assign(static_cast<std::size_t>(signed_x.width) * signed_x.height * 3, 20);
+        paste(signed_x, crop(x, 0, 0, 33, x.height), 0, 0);
+        paste(signed_x, crop(x, 33, 0, x.width, x.height), 43, 0);
+        // A retained native horizontal stroke is inserted as a synthetic minus.
+        // A missed sign may cause refusal, never an automatic absolute value.
+        paste(signed_x, crop(y, 60, 23, 68, 24), 34, 30);
+        const auto signed_patch = neighborhood(signed_x, y);
+        try {
+            const auto signed_read = ocr.recognize_map_neighborhood(signed_patch.image, signed_patch.layout);
+            check(!automatic_evidence(signed_read) ||
+                      wardogs::parse_ocr_coordinate(signed_read.text) == wardogs::Point{-97.79, 111.36},
+                  "a signed map axis cannot silently become a trusted positive absolute value");
+        } catch (const std::invalid_argument&) {
+            check(true, "a signed map axis cannot silently become a trusted positive absolute value");
+        }
+        for (const auto shift : {std::pair{80, 90}, std::pair{-140, 60}, std::pair{60, -65}}) {
+            const auto moved = neighborhood(x, y, 1.0, shift.first, shift.second);
+            const auto read = ocr.recognize_map_neighborhood(moved.image, moved.layout);
+            check(wardogs::parse_ocr_coordinate(read.text) == wardogs::Point{97.79, 111.36} &&
+                      automatic_evidence(read),
+                  "displaced full X/Y labels are found beyond the preferred field without guessing numbers");
+        }
+        auto duplicate_neighborhood = normal_neighborhood;
+        paste(duplicate_neighborhood.image, x, 40, 25);
+        rejected([&] { ocr.recognize_map_neighborhood(duplicate_neighborhood.image, duplicate_neighborhood.layout); },
+                 "preferred coordinates cannot hide another complete X row in the same neighborhood");
+        auto incomplete_axis = normal_neighborhood;
+        paste(incomplete_axis.image, crop(y, 16, 20, 55, 47), 40, 25);
+        rejected([&] { ocr.recognize_map_neighborhood(incomplete_axis.image, incomplete_axis.layout); },
+                 "an incomplete labeled axis cannot be discarded in favor of an easy preferred coordinate");
+        auto unrelated_number = normal_neighborhood;
+        paste(unrelated_number.image, crop(x, 32, 19, 82, 39), 35, 25);
+        const auto unrelated_read = ocr.recognize_map_neighborhood(unrelated_number.image, unrelated_number.layout);
+        check(wardogs::parse_ocr_coordinate(unrelated_read.text) == wardogs::Point{97.79, 111.36} &&
+                  automatic_evidence(unrelated_read),
+              "unlabeled nearby decimal is not a coordinate axis or a reason to replace labeled X/Y");
+        auto missing_y = normal_neighborhood;
+        missing_y.image = covered(missing_y.image, missing_y.layout.y_prior, 20);
+        rejected([&] { ocr.recognize_map_neighborhood(missing_y.image, missing_y.layout); },
+                 "neighborhood never fills a missing Y from another number or the prior position");
+        auto damaged_y = neighborhood(x, covered(y, {50, 22, 61, 39}, 255));
+        not_automatic([&] { return ocr.recognize_map_neighborhood(damaged_y.image, damaged_y.layout); },
+                      "covered Y digit remains unsafe in the neighborhood semantic extractor");
+        auto invalid_layout = normal_neighborhood.layout;
+        invalid_layout.x_prior.left = -1;
+        rejected([&] { ocr.recognize_map_neighborhood(normal_neighborhood.image, invalid_layout); },
+                 "invalid neighborhood geometry cannot start inference");
+        std::stop_source canceled;
+        canceled.request_stop();
+        try {
+            ocr.recognize_map_neighborhood(normal_neighborhood.image, normal_neighborhood.layout, canceled.get_token());
+            check(false, "canceled neighborhood request cannot return coordinate evidence");
+        } catch (const std::runtime_error&) {
+            check(true, "canceled neighborhood request cannot return coordinate evidence");
+        }
         const auto grid_x = with_grid_edge(x), grid_y = with_grid_edge(y);
         for (const double scale : {0.75, 1.0, 1.5, 2.0}) {
             const auto grid_result = ocr.recognize_map_coordinates(scaled(grid_x, scale), scaled(grid_y, scale));
@@ -186,6 +288,18 @@ int wmain(int argc, wchar_t** argv) {
                       automatic_evidence(value),
                       "actual map cursor line, player arrow and boundary ping bracket retain physical glyph proof at 75-200 percent");
             }
+            for (const double factor : {0.75, 1.0, 1.5, 2.0}) {
+                const auto patch = neighborhood(scaled(source_x, factor), scaled(source_y, factor),
+                                                source_x.width / 140.0 * factor);
+                const auto searched = ocr.recognize_map_neighborhood(patch.image, patch.layout);
+                if (!automatic_evidence(searched))
+                    std::wcerr << L"Neighborhood " << live_case.y << L" scale " << factor << L": "
+                               << searched.text << L" / " << searched.alternate_text << L" glyphs="
+                               << searched.coordinate_glyph_count_matches << L" clipped="
+                               << searched.coordinate_boundary_clipped << L'\n';
+                check(wardogs::parse_ocr_coordinate(searched.text) == live_case.expected && automatic_evidence(searched),
+                      "retained native map pixels survive scaled single-frame semantic neighborhood search");
+            }
         }
         const auto overlay_x = fixture(L"map_live_player_overlay_x.png");
         const auto overlay_y = fixture(L"map_live_player_overlay_y.png");
@@ -207,6 +321,37 @@ int wmain(int argc, wchar_t** argv) {
                       "large ping bracket exclusion cannot hide a clipped fractional digit");
         not_automatic([&] { return ocr.recognize_map_coordinates(x, covered(y, {11, 23, 13, 38}, 255)); },
                       "known cursor lane cannot discard an arbitrary full-font-height white stem");
+        for (const auto& changed_y : {crop(y, 0, 0, 77, y.height),
+                                      covered(y, {11, 23, 13, 38}, 255),
+                                      covered(overlay_y, {37, 22, 50, 39}, 20),
+                                      covered(overlay_y, {50, 22, 61, 39}, 255)}) {
+            const auto damaged = neighborhood(x, changed_y);
+            not_automatic([&] { return ocr.recognize_map_neighborhood(damaged.image, damaged.layout); },
+                          "neighborhood cannot drop a full-height stem, recover a missing label or fill a hidden digit");
+        }
+        auto clipped_search = normal_neighborhood;
+        clipped_search.image.bgr.assign(clipped_search.image.bgr.size(), 20);
+        paste(clipped_search.image, x, 60, 178);
+        paste(clipped_search.image, crop(y, 24, 0, y.width, y.height), 0, 104);
+        clipped_search.layout = {{60, 178, 200, 236}, {0, 104, 128, 172}, 12, 224, 1.0};
+        not_automatic([&] { return ocr.recognize_map_neighborhood(clipped_search.image, clipped_search.layout); },
+                      "a Y stub cut by the actual screenshot boundary cannot become complete semantic evidence");
+        for (const int digit_x : {35, 44, 53}) {
+            auto joined_grid = normal_neighborhood;
+            const int column = joined_grid.layout.y_prior.left + digit_x;
+            // A one-pixel bright grid preserves the visible digit strokes.
+            // Correct complete recovery is allowed; erased/covered digits in
+            // the separate tests above must still remain nonautomatic.
+            joined_grid.image = covered(joined_grid.image, {column, 0, column + 1, joined_grid.image.height}, 255);
+            try {
+                const auto value = ocr.recognize_map_neighborhood(joined_grid.image, joined_grid.layout);
+                check(!automatic_evidence(value) ||
+                          wardogs::parse_ocr_coordinate(value.text) == wardogs::Point{97.79, 111.36},
+                      "a bright grid touching a digit cannot create a wrong trusted coordinate");
+            } catch (const std::invalid_argument&) {
+                check(true, "a bright grid touching a digit cannot create a wrong trusted coordinate");
+            }
+        }
         std::cout << "Map live OCR: " << checks << " checks, " << failures << " failures\n";
         return failures ? 1 : 0;
     } catch (const std::exception& error) {

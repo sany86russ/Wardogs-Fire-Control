@@ -43,6 +43,8 @@ The ordinary local command below runs tests, **updates the local `App/` director
 .\Build.ps1 -Configuration Release -Package
 ```
 
+The root `Launch.ps1` normally starts `App/`. When the installation lives elsewhere, a local `App.location.txt` beside the script may contain one absolute path to the complete package. This file is excluded from Git; removing it restores launch from `App/`. A `-Package` build still updates `App/`. In a downloaded ZIP, `Start.cmd` uses portable mode and always starts its own directory.
+
 To produce the public package without replacing `App/`, use the CI path:
 
 ```powershell

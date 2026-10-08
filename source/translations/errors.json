@@ -1158,5 +1158,45 @@
   {
     "ru": "Откройте M → ПКМ → Отметить координаты и повторите захват орудия.",
     "en": "Open M → Right click → Mark coordinates and capture the gun position again."
+  },
+  {
+    "ru": "Масштаб поиска координат карты слишком велик.",
+    "en": "The map coordinate search scale is too large."
+  },
+  {
+    "ru": "Область поиска координат карты слишком велика.",
+    "en": "The map coordinate search area is too large."
+  },
+  {
+    "ru": "Неверная геометрия области поиска координат карты.",
+    "en": "Invalid map coordinate search geometry."
+  },
+  {
+    "ru": "Вокруг отметки слишком много подписей. Переместите курсор и повторите отметку.",
+    "en": "Too many labels surround the marker. Move the cursor and mark again."
+  },
+  {
+    "ru": "Подпись карты содержит противоречащие оси координат.",
+    "en": "The map label contains conflicting coordinate axes."
+  },
+  {
+    "ru": "В области карты найдена неполная подпись X/Y. Повторите отметку.",
+    "en": "An incomplete X/Y label was found in the map area. Mark again."
+  },
+  {
+    "ru": "Не удалось прочитать полную подпись X/Y с двумя дробными цифрами.",
+    "en": "Could not read a complete X/Y label with two fractional digits."
+  },
+  {
+    "ru": "Рядом с отметкой найдены несколько подписей одной оси. Повторите отметку.",
+    "en": "Multiple labels for the same axis were found near the marker. Mark again."
+  },
+  {
+    "ru": "Не найдены обе полные подписи X/Y рядом с отметкой. Уберите всплывающую подпись и повторите отметку.",
+    "en": "Both complete X/Y labels were not found near the marker. Clear the tooltip and mark again."
+  },
+  {
+    "ru": "Подписи X/Y не образуют одну пару координат рядом с отметкой.",
+    "en": "The X/Y labels do not form a single coordinate pair near the marker."
   }
 ]
