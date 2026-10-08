@@ -1,0 +1,94 @@
+#pragma once
+
+#include "wardogs/core.hpp"
+
+#include <array>
+#include <functional>
+#include <optional>
+#include <span>
+
+namespace wardogs {
+
+enum class Arc { low, high };
+
+using Vector3 = std::array<double, 3>;
+using Matrix3 = std::array<Vector3, 3>;
+using HeightLookup = std::function<std::optional<double>(Point)>;
+
+struct CalibrationShot {
+    Point aim_point;
+    Point impact_point;
+    Arc arc{Arc::low};
+};
+
+struct CorrectedSolution {
+    Arc arc{Arc::low};
+    double bearing_deg{};
+    double reticle_distance_m{};
+    double mil{};
+};
+
+struct FiringAngles {
+    double bearing_deg{};
+    double mil{};
+};
+
+struct DirectionObservation {
+    Vector3 local_direction;
+    Vector3 world_direction;
+    double weight{1.0};
+};
+
+struct PlatformCalibration {
+    Matrix3 rotation{};
+    double pair_angle_residual_deg{};
+
+    [[nodiscard]] Vector3 local_to_world(Vector3 direction) const;
+    [[nodiscard]] Vector3 world_to_local(Vector3 direction) const;
+};
+
+inline constexpr double sph2_maximum_range_m = 2629.0;
+inline constexpr double minimum_calibration_separation_deg = 30.0;
+inline constexpr double maximum_calibration_separation_deg = 150.0;
+// Project acceptance policy for initial two-shot calibration, not a game
+// physics constant. A rotation preserves the angle between two directions;
+// a larger discrepancy cannot be explained by a common platform correction.
+inline constexpr double maximum_initial_calibration_residual_deg = 2.0;
+
+[[nodiscard]] Matrix3 identity_rotation();
+// Rejects non-finite, scaled, skewed or reflected matrices. Calibration is a
+// proper rotation; its inverse is its transpose only under this contract.
+void validate_platform_calibration(const PlatformCalibration& calibration);
+[[nodiscard]] Vector3 direction_from_bearing_and_mil(double bearing_deg,
+                                                     double mil);
+[[nodiscard]] Vector3 firing_direction(double bearing_deg, double mil,
+                                       Arc arc);
+[[nodiscard]] Vector3 impact_direction(Point base, Point impact, Arc arc,
+                                       double height_delta_m = 0.0);
+[[nodiscard]] double sph2_mil_for_distance(double distance_m, Arc arc);
+[[nodiscard]] double sph2_world_mil_for_distance(double distance_m, Arc arc);
+[[nodiscard]] double sph2_distance_for_mil(double mil, Arc arc);
+// Uses the retained approximate physical trajectory to convert a horizontal
+// distance and target-minus-gun height to the observed flat-ground sight table.
+// This is not a slant-distance conversion; unsupported sight settings fail.
+[[nodiscard]] double sph2_mil_for_trajectory(double horizontal_distance_m,
+                                             double height_delta_m, Arc arc,
+                                             bool extend_to_physical_endpoint = false);
+[[nodiscard]] double calibration_aim_separation_deg(Point base, Point first,
+                                                    Point second);
+[[nodiscard]] bool valid_calibration_aim_separation(double separation_deg);
+[[nodiscard]] PlatformCalibration calibrate_platform(
+    Point base, const CalibrationShot& first, const CalibrationShot& second,
+    const HeightLookup& height_lookup = {});
+[[nodiscard]] PlatformCalibration refine_platform_calibration(
+    const PlatformCalibration& prior,
+    std::span<const DirectionObservation> observations,
+    double prior_weight = 1.5);
+[[nodiscard]] FiringAngles required_firing_angles(
+    Point base, Point point, const PlatformCalibration& calibration, Arc arc,
+    double height_delta_m = 0.0);
+[[nodiscard]] CorrectedSolution corrected_solution(
+    Point base, Point target, const PlatformCalibration& calibration, Arc arc,
+    double height_delta_m = 0.0);
+
+}  // namespace wardogs

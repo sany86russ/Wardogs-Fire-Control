@@ -1,0 +1,1302 @@
+[
+  {
+    "ru": "область",
+    "en": "region"
+  },
+  {
+    "ru": "орудие",
+    "en": "gun"
+  },
+  {
+    "ru": "цель",
+    "en": "target"
+  },
+  {
+    "ru": "разовая область",
+    "en": "one-time region"
+  },
+  {
+    "ru": "попадание",
+    "en": "impact"
+  },
+  {
+    "ru": "траектория",
+    "en": "trajectory"
+  },
+  {
+    "ru": "разблокировка карточки",
+    "en": "unlock card"
+  },
+  {
+    "ru": "выход из игры",
+    "en": "return from game"
+  },
+  {
+    "ru": "Размер прицела сохранён",
+    "en": "Sight size saved"
+  },
+  {
+    "ru": "Дополнительная область недоступна. %1 продолжает находить орудие автоматически.",
+    "en": "The custom region is unavailable. %1 still finds the gun automatically."
+  },
+  {
+    "ru": "Дополнительная область восстановлена. Орудие: M → ПКМ → Отметить координаты → ",
+    "en": "Custom region restored. Gun: M → right-click → Mark Coordinates → "
+  },
+  {
+    "ru": "Горячие клавиши недоступны: ",
+    "en": "Shortcuts unavailable: "
+  },
+  {
+    "ru": "Быстрая игра готова: ",
+    "en": "Quick play ready: "
+  },
+  {
+    "ru": " — орудие; средняя кнопка — цель.",
+    "en": " — gun; middle mouse button — target."
+  },
+  {
+    "ru": "Быстрая игра доступна в этом сеансе, но настройки не сохранены: ",
+    "en": "Quick play is available for this session, but settings were not saved: "
+  },
+  {
+    "ru": "Настройки не загружены: ",
+    "en": "Settings not loaded: "
+  },
+  {
+    "ru": "Рельеф не учтён",
+    "en": "Terrain not included"
+  },
+  {
+    "ru": "Введите",
+    "en": "Enter"
+  },
+  {
+    "ru": "заново",
+    "en": "again"
+  },
+  {
+    "ru": "Настильная: 0.0° N",
+    "en": "Low arc: 0.0° N"
+  },
+  {
+    "ru": "Навесная: 0.0° N",
+    "en": "High arc: 0.0° N"
+  },
+  {
+    "ru": "1562 м",
+    "en": "1562 m"
+  },
+  {
+    "ru": "Наводка недоступна",
+    "en": "Aiming unavailable"
+  },
+  {
+    "ru": "необязательная поправка",
+    "en": "optional correction"
+  },
+  {
+    "ru": "повторите Ctrl+Alt+X",
+    "en": "repeat Ctrl+Alt+X"
+  },
+  {
+    "ru": "Ctrl+Alt+X: чат",
+    "en": "Ctrl+Alt+X: chat"
+  },
+  {
+    "ru": "Табличный расчёт",
+    "en": "Table calculation"
+  },
+  {
+    "ru": "рельеф не учтён",
+    "en": "terrain not included"
+  },
+  {
+    "ru": "Поправки по попаданию",
+    "en": "Impact corrections"
+  },
+  {
+    "ru": "Поправка учтена",
+    "en": "Correction applied"
+  },
+  {
+    "ru": "Пристрелка готова",
+    "en": "Ranging ready"
+  },
+  {
+    "ru": "Локальная поправка",
+    "en": "Local correction"
+  },
+  {
+    "ru": "Поправка не применена",
+    "en": "Correction not applied"
+  },
+  {
+    "ru": "Попадания расходятся; точность поправки ограничена",
+    "en": "Impacts disagree; correction accuracy is limited"
+  },
+  {
+    "ru": "Дождитесь окончания чтения",
+    "en": "Wait for reading to finish"
+  },
+  {
+    "ru": "промах 237 м",
+    "en": "miss 237 m"
+  },
+  {
+    "ru": "Азимут -5.1°",
+    "en": "Bearing -5.1°"
+  },
+  {
+    "ru": "Расчёт скопирован",
+    "en": "Calculation copied"
+  },
+  {
+    "ru": "Навесная · Стрельбище: расчёт готов.\nAlt+I — распознать разрыв и учесть поправку для следующего выстрела.",
+    "en": "High arc · Training ground: calculation ready.\nAlt+I — read the impact and apply a correction for the next shot."
+  },
+  {
+    "ru": "Сейчас работает отдельный калькулятор. Захват и окна поверх игры включаются в настройках → «В игре». Разрешение BULKHEAD не подтверждено.",
+    "en": "The standalone calculator is active. Enable capture and overlays in settings → In game. BULKHEAD approval has not been confirmed."
+  },
+  {
+    "ru": "Исходные данные изменились. Захватите координаты заново.",
+    "en": "Input data changed. Capture the coordinates again."
+  },
+  {
+    "ru": "Проверьте координаты: ",
+    "en": "Review coordinates: "
+  },
+  {
+    "ru": "Захват отклонён. Восстановлен предыдущий расчёт.",
+    "en": "Capture rejected. Previous calculation restored."
+  },
+  {
+    "ru": "Орудие задано: ",
+    "en": "Gun set: "
+  },
+  {
+    "ru": "\nНовое орудие ещё не прочитано · повторите %1 или проверьте захват.",
+    "en": "\nThe new gun has not been read yet · repeat %1 or review the capture."
+  },
+  {
+    "ru": "\nНовый захват ещё не подтверждён · прежняя наводка скрыта.",
+    "en": "\nThe new capture is not yet confirmed · previous aiming is hidden."
+  },
+  {
+    "ru": "\nЦель: ",
+    "en": "\nTarget: "
+  },
+  {
+    "ru": "\nГотово. Ставьте отметки средней кнопкой на карте.",
+    "en": "\nReady. Mark targets with the middle mouse button on the map."
+  },
+  {
+    "ru": "\nУкажите цель или нажмите «Скрыть окно · в игру».",
+    "en": "\nSpecify a target or press Hide window · play."
+  },
+  {
+    "ru": "\nВведите координаты цели.",
+    "en": "\nEnter the target coordinates."
+  },
+  {
+    "ru": "Орудие ещё не задано · M → ПКМ → Отметить координаты → ",
+    "en": "Gun not set yet · M → right-click → Mark Coordinates → "
+  },
+  {
+    "ru": "Орудие ещё не задано · введите его координаты вручную.",
+    "en": "Gun not set yet · enter its coordinates manually."
+  },
+  {
+    "ru": "Сначала выберите и подтвердите текущую карту выше.",
+    "en": "First select and confirm the current map above."
+  },
+  {
+    "ru": "○ Захват выключен",
+    "en": "○ Capture disabled"
+  },
+  {
+    "ru": "✓ %1: чат · средняя кнопка: карта",
+    "en": "✓ %1: chat · middle mouse button: map"
+  },
+  {
+    "ru": "✓ Орудие: автопоиск в чате",
+    "en": "✓ Gun: automatic chat detection"
+  },
+  {
+    "ru": "%1 Карта подтверждена\n%2 Орудие задано\n%3\n%4 Цель рассчитана",
+    "en": "%1 Map confirmed\n%2 Gun set\n%3\n%4 Target calculated"
+  },
+  {
+    "ru": "%1 | Орудие %2 | Цель %3 | %4 | %5",
+    "en": "%1 | Gun %2 | Target %3 | %4 | %5"
+  },
+  {
+    "ru": " | Выбрана: настильная",
+    "en": " | Selected: low arc"
+  },
+  {
+    "ru": " | Выбрана: навесная",
+    "en": " | Selected: high arc"
+  },
+  {
+    "ru": " | Настильная: %1 / %2 MIL / по таблице ≈%3 м",
+    "en": " | Low arc: %1 / %2 MIL / table ≈%3 m"
+  },
+  {
+    "ru": " | Навесная: %1 / %2 MIL / по таблице ≈%3 м",
+    "en": " | High arc: %1 / %2 MIL / table ≈%3 m"
+  },
+  {
+    "ru": "Не удалось скопировать расчёт: ",
+    "en": "Could not copy calculation: "
+  },
+  {
+    "ru": "Курсор переместился. Нажмите среднюю кнопку на новой цели.",
+    "en": "The cursor moved. Middle-click the new target."
+  },
+  {
+    "ru": "Повторное чтение отменено. Вернитесь в игру и нажмите среднюю кнопку на цели.",
+    "en": "Retry cancelled. Return to the game and middle-click the target."
+  },
+  {
+    "ru": "Открыть расчёт",
+    "en": "Open calculation"
+  },
+  {
+    "ru": "Мини-карточка",
+    "en": "Mini card"
+  },
+  {
+    "ru": "Снять блокировку карточки",
+    "en": "Unlock card"
+  },
+  {
+    "ru": "Завершить",
+    "en": "Quit"
+  },
+  {
+    "ru": "Сначала задайте орудие: M → ПКМ → Отметить координаты → ",
+    "en": "Set the gun first: M → right-click → Mark Coordinates → "
+  },
+  {
+    "ru": "Перед игрой выберите и подтвердите текущую карту.",
+    "en": "Select and confirm the current map before playing."
+  },
+  {
+    "ru": "Дождитесь окончания текущего действия",
+    "en": "Wait for the current action to finish"
+  },
+  {
+    "ru": "Режим игры не включён: ",
+    "en": "Game mode not enabled: "
+  },
+  {
+    "ru": "Вернуться · ",
+    "en": "Return · "
+  },
+  {
+    "ru": "WARDOGS · режим игры · ",
+    "en": "WARDOGS · game mode · "
+  },
+  {
+    "ru": "Орудие: ",
+    "en": "Gun: "
+  },
+  {
+    "ru": "\nСредняя кнопка — цель · возврат ",
+    "en": "\nMiddle mouse button — target · return "
+  },
+  {
+    "ru": "M → ПКМ → Отметить координаты → ",
+    "en": "M → right-click → Mark Coordinates → "
+  },
+  {
+    "ru": ". Возврат — ",
+    "en": ". Return — "
+  },
+  {
+    "ru": "Режим игры: захват цели — ",
+    "en": "Game mode: target capture — "
+  },
+  {
+    "ru": "Скрыть окно · в игру",
+    "en": "Hide window · play"
+  },
+  {
+    "ru": "Игровые функции",
+    "en": "Game features"
+  },
+  {
+    "ru": "Сложный захват: проверьте координаты или повторите чтение в игре.",
+    "en": "Difficult capture: review coordinates or read them again in the game."
+  },
+  {
+    "ru": "Новый захват не завершён. Повторите чтение в игре; прежняя наводка скрыта.",
+    "en": "New capture incomplete. Read again in the game; previous aiming is hidden."
+  },
+  {
+    "ru": "Расчёт открыт. Для игры вернитесь в WARDOGS.",
+    "en": "Calculation opened. Return to WARDOGS to play."
+  },
+  {
+    "ru": "Лицензии и источники",
+    "en": "Licenses and sources"
+  },
+  {
+    "ru": "Как пользоваться WARDOGS Fire Control",
+    "en": "How to use WARDOGS Fire Control"
+  },
+  {
+    "ru": "<h2>Лицензии и источники</h2><p>Основной код: Rico217 / Ricoz217, MIT.<br>Доработка и интерфейс: SoNiX.</p><p>Qt 6: LGPL v3 / GPL v3. ONNX Runtime: MIT. PaddleOCR: Apache 2.0. Zstandard: BSD / GPL v2.</p><p>Полные тексты сохранены рядом с приложением в LICENSE, THIRD_PARTY_NOTICES.md, models и licenses.</p><p>Рельеф: данные сообщества Apollyon, уведомление TERRAIN_DATA_NOTICE.md. Они не перелицензируются MIT.</p><p>Неофициальный инструмент для игры WARDOGS. Не связан с BULKHEAD.</p><p><a href='https://github.com/Ricoz217/WarDogs_Distance_Calculator'>Исходный проект</a></p>",
+    "en": "<h2>Licenses and sources</h2><p>Original code: Rico217 / Ricoz217, MIT.<br>Enhancements and interface: SoNiX.</p><p>Qt 6: LGPL v3 / GPL v3. ONNX Runtime: MIT. PaddleOCR: Apache 2.0. Zstandard: BSD / GPL v2.</p><p>Full texts are stored beside the application in LICENSE, THIRD_PARTY_NOTICES.md, models and licenses.</p><p>Terrain: Apollyon community data, notice in TERRAIN_DATA_NOTICE.md. These data are not relicensed under MIT.</p><p>Unofficial tool for WARDOGS. Not affiliated with BULKHEAD.</p><p><a href='https://github.com/Ricoz217/WarDogs_Distance_Calculator'>Original project</a></p>"
+  },
+  {
+    "ru": "<h2>Три шага до расчёта</h2><p><b>1. Запустите программу и подтвердите карту игры вверху окна.</b> Для стрельбища выберите «Стрельбище · высот нет». L81 выбран по умолчанию; SPH-2 можно выбрать кнопкой орудия. Затем вернитесь в WARDOGS.</p><p><b>2. На карте M нажмите ПКМ у своего орудия → Mark Coordinates → %1.</b> Пара в поле чата задаст орудие автоматически. Отправлять текст и выделять область не нужно. Мини-карточка подтвердит координаты.</p><p><b>3. Ставьте цели средней кнопкой на карте.</b> Программа читает X/Y возле курсора и сразу показывает расстояние, азимут и наводку. В чат цель отправлять не нужно. Возврат к основному окну — <b>%2</b>.</p><p>При перемещении орудия повторите шаг 2. Если подпись обрезана или распознавание расходится, прежняя наводка скрывается: наведите курсор на цель и повторите среднюю кнопку. Проверка вручную доступна для сложного захвата.</p><h3>Ручной ввод и настройки</h3><p>Раскройте «Ручной ввод и диагностика» для координат, вставки текста и выбора собственной области. Форматы: <b>x12.34, y56.78</b> или <b>12.34 56.78</b>; точка (0, 0) разрешена. В настройках «Дополнительно» находятся клавиши, OCR, прицел и отдельный режим калькулятора. Блокировка карточки снимается через <b>%3</b>.</p><h3>Точность</h3><p>Одна единица карты равна 100 м. Север — 0°, восток — 90°. MIL берётся из игровых таблиц; вне табличной дальности он не выдаётся. Если пакет высот карты не установлен, рельеф не учтён. Поправка высоты по установленному пакету приближённая.</p><h3>SPH-2</h3><p><b>%4</b> выбирает траекторию; выбранная отмечена галочкой. Можно стрелять сразу по указанным азимуту и MIL. Если нужен учёт промаха, наведите курсор на фактическое попадание на карте и нажмите <b>%5</b>. Это необязательно; цель сохраняется. Первый принятый промах уточняет ту же траекторию рядом с целью. По одной точке программа не определяет общий наклон машины.</p><p>Запишите попадание до смены цели или траектории. Программа сохраняет предъявленную наводку при чтении и не отслеживает сам выстрел. После новой позиции орудия или смены рельефа поправки сбрасываются. Основное расстояние — до цели; табличный эквивалент наводки отмечен приблизительным значением в подсказке.</p><p>Захват работает только для окна WARDOGS на переднем плане. При недоступной мини-карточке в полноэкранном режиме используйте оконный режим без рамки. <a href='https://www.wardogs.com/enforcement'>Правила WARDOGS</a> доступны на сайте игры.</p>",
+    "en": "<h2>Three steps to a calculation</h2><p><b>1. Launch the application and confirm the game map at the top of the window.</b> For the training ground, select Training ground · no heights. L81 is selected by default; use the weapon button to select SPH-2. Then return to WARDOGS.</p><p><b>2. On map M, right-click your gun → Mark Coordinates → %1.</b> The pair in the chat input sets the gun automatically. You do not need to send the text or select a region. The mini card confirms the coordinates.</p><p><b>3. Mark targets with the middle mouse button on the map.</b> The application reads X/Y near the cursor and immediately shows distance, bearing and elevation. You do not need to send the target in chat. Return to the main window with <b>%2</b>.</p><p>Repeat step 2 after moving the gun. If a label is clipped or recognition results disagree, previous aiming is hidden: point at the target and middle-click again. Manual review is available for a difficult capture.</p><h3>Manual input and settings</h3><p>Expand Manual input and diagnostics for coordinates, pasted text and custom region selection. Formats: <b>x12.34, y56.78</b> or <b>12.34 56.78</b>; point (0, 0) is allowed. Advanced settings contain shortcuts, OCR, the sight and standalone calculator mode. Unlock the card with <b>%3</b>.</p><h3>Accuracy</h3><p>One map unit equals 100 m. North is 0°, east is 90°. MIL comes from the game tables; it is not supplied outside the table range. Terrain is not included if the map's height package is not installed. Elevation correction from an installed package is approximate.</p><h3>SPH-2</h3><p><b>%4</b> selects the trajectory; a check mark identifies the selected one. You can fire immediately using the displayed bearing and MIL. To account for a miss, point at the actual impact on the map and press <b>%5</b>. This is optional; the target is retained. The first accepted miss refines the same trajectory near the target. One point cannot determine the vehicle's overall tilt.</p><p>Record the impact before changing the target or trajectory. The application saves the commanded aiming solution during reading and does not observe the shot itself. Corrections reset after moving the gun or changing terrain. The main distance is to the target; the table-equivalent aiming range is marked as approximate in the tooltip.</p><p>Capture works only while the WARDOGS window is in the foreground. If the mini card is unavailable in fullscreen, use borderless windowed mode. <a href='https://www.wardogs.com/enforcement'>WARDOGS rules</a> are available on the game's website.</p>"
+  },
+  {
+    "ru": "Понятно",
+    "en": "Got it"
+  },
+  {
+    "ru": "Лицензии",
+    "en": "Licenses"
+  },
+  {
+    "ru": "FIRE CONTROL  /  ОГНЕВОЙ РАСЧЁТ",
+    "en": "FIRE CONTROL  /  AIMING ASSISTANT"
+  },
+  {
+    "ru": "ОФЛАЙН  ·  v",
+    "en": "OFFLINE  ·  v"
+  },
+  {
+    "ru": "Как пользоваться",
+    "en": "How to use"
+  },
+  {
+    "ru": "Настройки",
+    "en": "Settings"
+  },
+  {
+    "ru": "Начать игру",
+    "en": "Start game"
+  },
+  {
+    "ru": "Скрыть окно и включить захват цели средней кнопкой в WARDOGS",
+    "en": "Hide the window and enable middle-button target capture in WARDOGS"
+  },
+  {
+    "ru": "Прицел",
+    "en": "Sight"
+  },
+  {
+    "ru": "Шкала наводки поверх игры",
+    "en": "Aiming scale over the game"
+  },
+  {
+    "ru": "БЫСТРАЯ ИГРА",
+    "en": "QUICK PLAY"
+  },
+  {
+    "ru": "Ручной ввод и диагностика",
+    "en": "Manual input and diagnostics"
+  },
+  {
+    "ru": "01  КООРДИНАТЫ",
+    "en": "01  COORDINATES"
+  },
+  {
+    "ru": "x12.34, y56.78  или  12.34 56.78",
+    "en": "x12.34, y56.78  or  12.34 56.78"
+  },
+  {
+    "ru": "Координаты орудия",
+    "en": "Gun coordinates"
+  },
+  {
+    "ru": "Вставить",
+    "en": "Paste"
+  },
+  {
+    "ru": "Задать орудие из скопированной пары X/Y одним нажатием",
+    "en": "Set the gun from a copied X/Y pair with one click"
+  },
+  {
+    "ru": "Задать",
+    "en": "Set"
+  },
+  {
+    "ru": "Координаты цели из карты или чата",
+    "en": "Target coordinates from the map or chat"
+  },
+  {
+    "ru": "Координаты цели",
+    "en": "Target coordinates"
+  },
+  {
+    "ru": "Рассчитать цель из скопированной пары X/Y одним нажатием",
+    "en": "Calculate the target from a copied X/Y pair with one click"
+  },
+  {
+    "ru": "Рассчитать",
+    "en": "Calculate"
+  },
+  {
+    "ru": "ПРОВЕРЬТЕ КООРДИНАТЫ OCR",
+    "en": "REVIEW OCR COORDINATES"
+  },
+  {
+    "ru": "Подтверждаемые координаты OCR",
+    "en": "OCR coordinates for review"
+  },
+  {
+    "ru": "Применить проверенные координаты",
+    "en": "Apply verified coordinates"
+  },
+  {
+    "ru": "Отклонить",
+    "en": "Reject"
+  },
+  {
+    "ru": "Можно исправить X и Y перед применением.",
+    "en": "You can edit X and Y before applying."
+  },
+  {
+    "ru": "02  РЕШЕНИЕ ДЛЯ L81",
+    "en": "02  L81 SOLUTION"
+  },
+  {
+    "ru": "ДАЛЬНОСТЬ",
+    "en": "RANGE"
+  },
+  {
+    "ru": "АЗИМУТ",
+    "en": "BEARING"
+  },
+  {
+    "ru": "НАВОДКА · MIL",
+    "en": "ELEVATION · MIL"
+  },
+  {
+    "ru": "Игровая шкала наведения L81 из таблицы дальности. MIL — не расстояние в милях.",
+    "en": "L81 game aiming scale from the range table. MIL is not miles."
+  },
+  {
+    "ru": "Укажите положение орудия и цель",
+    "en": "Specify the gun position and target"
+  },
+  {
+    "ru": "02  РЕШЕНИЕ ДЛЯ SPH-2",
+    "en": "02  SPH-2 SOLUTION"
+  },
+  {
+    "ru": "Табличный расчёт · рельеф не учтён. Поправка по попаданию необязательна.",
+    "en": "Table calculation · terrain not included. Impact correction is optional."
+  },
+  {
+    "ru": "Скопировать расчёт",
+    "en": "Copy calculation"
+  },
+  {
+    "ru": "03  КООРДИНАТЫ С ЭКРАНА",
+    "en": "03  COORDINATES FROM SCREEN"
+  },
+  {
+    "ru": "M → правая кнопка → Mark Coordinates.\nПара X/Y появится в поле чата. Можно читать её до отправки.",
+    "en": "M → right-click → Mark Coordinates.\nThe X/Y pair appears in the chat input. You can read it before sending."
+  },
+  {
+    "ru": "Текст: —",
+    "en": "Text: —"
+  },
+  {
+    "ru": "КАРТА ИГРЫ · ОБЯЗАТЕЛЬНО",
+    "en": "GAME MAP · REQUIRED"
+  },
+  {
+    "ru": "Выберите текущую карту. После запуска подтвердите прошлый выбор; программа не определяет карту игры автоматически.",
+    "en": "Select the current map. Confirm the previous selection after launch; the application does not detect the game map automatically."
+  },
+  {
+    "ru": "Подтвердить карту",
+    "en": "Confirm map"
+  },
+  {
+    "ru": "Подключить локальные данные высот…",
+    "en": "Connect local height data…"
+  },
+  {
+    "ru": "Проверить и установить ранее полученные пакеты bakurani.wdt, ozeti.wdt и zestafona.wdt. Обновление программы сохраняет эти данные.",
+    "en": "Verify and install previously obtained bakurani.wdt, ozeti.wdt and zestafona.wdt packages. Application updates preserve these data."
+  },
+  {
+    "ru": "ПЕРЕД ВЫСТРЕЛОМ",
+    "en": "BEFORE FIRING"
+  },
+  {
+    "ru": "НЕДАВНИЕ ЦЕЛИ",
+    "en": "RECENT TARGETS"
+  },
+  {
+    "ru": "Пока нет целей",
+    "en": "No targets yet"
+  },
+  {
+    "ru": "До 12 целей в этом сеансе.\nВыберите цель для нового расчёта.",
+    "en": "Up to 12 targets in this session.\nSelect a target for a new calculation."
+  },
+  {
+    "ru": "Готово. Задайте орудие по подсказке выше — дополнительных настроек не требуется.",
+    "en": "Ready. Set the gun using the hint above — no extra settings are required."
+  },
+  {
+    "ru": "Текущая цель",
+    "en": "Current target"
+  },
+  {
+    "ru": "Фактическое попадание",
+    "en": "Actual impact"
+  },
+  {
+    "ru": "Траектория",
+    "en": "Trajectory"
+  },
+  {
+    "ru": "OCR или вручную",
+    "en": "OCR or manual input"
+  },
+  {
+    "ru": "Траектория для поправок",
+    "en": "Trajectory for corrections"
+  },
+  {
+    "ru": "Поправка",
+    "en": "Correction"
+  },
+  {
+    "ru": "OCR попадания",
+    "en": "Impact OCR"
+  },
+  {
+    "ru": "Записать попадание",
+    "en": "Record impact"
+  },
+  {
+    "ru": "Сбросить поправки",
+    "en": "Reset corrections"
+  },
+  {
+    "ru": "Можно стрелять сразу. Если нужно, запишите промах по текущей цели: он уточнит только эту траекторию рядом с целью.",
+    "en": "You can fire immediately. If needed, record a miss at the current target: it refines only this trajectory near the target."
+  },
+  {
+    "ru": "Переключить настильную / навесную траекторию",
+    "en": "Switch low / high arc"
+  },
+  {
+    "ru": "Навесная",
+    "en": "High arc"
+  },
+  {
+    "ru": "Настильная",
+    "en": "Low arc"
+  },
+  {
+    "ru": "SPH-2 · Артиллерия",
+    "en": "SPH-2 · Artillery"
+  },
+  {
+    "ru": "L81 · Миномёт",
+    "en": "L81 · Mortar"
+  },
+  {
+    "ru": "Переключить на миномёт L81",
+    "en": "Switch to the L81 mortar"
+  },
+  {
+    "ru": "Переключить на SPH-2",
+    "en": "Switch to SPH-2"
+  },
+  {
+    "ru": "SPH-2: переключить на L81",
+    "en": "SPH-2: switch to L81"
+  },
+  {
+    "ru": "L81: переключить на SPH-2",
+    "en": "L81: switch to SPH-2"
+  },
+  {
+    "ru": "L81: дальность, азимут и табличная наводка для 132–684 м.",
+    "en": "L81: range, bearing and table-based elevation for 132–684 m."
+  },
+  {
+    "ru": "SPH-2: задайте орудие и цель. Поправка по попаданию необязательна.",
+    "en": "SPH-2: set the gun and target. Impact correction is optional."
+  },
+  {
+    "ru": "Проверка OCR отменена при смене орудия. Наводка скрыта · введите или захватите цель заново.",
+    "en": "OCR review cancelled after changing weapon. Aiming hidden · enter or capture the target again."
+  },
+  {
+    "ru": "Выберите текущую карту…",
+    "en": "Select the current map…"
+  },
+  {
+    "ru": "Бакурани / Bakurani",
+    "en": "Bakurani"
+  },
+  {
+    "ru": "Озети / Ozeti",
+    "en": "Ozeti"
+  },
+  {
+    "ru": "Зестафона / Zestafona",
+    "en": "Zestafona"
+  },
+  {
+    "ru": "Стрельбище · высот нет",
+    "en": "Training ground · no heights"
+  },
+  {
+    "ru": "Другая карта · высот нет",
+    "en": "Other map · no heights"
+  },
+  {
+    "ru": "Перед расчётом выберите карту, на которой играете.",
+    "en": "Select the map you are playing before calculating."
+  },
+  {
+    "ru": "Подтвердите текущую карту перед расчётом. Прошлый выбор не определяет новый матч.",
+    "en": "Confirm the current map before calculating. The previous selection does not identify a new match."
+  },
+  {
+    "ru": ". Рельеф не учтён: высоты орудия и цели считаются равными.",
+    "en": ". Terrain not included: gun and target elevations are assumed equal."
+  },
+  {
+    "ru": " · высоты подключены для SPH-2",
+    "en": " · heights connected for SPH-2"
+  },
+  {
+    "ru": " · L81 использует прежнюю таблицу без поправки высоты",
+    "en": " · L81 uses its existing table without elevation correction"
+  },
+  {
+    "ru": "\nВысота по карте · орудие: %1 м",
+    "en": "\nMap elevation · gun: %1 m"
+  },
+  {
+    "ru": " · цель: %1 м",
+    "en": " · target: %1 m"
+  },
+  {
+    "ru": " · перепад высоты цели ",
+    "en": " · target elevation difference "
+  },
+  {
+    "ru": "Выберите и подтвердите текущую карту",
+    "en": "Select and confirm the current map"
+  },
+  {
+    "ru": "Перед расчётом выберите текущую карту.",
+    "en": "Select the current map before calculating."
+  },
+  {
+    "ru": "Высоты выбранной карты недоступны. Подключите проверенные локальные данные; расчёт заблокирован.",
+    "en": "Selected map heights unavailable. Connect verified local data; calculation is blocked."
+  },
+  {
+    "ru": "Карта не подтверждена: ",
+    "en": "Map not confirmed: "
+  },
+  {
+    "ru": "Рельеф изменён. Поправки по прежним попаданиям сброшены.",
+    "en": "Terrain changed. Corrections from previous impacts reset."
+  },
+  {
+    "ru": "Загружен рельеф ",
+    "en": "Terrain loaded: "
+  },
+  {
+    "ru": " · заново задайте орудие и цель",
+    "en": " · set the gun and target again"
+  },
+  {
+    "ru": " · SPH-2 учитывает перепад высоты",
+    "en": " · SPH-2 accounts for the elevation difference"
+  },
+  {
+    "ru": " · рельеф не учтён",
+    "en": " · terrain not included"
+  },
+  {
+    "ru": " · прежние поправки сброшены",
+    "en": " · previous corrections reset"
+  },
+  {
+    "ru": "Дождитесь окончания чтения координат.",
+    "en": "Wait for coordinate reading to finish."
+  },
+  {
+    "ru": "Папка ранее полученных карт высот",
+    "en": "Folder containing previously obtained height maps"
+  },
+  {
+    "ru": "Подключены карты: %1. %2",
+    "en": "Maps connected: %1. %2"
+  },
+  {
+    "ru": "Локальные высоты подключены · карт: %1.",
+    "en": "Local heights connected · maps: %1."
+  },
+  {
+    "ru": "Не удалось подключить высоты: ",
+    "en": "Could not connect heights: "
+  },
+  {
+    "ru": "Учтено попаданий: %1/%2. Поправка действует только рядом с записанной целью и для той же траектории.",
+    "en": "Impacts used: %1/%2. The correction applies only near the recorded target and to the same trajectory."
+  },
+  {
+    "ru": "Можно стрелять сразу. Поправка необязательна: после выстрела по показанным азимуту и MIL наведите курсор на фактическое попадание и нажмите %1 до смены цели или траектории.",
+    "en": "You can fire immediately. Correction is optional: after firing with the displayed bearing and MIL, point at the actual impact and press %1 before changing the target or trajectory."
+  },
+  {
+    "ru": "Сначала выберите и подтвердите текущую карту",
+    "en": "First select and confirm the current map"
+  },
+  {
+    "ru": "Наводка недоступна · выберите цель в диапазоне SPH-2",
+    "en": "Aiming unavailable · select a target within SPH-2 range"
+  },
+  {
+    "ru": " · рельеф учтён",
+    "en": " · terrain included"
+  },
+  {
+    "ru": " · смена %1",
+    "en": " · switch %1"
+  },
+  {
+    "ru": "\n%1 у попадания — необязательная поправка.",
+    "en": "\n%1 at the impact — optional correction."
+  },
+  {
+    "ru": "Наводка недоступна · заново задайте цель SPH-2",
+    "en": "Aiming unavailable · set the SPH-2 target again"
+  },
+  {
+    "ru": "Сначала задайте орудие и цель SPH-2",
+    "en": "Set the SPH-2 gun and target first"
+  },
+  {
+    "ru": "вручную",
+    "en": "manually"
+  },
+  {
+    "ru": "Некорректное попадание: ",
+    "en": "Invalid impact: "
+  },
+  {
+    "ru": "учтён рельеф карты",
+    "en": "map terrain included"
+  },
+  {
+    "ru": "Попадания расходятся; точность поправки ограничена.\nПромах %1 м · азимут %2° · MIL %3.",
+    "en": "Impacts disagree; correction accuracy is limited.\nMiss %1 m · bearing %2° · MIL %3."
+  },
+  {
+    "ru": "Поправка учтена · промах %1 м.\nАзимут %2° · MIL %3; %4.",
+    "en": "Correction applied · miss %1 m.\nBearing %2° · MIL %3; %4."
+  },
+  {
+    "ru": "Поправка не применена: ",
+    "en": "Correction not applied: "
+  },
+  {
+    "ru": "Дождитесь окончания чтения координат перед сбросом поправок.",
+    "en": "Wait for coordinate reading to finish before resetting corrections."
+  },
+  {
+    "ru": "Поправки сброшены. Новый захват ещё требует проверки.",
+    "en": "Corrections reset. The new capture still needs review."
+  },
+  {
+    "ru": "Поправки сброшены. Можно стрелять по табличному расчёту.",
+    "en": "Corrections reset. You can fire using the table calculation."
+  },
+  {
+    "ru": "Занятые сочетания заменены: ",
+    "en": "Occupied shortcuts replaced: "
+  },
+  {
+    "ru": "Параметры карточки действуют в этом сеансе. Сохранить не удалось: ",
+    "en": "Card settings apply for this session. Could not save: "
+  },
+  {
+    "ru": "не задано",
+    "en": "not set"
+  },
+  {
+    "ru": "Цель: ",
+    "en": "Target: "
+  },
+  {
+    "ru": "1. Выберите или подтвердите текущую карту выше.\n2. В игре: M → ПКМ по позиции орудия → Отметить координаты.\n3. Нажмите %1 — орудие считается из чата, область выбирать не нужно.\n4. Средняя кнопка по цели на карте — автоматический расчёт. Возврат: %2.",
+    "en": "1. Select or confirm the current map above.\n2. In the game: M → right-click the gun position → Mark Coordinates.\n3. Press %1 — the gun is read from chat; no region selection is needed.\n4. Middle-click a target on the map — automatic calculation. Return: %2."
+  },
+  {
+    "ru": "Выберите текущую карту. Откройте «Ручной ввод» или включите быструю игру в дополнительных настройках.",
+    "en": "Select the current map. Open Manual input or enable quick play in advanced settings."
+  },
+  {
+    "ru": "\n5. %1 меняет траекторию. Поправка необязательна: наведите курсор на фактическое попадание и нажмите %2 до смены цели или траектории.",
+    "en": "\n5. %1 changes the trajectory. Correction is optional: point at the actual impact and press %2 before changing the target or trajectory."
+  },
+  {
+    "ru": "ОТДЕЛЬНЫЙ КАЛЬКУЛЯТОР\nКоординаты вводятся вручную.\nВзаимодействие с игрой включается в настройках.",
+    "en": "STANDALONE CALCULATOR\nCoordinates are entered manually.\nEnable game interaction in settings."
+  },
+  {
+    "ru": "БЫСТРАЯ ИГРА\nОрудие — ",
+    "en": "QUICK PLAY\nGun — "
+  },
+  {
+    "ru": ".\nЦель — средняя кнопка на карте.\nВозврат — ",
+    "en": ".\nTarget — middle mouse button on the map.\nReturn — "
+  },
+  {
+    "ru": "ЗАХВАТ КЛАВИШЕЙ\nЦель — ",
+    "en": "SHORTCUT CAPTURE\nTarget — "
+  },
+  {
+    "ru": ".\nВозврат — ",
+    "en": ".\nReturn — "
+  },
+  {
+    "ru": " · Область",
+    "en": " · Region"
+  },
+  {
+    "ru": "Выделить одну строку и перейти с автопоиска на свою область",
+    "en": "Select one line and switch from automatic detection to a custom region"
+  },
+  {
+    "ru": "Введите X/Y или вставьте скопированную пару из игрового чата: Ctrl+V, Enter",
+    "en": "Enter X/Y or paste a copied pair from game chat: Ctrl+V, Enter"
+  },
+  {
+    "ru": " · Орудие",
+    "en": " · Gun"
+  },
+  {
+    "ru": " · Цель",
+    "en": " · Target"
+  },
+  {
+    "ru": " · Разовая область",
+    "en": " · One-time region"
+  },
+  {
+    "ru": "%1 в игре · Прочитать попадание возле курсора карты. Из главного окна кнопка читает чат или свою область. Запишите попадание до смены цели/траектории.",
+    "en": "%1 in game · Read the impact near the map cursor. From the main window, the button reads chat or a custom region. Record the impact before changing target/trajectory."
+  },
+  {
+    "ru": "Быстрый захват: RapidOCR · работает офлайн",
+    "en": "Quick capture: RapidOCR · works offline"
+  },
+  {
+    "ru": "Быстрый захват: RapidOCR · своя область: Windows OCR",
+    "en": "Quick capture: RapidOCR · custom region: Windows OCR"
+  },
+  {
+    "ru": "Захват экрана отключён · включается в настройках",
+    "en": "Screen capture disabled · enable in settings"
+  },
+  {
+    "ru": "Орудие: черновик чата. Цель: X/Y возле курсора. Область выбирается автоматически.",
+    "en": "Gun: chat draft. Target: X/Y near the cursor. Region selected automatically."
+  },
+  {
+    "ru": "\nДополнительная область не выбрана.",
+    "en": "\nNo custom region selected."
+  },
+  {
+    "ru": "\nДополнительная область: %1 · %2×%3 px · (%4, %5)",
+    "en": "\nCustom region: %1 · %2×%3 px · (%4, %5)"
+  },
+  {
+    "ru": "Расчёт заблокирован до выбора текущей карты.",
+    "en": "Calculation blocked until the current map is selected."
+  },
+  {
+    "ru": "Новый захват не подтверждён · проверьте OCR или введите координаты вручную",
+    "en": "New capture unconfirmed · review OCR or enter coordinates manually"
+  },
+  {
+    "ru": "Сначала задайте орудие",
+    "en": "Set the gun first"
+  },
+  {
+    "ru": "Вне диапазона",
+    "en": "Out of range"
+  },
+  {
+    "ru": "L81: наводка доступна для 132–684 м. Дальность и азимут рассчитаны.",
+    "en": "L81: elevation available for 132–684 m. Range and bearing calculated."
+  },
+  {
+    "ru": "Высота орудия или цели недоступна",
+    "en": "Gun or target elevation unavailable"
+  },
+  {
+    "ru": "Ошибка рельефа: ",
+    "en": "Terrain error: "
+  },
+  {
+    "ru": "Одна траектория недоступна · используйте доступную",
+    "en": "One trajectory unavailable · use the available one"
+  },
+  {
+    "ru": " · другая траектория доступна",
+    "en": " · the other trajectory is available"
+  },
+  {
+    "ru": "Вне дальности SPH-2 · доступны только расстояние и азимут",
+    "en": "Outside SPH-2 range · only distance and bearing available"
+  },
+  {
+    "ru": "Вне дальности: ",
+    "en": "Out of range: "
+  },
+  {
+    "ru": "Локальная поправка: ",
+    "en": "Local correction: "
+  },
+  {
+    "ru": " · %1 · перепад %2 м",
+    "en": " · %1 · elevation difference %2 m"
+  },
+  {
+    "ru": "Скрыть прицел",
+    "en": "Hide sight"
+  },
+  {
+    "ru": "Прицел поверх игры",
+    "en": "Sight over the game"
+  },
+  {
+    "ru": "Для L81 используется одна табличная траектория",
+    "en": "L81 uses one table-based trajectory"
+  },
+  {
+    "ru": "Предпочтительная траектория: навесная; при недоступности используется настильная",
+    "en": "Preferred trajectory: high arc; low arc is used if unavailable"
+  },
+  {
+    "ru": "Предпочтительная траектория: настильная; при недоступности используется навесная",
+    "en": "Preferred trajectory: low arc; high arc is used if unavailable"
+  },
+  {
+    "ru": "Вставка не выполнена: ",
+    "en": "Paste failed: "
+  },
+  {
+    "ru": "Орудие задано · укажите цель",
+    "en": "Gun set · specify a target"
+  },
+  {
+    "ru": "Сначала задайте координаты орудия",
+    "en": "Set the gun coordinates first"
+  },
+  {
+    "ru": "Сначала завершите чтение нового орудия или отклоните его захват",
+    "en": "Finish reading the new gun or reject its capture first"
+  },
+  {
+    "ru": "Расчёт готов",
+    "en": "Calculation ready"
+  },
+  {
+    "ru": "Распознавание выполняется…",
+    "en": "Recognition in progress…"
+  },
+  {
+    "ru": "Выбор области отменён",
+    "en": "Region selection cancelled"
+  },
+  {
+    "ru": "Область координат сохранена",
+    "en": "Coordinate region saved"
+  },
+  {
+    "ru": "Область действует в этом сеансе. Сохранить не удалось: ",
+    "en": "Region applies for this session. Could not save: "
+  },
+  {
+    "ru": "Не удалось начать выбор области",
+    "en": "Could not start region selection"
+  },
+  {
+    "ru": "Разовый захват отменён",
+    "en": "One-time capture cancelled"
+  },
+  {
+    "ru": "Не удалось начать разовый захват",
+    "en": "Could not start one-time capture"
+  },
+  {
+    "ru": "Сначала переключите орудие на SPH-2",
+    "en": "Switch the weapon to SPH-2 first"
+  },
+  {
+    "ru": "Задайте цель перед записью попадания",
+    "en": "Set a target before recording an impact"
+  },
+  {
+    "ru": "Сначала получите действующую наводку SPH-2 для цели. Попадание не записано.",
+    "en": "Obtain a valid SPH-2 aiming solution for the target first. Impact not recorded."
+  },
+  {
+    "ru": "Не удалось определить точку попадания на карте",
+    "en": "Could not determine the impact point on the map"
+  },
+  {
+    "ru": "Дождитесь окончания предыдущего захвата",
+    "en": "Wait for the previous capture to finish"
+  },
+  {
+    "ru": "Захват не выполнен · прежняя наводка скрыта",
+    "en": "Capture failed · previous aiming hidden"
+  },
+  {
+    "ru": "Сначала подтвердите или отклоните предыдущий захват",
+    "en": "Confirm or reject the previous capture first"
+  },
+  {
+    "ru": "Расчёт недоступен: ",
+    "en": "Calculation unavailable: "
+  },
+  {
+    "ru": "Новый захват не выполнен · прежняя наводка скрыта",
+    "en": "New capture failed · previous aiming hidden"
+  },
+  {
+    "ru": "Захват экрана не выполнен: ",
+    "en": "Screen capture failed: "
+  },
+  {
+    "ru": "Новое орудие ещё не задано · повторите %1 или подтвердите его координаты",
+    "en": "New gun not set yet · repeat %1 or confirm its coordinates"
+  },
+  {
+    "ru": "Дождитесь завершения предыдущего захвата",
+    "en": "Wait for the previous capture to complete"
+  },
+  {
+    "ru": "Считываю координаты новой отметки на карте…",
+    "en": "Reading coordinates of the new map marker…"
+  },
+  {
+    "ru": "Новая отметка принята · считываю последние координаты",
+    "en": "New marker accepted · reading the latest coordinates"
+  },
+  {
+    "ru": "Попадание не прочитано: ",
+    "en": "Impact not read: "
+  },
+  {
+    "ru": "Отметка не прочитана: ",
+    "en": "Marker not read: "
+  },
+  {
+    "ru": " · повторите %1 на точке попадания",
+    "en": " · repeat %1 at the impact point"
+  },
+  {
+    "ru": "Распознавание нового захвата · предыдущая наводка скрыта",
+    "en": "Recognizing new capture · previous aiming hidden"
+  },
+  {
+    "ru": "Распознавание координат…",
+    "en": "Recognizing coordinates…"
+  },
+  {
+    "ru": "Распознавание средствами Windows…",
+    "en": "Recognizing with Windows OCR…"
+  },
+  {
+    "ru": "не найдена единственная полная пара X/Y",
+    "en": "no single complete X/Y pair found"
+  },
+  {
+    "ru": "текст координат обрезан у края",
+    "en": "coordinate text clipped at the edge"
+  },
+  {
+    "ru": "повторное чтение не подтвердило координаты",
+    "en": "the second reading did not confirm the coordinates"
+  },
+  {
+    "ru": "не все видимые знаки удалось прочитать",
+    "en": "not all visible characters could be read"
+  },
+  {
+    "ru": "не подтверждено активное поле чата",
+    "en": "active chat input not confirmed"
+  },
+  {
+    "ru": "не прочитаны подписи X и Y",
+    "en": "X and Y labels not read"
+  },
+  {
+    "ru": "Уточняю координаты отметки…",
+    "en": "Refining marker coordinates…"
+  },
+  {
+    "ru": "Текст: ",
+    "en": "Text: "
+  },
+  {
+    "ru": "пусто",
+    "en": "empty"
+  },
+  {
+    "ru": "OCR не распознало новый захват · введите координаты вручную или повторите захват",
+    "en": "OCR did not recognize the new capture · enter coordinates manually or capture again"
+  },
+  {
+    "ru": "Координаты не распознаны: ",
+    "en": "Coordinates not recognized: "
+  },
+  {
+    "ru": " · уверенность символов %1%",
+    "en": " · character confidence %1%"
+  },
+  {
+    "ru": " · %1 мс",
+    "en": " · %1 ms"
+  },
+  {
+    "ru": "не удалось подтвердить полное чтение двух координат возле курсора",
+    "en": "could not confirm complete reading of both coordinates near the cursor"
+  },
+  {
+    "ru": "не удалось подтвердить полную пару в активном поле чата",
+    "en": "could not confirm a complete pair in the active chat input"
+  },
+  {
+    "ru": "несколько разных пар X/Y",
+    "en": "several different X/Y pairs"
+  },
+  {
+    "ru": "проходы распознавания расходятся",
+    "en": "recognition passes disagree"
+  },
+  {
+    "ru": "слабая уверенность символов",
+    "en": "low character confidence"
+  },
+  {
+    "ru": "выделено несколько строк",
+    "en": "several lines selected"
+  },
+  {
+    "ru": "%1. Орудие, цель и поправки пока не изменены.",
+    "en": "%1. Gun, target and corrections have not changed yet."
+  },
+  {
+    "ru": "Проверьте новый захват · наводка скрыта до подтверждения",
+    "en": "Review the new capture · aiming hidden until confirmation"
+  },
+  {
+    "ru": "OCR требует проверки · вернитесь через ",
+    "en": "OCR needs review · return with "
+  },
+  {
+    "ru": "Проверьте координаты в карточке OCR и подтвердите их",
+    "en": "Review the coordinates in the OCR card and confirm them"
+  },
+  {
+    "ru": "Наводка выстрела не сохранена. Попадание не применено.",
+    "en": "Shot aiming solution not saved. Impact not applied."
+  },
+  {
+    "ru": "Орудие распознано: ",
+    "en": "Gun recognized: "
+  },
+  {
+    "ru": "Цель распознана: ",
+    "en": "Target recognized: "
+  },
+  {
+    "ru": " · расчёт готов",
+    "en": " · calculation ready"
+  },
+  {
+    "ru": "Дождитесь окончания распознавания перед изменением настроек",
+    "en": "Wait for recognition to finish before changing settings"
+  },
+  {
+    "ru": "Не удалось восстановить горячие клавиши: ",
+    "en": "Could not restore shortcuts: "
+  },
+  {
+    "ru": "Настройки сохранены. Последний OCR не применён · введите или захватите координаты заново.",
+    "en": "Settings saved. Last OCR result not applied · enter or capture coordinates again."
+  },
+  {
+    "ru": "Настройки сохранены и применены",
+    "en": "Settings saved and applied"
+  },
+  {
+    "ru": ". Занятые сочетания заменены: ",
+    "en": ". Occupied shortcuts replaced: "
+  },
+  {
+    "ru": "Настройки не сохранены: ",
+    "en": "Settings not saved: "
+  },
+  {
+    "ru": "Занятые сочетания заменены и сохранены: ",
+    "en": "Occupied shortcuts replaced and saved: "
+  },
+  {
+    "ru": "Свободные сочетания действуют в этом сеансе: ",
+    "en": "Available shortcuts apply for this session: "
+  },
+  {
+    "ru": ". Сохранить не удалось: ",
+    "en": ". Could not save: "
+  },
+  {
+    "ru": "Клавиши восстановлены",
+    "en": "Shortcuts restored"
+  },
+  {
+    "ru": ". Режим игры завершён: обработчик средней кнопки недоступен. ",
+    "en": ". Game mode ended: middle-button handler unavailable. "
+  },
+  {
+    "ru": "Двойной щелчок запускает приложение.\n--unlock-pinned: снять блокировку карточки.\n--ui-snapshot=путь.png: снимок окна без изменения профиля.\n--self-test=путь.json: диагностические проверки.\n--test-image=путь.png: дополнительный OCR-тест.",
+    "en": "Double-click to launch the application.\n--unlock-pinned: unlock the card.\n--ui-snapshot=path.png: window screenshot without changing the profile.\n--self-test=path.json: diagnostic checks.\n--test-image=path.png: additional OCR test."
+  },
+  {
+    "ru": "Не удалось запустить",
+    "en": "Could not start"
+  },
+  {
+    "ru": "Windows не разрешила создать экземпляр приложения.",
+    "en": "Windows did not allow an application instance to be created."
+  },
+  {
+    "ru": "Диагностика",
+    "en": "Diagnostics"
+  },
+  {
+    "ru": "Журнал недоступен. Проверьте доступ к папке приложения в профиле Windows.",
+    "en": "Log unavailable. Check access to the application's folder in your Windows profile."
+  }
+]

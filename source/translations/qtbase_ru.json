@@ -1,0 +1,742 @@
+[
+  {
+    "context": "QAbstractSpinBox",
+    "source": "&Select All",
+    "translation": "&Выделить всё"
+  },
+  {
+    "context": "QAbstractSpinBox",
+    "source": "&Step up",
+    "translation": "Шаг вв&ерх"
+  },
+  {
+    "context": "QAbstractSpinBox",
+    "source": "Step &down",
+    "translation": "Шаг вн&из"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Press",
+    "translation": "Нажать"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Increase",
+    "translation": "Увеличить"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Decrease",
+    "translation": "Уменьшить"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "ShowMenu",
+    "translation": "ПоказатьМеню"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "SetFocus",
+    "translation": "УстановитьФокус"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Toggle",
+    "translation": "Сменить"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scroll Left",
+    "translation": "Прокрутить влево"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scroll Right",
+    "translation": "Прокрутить вправо"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scroll Up",
+    "translation": "Прокрутить вверх"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scroll Down",
+    "translation": "Прокрутить вниз"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Previous Page",
+    "translation": "Предыдущая страница"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Next Page",
+    "translation": "Следующая страница"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Triggers the action",
+    "translation": "Выполнить действие"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Increase the value",
+    "translation": "Увеличить значение"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Decrease the value",
+    "translation": "Уменьшить значение"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Shows the menu",
+    "translation": "Показать меню"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Sets the focus",
+    "translation": "Установить фокус"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Toggles the state",
+    "translation": "Сменить состояние"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scrolls to the left",
+    "translation": "Прокрутка влево"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scrolls to the right",
+    "translation": "Прокрутка вправо"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scrolls up",
+    "translation": "Прокрутка вверх"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Scrolls down",
+    "translation": "Прокрутка вниз"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Goes back a page",
+    "translation": "Переход на предыдущую страницу"
+  },
+  {
+    "context": "QAccessibleActionInterface",
+    "source": "Goes to the next page",
+    "translation": "Переход на следующую страницу"
+  },
+  {
+    "context": "QComboBox",
+    "source": "False",
+    "translation": "Нет"
+  },
+  {
+    "context": "QComboBox",
+    "source": "True",
+    "translation": "Да"
+  },
+  {
+    "context": "QComboBox",
+    "source": "Open the combo box selection popup",
+    "translation": "Открыть раскрывающийся список"
+  },
+  {
+    "context": "QDialogButtonBox",
+    "source": "OK",
+    "translation": "OK"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Look in:",
+    "translation": "Перейти к:"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Back",
+    "translation": "Назад"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Go back",
+    "translation": "Назад"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Forward",
+    "translation": "Вперёд"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Go forward",
+    "translation": "Вперёд"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Parent Directory",
+    "translation": "Родительский каталог"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Go to the parent directory",
+    "translation": "Перейти в родительский каталог"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Create New Folder",
+    "translation": "Создать папку"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Create a New Folder",
+    "translation": "Создать новую папку"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "List View",
+    "translation": "Список"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Change to list view mode",
+    "translation": "Переключить в режим списка"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Detail View",
+    "translation": "Подробный вид"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Change to detail view mode",
+    "translation": "Переключить в подробный режим"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Files of type:",
+    "translation": "Типы файлов:"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Find Directory",
+    "translation": "Найти каталог"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Open",
+    "translation": "Открыть"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Save As",
+    "translation": "Сохранить как"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Directory:",
+    "translation": "Каталог:"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "File &name:",
+    "translation": "&Имя файла:"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&Open",
+    "translation": "&Открыть"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&Choose",
+    "translation": "&Выбрать"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&Save",
+    "translation": "&Сохранить"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "All Files (*)",
+    "translation": "Все файлы (*)"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Show ",
+    "translation": "Показать "
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&Rename",
+    "translation": "&Переименовать"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&Delete",
+    "translation": "&Удалить"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Show &hidden files",
+    "translation": "Показать ск&рытые файлы"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "&New Folder",
+    "translation": "&Новая папка"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "All files (*)",
+    "translation": "Все файлы (*)"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Directories",
+    "translation": "Каталоги"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "%1\nDirectory not found.\nPlease verify the correct directory name was given.",
+    "translation": "%1\nКаталог не найден.\nПроверьте правильность указанного имени каталога."
+  },
+  {
+    "context": "QFileDialog",
+    "source": "%1 already exists.\nDo you want to replace it?",
+    "translation": "%1 уже существует.\nЗаменить его?"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "%1\nFile not found.\nPlease verify the correct file name was given.",
+    "translation": "%1\nФайл не найден.\nПроверьте правильность указанного имени файла."
+  },
+  {
+    "context": "QFileDialog",
+    "source": "New Folder",
+    "translation": "Новая папка"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Delete",
+    "translation": "Удалить"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "'%1' is write protected.\nDo you want to delete it anyway?",
+    "translation": "«%1» защищён от записи.\nДействительно удалить?"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Are you sure you want to delete '%1'?",
+    "translation": "Действительно удалить «%1»?"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Could not delete directory.",
+    "translation": "Не удалось удалить каталог."
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Recent Places",
+    "translation": "Недавние документы"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Remove",
+    "translation": "Удалить"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "My Computer",
+    "translation": "Мой компьютер"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Drive",
+    "translation": "Диск"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "%1 File",
+    "translation": "Файл %1"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "File",
+    "translation": "Файл"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "File Folder",
+    "translation": "Папка с файлами"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Folder",
+    "translation": "Папка"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Alias",
+    "translation": "Псевдоним"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Shortcut",
+    "translation": "Ярлык"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Unknown",
+    "translation": "Неизвестный"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Sidebar",
+    "translation": "Боковая панель"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "List of places and bookmarks",
+    "translation": "Места и закладки"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Files",
+    "translation": "Файлы"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Alt+Left",
+    "translation": "Alt+Left"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Alt+Right",
+    "translation": "Alt+Right"
+  },
+  {
+    "context": "QFileDialog",
+    "source": "Alt+Up",
+    "translation": "Alt+Up"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Invalid filename",
+    "translation": "Некорректное имя файла"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "<b>The name \"%1\" cannot be used.</b><p>Try using another name, with fewer characters or no punctuation marks.",
+    "translation": "<b>Имя «%1» не может быть использовано.</b><p>Попробуйте использовать имя меньшей длины и/или без символов пунктуации."
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Name",
+    "translation": "Имя"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Size",
+    "translation": "Размер"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Kind",
+    "translation": "Вид"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Type",
+    "translation": "Тип"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Date Modified",
+    "translation": "Дата изменения"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "My Computer",
+    "translation": "Мой компьютер"
+  },
+  {
+    "context": "QFileSystemModel",
+    "source": "Computer",
+    "translation": "Компьютер"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "&Undo",
+    "translation": "&Отменить действие"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "&Redo",
+    "translation": "&Повторить действие"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "Cu&t",
+    "translation": "&Вырезать"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "&Copy",
+    "translation": "&Копировать"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "&Paste",
+    "translation": "В&ставить"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "Delete",
+    "translation": "Удалить"
+  },
+  {
+    "context": "QLineEdit",
+    "source": "Select All",
+    "translation": "Выделить всё"
+  },
+  {
+    "context": "QMessageBox",
+    "source": "Show Details...",
+    "translation": "Показать подробности..."
+  },
+  {
+    "context": "QMessageBox",
+    "source": "Hide Details...",
+    "translation": "Скрыть подробности..."
+  },
+  {
+    "context": "QMessageBox",
+    "source": "<h3>About Qt</h3><p>This program uses Qt version %1.</p>",
+    "translation": "<h3>О Qt</h3><p>Данная программа использует Qt версии %1.</p>"
+  },
+  {
+    "context": "QMessageBox",
+    "source": "<p>Qt is a C++ toolkit for cross-platform application development.</p><p>Qt provides single-source portability across all major desktop operating systems. It is also available for embedded Linux and other embedded and mobile operating systems.</p><p>Qt is available under multiple licensing options designed to accommodate the needs of our various users.</p><p>Qt licensed under our commercial license agreement is appropriate for development of proprietary/commercial software where you do not want to share any source code with third parties or otherwise cannot comply with the terms of GNU (L)GPL.</p><p>Qt licensed under GNU (L)GPL is appropriate for the development of Qt&nbsp;applications provided you can comply with the terms and conditions of the respective licenses.</p><p>Please see <a href=\"http://%2/\">%2</a> for an overview of Qt licensing.</p><p>Copyright (C) %1 The Qt Company Ltd and other contributors.</p><p>Qt and the Qt logo are trademarks of The Qt Company Ltd.</p><p>Qt is The Qt Company Ltd product developed as an open source project. See <a href=\"http://%3/\">%3</a> for more information.</p>",
+    "translation": "<p>Qt is a C++ toolkit for cross-platform application development.</p><p>Qt provides single-source portability across all major desktop operating systems. It is also available for embedded Linux and other embedded and mobile operating systems.</p><p>Qt is available under multiple licensing options designed to accommodate the needs of our various users.</p><p>Qt licensed under our commercial license agreement is appropriate for development of proprietary/commercial software where you do not want to share any source code with third parties or otherwise cannot comply with the terms of GNU (L)GPL.</p><p>Qt licensed under GNU (L)GPL is appropriate for the development of Qt&nbsp;applications provided you can comply with the terms and conditions of the respective licenses.</p><p>Please see <a href=\"http://%2/\">%2</a> for an overview of Qt licensing.</p><p>Copyright (C) %1 The Qt Company Ltd and other contributors.</p><p>Qt and the Qt logo are trademarks of The Qt Company Ltd.</p><p>Qt is The Qt Company Ltd product developed as an open source project. See <a href=\"http://%3/\">%3</a> for more information.</p>"
+  },
+  {
+    "context": "QMessageBox",
+    "source": "About Qt",
+    "translation": "О Qt"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "OK",
+    "translation": "OK"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Save",
+    "translation": "Сохранить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Save All",
+    "translation": "Сохранить все"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Open",
+    "translation": "Открыть"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "&Yes",
+    "translation": "&Да"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Yes to &All",
+    "translation": "Да для &всех"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "&No",
+    "translation": "&Нет"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "N&o to All",
+    "translation": "Н&ет для всех"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Abort",
+    "translation": "Прервать"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Retry",
+    "translation": "Повторить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Ignore",
+    "translation": "Пропустить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Close",
+    "translation": "Закрыть"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Cancel",
+    "translation": "Отмена"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Discard",
+    "translation": "Отклонить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Help",
+    "translation": "Справка"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Apply",
+    "translation": "Применить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Reset",
+    "translation": "Сбросить"
+  },
+  {
+    "context": "QPlatformTheme",
+    "source": "Restore Defaults",
+    "translation": "По умолчанию"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Scroll here",
+    "translation": "Прокрутить сюда"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Left edge",
+    "translation": "К левой границе"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Top",
+    "translation": "Вверх"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Right edge",
+    "translation": "К правой границе"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Bottom",
+    "translation": "Вниз"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Page left",
+    "translation": "На страницу влево"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Page up",
+    "translation": "На страницу вверх"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Page right",
+    "translation": "На страницу вправо"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Page down",
+    "translation": "На страницу вниз"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Scroll left",
+    "translation": "Прокрутить влево"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Scroll up",
+    "translation": "Прокрутить вверх"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Scroll right",
+    "translation": "Прокрутить вправо"
+  },
+  {
+    "context": "QScrollBar",
+    "source": "Scroll down",
+    "translation": "Прокрутить вниз"
+  },
+  {
+    "context": "QTabBar",
+    "source": "Scroll Left",
+    "translation": "Прокрутить влево"
+  },
+  {
+    "context": "QTabBar",
+    "source": "Scroll Right",
+    "translation": "Прокрутить вправо"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "&Undo",
+    "translation": "&Отменить действие"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "&Redo",
+    "translation": "&Повторить действие"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "Cu&t",
+    "translation": "&Вырезать"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "&Copy",
+    "translation": "&Копировать"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "Copy &Link Location",
+    "translation": "Скопировать &адрес ссылки"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "&Paste",
+    "translation": "В&ставить"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "Delete",
+    "translation": "Удалить"
+  },
+  {
+    "context": "QWidgetTextControl",
+    "source": "Select All",
+    "translation": "Выделить всё"
+  }
+]

@@ -1,0 +1,22 @@
+* text=auto
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.java text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.asm text eol=lf
+*.c text eol=lf
+*.exe binary
+*.dll binary
+*.lib binary
+*.onnx binary
+*.png binary
+*.ico binary
+*.bin binary
+*.wdt binary
+source/third_party/qt/qtbase_ru-6.8.3.ts -text
+analysis/binary/** -text
+analysis/verification/** -text

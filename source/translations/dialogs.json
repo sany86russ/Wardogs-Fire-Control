@@ -1,0 +1,582 @@
+[
+  {
+    "ru": "Настройки · WARDOGS",
+    "en": "Settings · WARDOGS"
+  },
+  {
+    "ru": "Быстрый запуск",
+    "en": "Quick start"
+  },
+  {
+    "ru": "Приложение готово к работе после запуска. Изменения ниже применятся после сохранения.",
+    "en": "The app is ready to use as soon as it starts. Changes below take effect after you save them."
+  },
+  {
+    "ru": "Основные",
+    "en": "General"
+  },
+  {
+    "ru": "Орудие → цель → расчёт",
+    "en": "Gun → target → solution"
+  },
+  {
+    "ru": "1. В игре: M → правая кнопка → Mark Coordinates для позиции орудия.\n2. %1 — считать позицию орудия.\n3. Средняя кнопка на карте — цель из подсказки отметки и расчёт.",
+    "en": "1. In game: M → right-click → Mark Coordinates for the gun position.\n2. %1 — read the gun position.\n3. Middle-click the map to read the marker tooltip and calculate the target solution."
+  },
+  {
+    "ru": "Дополнительно",
+    "en": "Advanced"
+  },
+  {
+    "ru": "Эти параметры нужны для своего способа работы. Обычно достаточно стандартных настроек.",
+    "en": "These options let you customize your workflow. The default settings are usually enough."
+  },
+  {
+    "ru": "Режим работы",
+    "en": "Operating mode"
+  },
+  {
+    "ru": "Отдельный калькулятор · только ручной ввод",
+    "en": "Standalone calculator · manual input only"
+  },
+  {
+    "ru": "В этом режиме глобальные клавиши, захват экрана и игровые окна выключены. Выбор сохраняется между запусками.",
+    "en": "This mode disables global hotkeys, screen capture, and in-game overlays. Your choice is saved between sessions."
+  },
+  {
+    "ru": "Считать цель средней кнопкой мыши",
+    "en": "Read the target with the middle mouse button"
+  },
+  {
+    "ru": "Горячие клавиши",
+    "en": "Hotkeys"
+  },
+  {
+    "ru": "Выбрать область координат",
+    "en": "Select the coordinate region"
+  },
+  {
+    "ru": "Считать позицию орудия",
+    "en": "Read the gun position"
+  },
+  {
+    "ru": "Считать цель",
+    "en": "Read the target"
+  },
+  {
+    "ru": "Быстрая цель",
+    "en": "Quick target"
+  },
+  {
+    "ru": "Считать точку попадания",
+    "en": "Read the impact point"
+  },
+  {
+    "ru": "Необязательно: наведите курсор на фактическое попадание на карте. Уточняет текущую цель и выбранную траекторию; цель не меняется. Запишите попадание до смены цели/траектории. Пробные выстрелы в сторону не нужны.",
+    "en": "Optional: point at the actual impact on the map. This refines the current target and selected arc without changing the target. Record the impact before changing the target or arc. There is no need to fire test shots off to the side."
+  },
+  {
+    "ru": "Сменить траекторию прицела",
+    "en": "Switch the reticle arc"
+  },
+  {
+    "ru": "Выбирает траекторию SPH-2 для прицела, карточки и записи попаданий",
+    "en": "Selects the SPH-2 arc for the reticle, result card, and impact records"
+  },
+  {
+    "ru": "Вернуться из игрового режима",
+    "en": "Return from game mode"
+  },
+  {
+    "ru": "Если сочетание занято другой программой, при сохранении подбирается свободное с той же клавишей и дополнительным Ctrl или Shift. Новое сочетание появится на кнопке действия и сохранится в настройках.",
+    "en": "If another app uses a shortcut, saving will select an available shortcut with the same key and an extra Ctrl or Shift modifier. The new shortcut appears on the action button and is saved in settings."
+  },
+  {
+    "ru": "Отметка на карте",
+    "en": "Map marker"
+  },
+  {
+    "ru": " мс",
+    "en": " ms"
+  },
+  {
+    "ru": "Первое чтение выполняется сразу при нажатии средней кнопки. Если оно не удалось, выполняются до двух повторов с паузой 80–350 мс. Значения вне этого диапазона ограничиваются только на время повторного чтения.",
+    "en": "The first read happens as soon as you press the middle mouse button. If it fails, up to two retries follow with an 80–350 ms delay. Values outside this range are clamped only for retries."
+  },
+  {
+    "ru": "Пауза перед повторным чтением",
+    "en": "Delay before retrying"
+  },
+  {
+    "ru": "Первое чтение — сразу при нажатии средней кнопки. При неудаче калькулятор повторит чтение до двух раз; пауза ограничена 80–350 мс.",
+    "en": "The first read happens as soon as you press the middle mouse button. On failure, the calculator retries up to twice; the delay is limited to 80–350 ms."
+  },
+  {
+    "ru": "Отдельный калькулятор: введите координаты орудия и цели вручную.",
+    "en": "Standalone calculator: enter the gun and target coordinates manually."
+  },
+  {
+    "ru": "Средняя кнопка на карте — цель из подсказки отметки и расчёт.",
+    "en": "Middle-click the map to read the marker tooltip and calculate the target solution."
+  },
+  {
+    "ru": " — считать цель и выполнить расчёт.",
+    "en": " — read the target and calculate the solution."
+  },
+  {
+    "ru": "1. В игре: M → правая кнопка → Mark Coordinates для позиции орудия.\n2. %1 — считать позицию орудия.\n3. %2",
+    "en": "1. In game: M → right-click → Mark Coordinates for the gun position.\n2. %1 — read the gun position.\n3. %2"
+  },
+  {
+    "ru": "Прозрачная шкала поверх игры помогает выставить азимут и угол. В обычном режиме прицел пропускает нажатия мыши.",
+    "en": "The transparent overlay helps you set the bearing and elevation in game. In normal mode, mouse clicks pass through the reticle."
+  },
+  {
+    "ru": "Размер и выравнивание",
+    "en": "Size and alignment"
+  },
+  {
+    "ru": "Свой размер · %1 × %2",
+    "en": "Custom size · %1 × %2"
+  },
+  {
+    "ru": "Разрешение игры 16:9. Ширина прицела — 37,5% ширины экрана.",
+    "en": "16:9 game resolution. Reticle width is 37.5% of the screen width."
+  },
+  {
+    "ru": "Разрешение игры",
+    "en": "Game resolution"
+  },
+  {
+    "ru": "Уменьшить на 0,05°",
+    "en": "Decrease by 0.05°"
+  },
+  {
+    "ru": "Эта поправка прибавляется к азимуту на прозрачной шкале",
+    "en": "This correction is added to the bearing on the transparent overlay"
+  },
+  {
+    "ru": "Увеличить на 0,05°",
+    "en": "Increase by 0.05°"
+  },
+  {
+    "ru": "Поправка азимута",
+    "en": "Bearing correction"
+  },
+  {
+    "ru": "Настроить размер на экране",
+    "en": "Adjust the size on screen"
+  },
+  {
+    "ru": "Перетаскивайте края рамки; пропорции прицела — 4:3",
+    "en": "Drag the frame edges; the reticle aspect ratio is 4:3"
+  },
+  {
+    "ru": "Распознавание координат",
+    "en": "Coordinate recognition"
+  },
+  {
+    "ru": "RapidOCR — рекомендуется",
+    "en": "RapidOCR — recommended"
+  },
+  {
+    "ru": "Windows OCR — совместимость",
+    "en": "Windows OCR — compatibility"
+  },
+  {
+    "ru": "Выбранный движок применяется при чтении своей области экрана. Автоматическое чтение чата и координат возле курсора на карте всегда использует RapidOCR.",
+    "en": "The selected engine reads your custom screen region. Automatic chat and map cursor coordinate capture always use RapidOCR."
+  },
+  {
+    "ru": "OCR для своей области",
+    "en": "OCR for the custom region"
+  },
+  {
+    "ru": "Автопоиск для дополнительных захватов",
+    "en": "Auto-detect for additional captures"
+  },
+  {
+    "ru": "Alt+X всегда находит орудие в поле чата автоматически. Средняя кнопка всегда читает X/Y возле курсора на карте. Эта настройка выбирает источник только для дополнительных захватов цели и попадания; своя область не нужна для быстрой игры.",
+    "en": "Alt+X always detects the gun position in chat automatically. The middle mouse button always reads X/Y near the map cursor. This setting selects the source only for additional target and impact captures; a custom region is not needed for quick play."
+  },
+  {
+    "ru": "Автоматическое чтение чата и карты использует локальный RapidOCR. Движок выше применяется только к своей области экрана. Windows OCR доступен при установленном английском языковом пакете.",
+    "en": "Automatic chat and map capture use local RapidOCR. The engine above applies only to your custom screen region. Windows OCR requires the English language pack."
+  },
+  {
+    "ru": "Шаблон координат · для опытных пользователей",
+    "en": "Coordinate pattern · for advanced users"
+  },
+  {
+    "ru": "Две группы захвата должны содержать X и Y. Меняйте шаблон только для другого формата текста координат. Сложные повторы групп, альтернативы и обратные ссылки отклоняются, чтобы поиск не зависал.",
+    "en": "The two capture groups must contain X and Y. Change the pattern only for a different coordinate text format. Complex repeated groups, alternatives, and backreferences are rejected to prevent the search from hanging."
+  },
+  {
+    "ru": "Шаблон координат X и Y",
+    "en": "X and Y coordinate pattern"
+  },
+  {
+    "ru": "Восстановить стандартный шаблон WARDOGS",
+    "en": "Restore the default WARDOGS pattern"
+  },
+  {
+    "ru": "Сохранить",
+    "en": "Save"
+  },
+  {
+    "ru": "Отмена",
+    "en": "Cancel"
+  },
+  {
+    "ru": "Версия %1",
+    "en": "Version %1"
+  },
+  {
+    "ru": "Проверьте шаблон",
+    "en": "Check the pattern"
+  },
+  {
+    "ru": "В шаблоне координат есть синтаксическая ошибка.",
+    "en": "The coordinate pattern contains a syntax error."
+  },
+  {
+    "ru": "Проверьте горячие клавиши",
+    "en": "Check the hotkeys"
+  },
+  {
+    "ru": "Дальность до цели",
+    "en": "Target range"
+  },
+  {
+    "ru": "Азимут",
+    "en": "Bearing"
+  },
+  {
+    "ru": "Наводка · MIL",
+    "en": "Elevation · MIL"
+  },
+  {
+    "ru": "Дальность до цели SPH-2",
+    "en": "SPH-2 target range"
+  },
+  {
+    "ru": "Горизонтальное расстояние до цели по карте.",
+    "en": "Horizontal distance to the target on the map."
+  },
+  {
+    "ru": "Наводка SPH-2 по игровой шкале MIL",
+    "en": "SPH-2 elevation on the in-game MIL scale"
+  },
+  {
+    "ru": "Дальность до цели SPH-2: ожидается цель",
+    "en": "SPH-2 target range: waiting for a target"
+  },
+  {
+    "ru": "Выберите цель, чтобы получить расстояние по карте и наводку.",
+    "en": "Select a target to get the map distance and elevation."
+  },
+  {
+    "ru": "Ждём цель",
+    "en": "Waiting for target"
+  },
+  {
+    "ru": "Горизонтальная дальность до цели SPH-2",
+    "en": "SPH-2 horizontal target range"
+  },
+  {
+    "ru": " м",
+    "en": " m"
+  },
+  {
+    "ru": "До цели %1 м; табличная дальность для наводки ≈ %2 м. Табличное значение — оценка модели и может отличаться от игровой шкалы. Выставляйте MIL выбранной траектории.",
+    "en": "Target range: %1 m; table range for elevation: ≈ %2 m. The table value is a model estimate and may differ from the in-game scale. Set the MIL value for the selected arc."
+  },
+  {
+    "ru": "По таблице",
+    "en": "Table range"
+  },
+  {
+    "ru": "Оценка табличной дальности SPH-2",
+    "en": "Estimated SPH-2 table range"
+  },
+  {
+    "ru": "≈ %1 м",
+    "en": "≈ %1 m"
+  },
+  {
+    "ru": "Табличная дальность для наводки ≈ %1 м — оценка модели. Она может отличаться от расстояния до цели и игровой шкалы. Выставляйте MIL выбранной траектории.",
+    "en": "Table range for elevation: ≈ %1 m — a model estimate. It may differ from the target range and in-game scale. Set the MIL value for the selected arc."
+  },
+  {
+    "ru": "Игровая наводка SPH-2 в MIL из таблицы орудия с поправками. MIL здесь не означает расстояние в милях.",
+    "en": "SPH-2 in-game elevation in MIL, calculated from the gun table with corrections. MIL here does not mean distance in miles."
+  },
+  {
+    "ru": "Расстояние до цели по карте. Наводка для этой траектории недоступна.",
+    "en": "Target range on the map. Elevation is unavailable for this arc."
+  },
+  {
+    "ru": "Нет решения",
+    "en": "No solution"
+  },
+  {
+    "ru": "Дальность или угол выходят за пределы таблицы орудия",
+    "en": "Range or elevation is outside the gun table limits"
+  },
+  {
+    "ru": "Дальность до цели SPH-2: нет данных высоты",
+    "en": "SPH-2 target range: elevation data unavailable"
+  },
+  {
+    "ru": "Не удалось получить данные высоты. Наводка недоступна.",
+    "en": "Could not retrieve elevation data. The firing solution is unavailable."
+  },
+  {
+    "ru": "Нет высот",
+    "en": "No elevation data"
+  },
+  {
+    "ru": "Настильная",
+    "en": "Low arc"
+  },
+  {
+    "ru": "Навесная",
+    "en": "High arc"
+  },
+  {
+    "ru": "недоступна",
+    "en": "unavailable"
+  },
+  {
+    "ru": "ожидает цель",
+    "en": "waiting for target"
+  },
+  {
+    "ru": "выбрана",
+    "en": "selected"
+  },
+  {
+    "ru": "доступна",
+    "en": "available"
+  },
+  {
+    "ru": " траектория: ",
+    "en": " arc: "
+  },
+  {
+    "ru": ". Дальность до цели, азимут и игровая наводка в MIL.",
+    "en": ". Target range, bearing, and in-game elevation in MIL."
+  },
+  {
+    "ru": ". Оценка табличной дальности, азимут и игровая наводка в MIL.",
+    "en": ". Estimated table range, bearing, and in-game elevation in MIL."
+  },
+  {
+    "ru": "Решение · WARDOGS",
+    "en": "Solution · WARDOGS"
+  },
+  {
+    "ru": "ДАЛЬНОСТЬ",
+    "en": "RANGE"
+  },
+  {
+    "ru": "АЗИМУТ",
+    "en": "BEARING"
+  },
+  {
+    "ru": "Наводка L81 по игровой шкале MIL",
+    "en": "L81 elevation on the in-game MIL scale"
+  },
+  {
+    "ru": "MIL — игровая шкала наведения L81, а не расстояние в милях. Значение берётся из таблицы дальности.",
+    "en": "MIL is the L81 in-game elevation scale, not a distance in miles. The value comes from the range table."
+  },
+  {
+    "ru": "Состояние считывания координат",
+    "en": "Coordinate capture status"
+  },
+  {
+    "ru": "Карточка · прозрачность",
+    "en": "Card · opacity"
+  },
+  {
+    "ru": "Прозрачность карточки: %1%",
+    "en": "Card opacity: %1%"
+  },
+  {
+    "ru": "Прозрачность карточки результата",
+    "en": "Result card opacity"
+  },
+  {
+    "ru": "Прицел · прозрачность",
+    "en": "Reticle · opacity"
+  },
+  {
+    "ru": "Прозрачность прицела",
+    "en": "Reticle opacity"
+  },
+  {
+    "ru": "Разблокировать",
+    "en": "Unlock"
+  },
+  {
+    "ru": "Сочетание работает даже при заблокированной карточке",
+    "en": "The shortcut works even when the card is locked"
+  },
+  {
+    "ru": "Горячая клавиша разблокировки",
+    "en": "Unlock hotkey"
+  },
+  {
+    "ru": "Перетаскивайте карточку и её края.\nБлокировка пропускает нажатия в игру.",
+    "en": "Drag the card or its edges.\nWhen locked, clicks pass through to the game."
+  },
+  {
+    "ru": "Вернуться в калькулятор",
+    "en": "Return to calculator"
+  },
+  {
+    "ru": "Выключить прицел",
+    "en": "Hide reticle"
+  },
+  {
+    "ru": "Показать прицел",
+    "en": "Show reticle"
+  },
+  {
+    "ru": "Прозрачность прицела: %1%",
+    "en": "Reticle opacity: %1%"
+  },
+  {
+    "ru": "Сочетание занято или совпадает с другим действием",
+    "en": "This shortcut is in use or conflicts with another action"
+  },
+  {
+    "ru": "Введите одно действительное сочетание клавиш",
+    "en": "Enter one valid shortcut"
+  },
+  {
+    "ru": "Разблокировать карточку",
+    "en": "Unlock result card"
+  },
+  {
+    "ru": "Заблокировать карточку",
+    "en": "Lock card"
+  },
+  {
+    "ru": "Карточка заблокирована. Разблокировка: %1",
+    "en": "Card locked. Unlock: %1"
+  },
+  {
+    "ru": "Тяните карточку для перемещения, края — для размера. Правая кнопка — настройки, двойной щелчок — возврат.",
+    "en": "Drag the card to move it or its edges to resize it. Right-click for settings; double-click to return."
+  },
+  {
+    "ru": "Наводка: ",
+    "en": "Elevation: "
+  },
+  {
+    "ru": "Сохранить размер",
+    "en": "Save size"
+  },
+  {
+    "ru": "Сохранить размер прицела",
+    "en": "Save reticle size"
+  },
+  {
+    "ru": "Отменить изменение",
+    "en": "Cancel change"
+  },
+  {
+    "ru": "Отменить изменение размера прицела",
+    "en": "Cancel reticle size change"
+  },
+  {
+    "ru": "Тяните края · Формат 4:3 · Esc — сохранить",
+    "en": "Drag edges · 4:3 · Esc to save"
+  },
+  {
+    "ru": "Область слишком мала. Выберите текст координат целиком.",
+    "en": "The region is too small. Select the entire coordinate text."
+  },
+  {
+    "ru": "Схема направления на цель, север сверху",
+    "en": "Target direction diagram, north at the top"
+  },
+  {
+    "ru": "Схема направления. Не отображает рельеф и препятствия.",
+    "en": "Direction diagram. Does not show terrain or obstacles."
+  },
+  {
+    "ru": "СХЕМА НАПРАВЛЕНИЯ",
+    "en": "DIRECTION DIAGRAM"
+  },
+  {
+    "ru": "ОРУДИЕ В ЦЕНТРЕ · СЕВЕР СВЕРХУ",
+    "en": "GUN AT CENTER · NORTH AT TOP"
+  },
+  {
+    "ru": "Свернуть",
+    "en": "Minimize"
+  },
+  {
+    "ru": "Развернуть",
+    "en": "Maximize"
+  },
+  {
+    "ru": "Закрыть",
+    "en": "Close"
+  },
+  {
+    "ru": "Обычный размер",
+    "en": "Restore"
+  },
+  {
+    "ru": "Север",
+    "en": "North"
+  },
+  {
+    "ru": "Юг",
+    "en": "South"
+  },
+  {
+    "ru": "Запад",
+    "en": "West"
+  },
+  {
+    "ru": "Восток",
+    "en": "East"
+  },
+  {
+    "ru": "Выбор области координат",
+    "en": "Coordinate region selection"
+  },
+  {
+    "ru": "Выделите текст координат X / Y\nEsc или правая кнопка — отмена",
+    "en": "Select the X / Y coordinate text\nEsc or right-click to cancel"
+  },
+  {
+    "ru": "%1 — считать цель и выполнить расчёт.",
+    "en": "%1 — read the target and calculate the solution."
+  },
+  {
+    "ru": "%1 траектория: %2",
+    "en": "%1 status: %2"
+  },
+  {
+    "ru": "%1. Дальность до цели, азимут и игровая наводка в MIL.",
+    "en": "%1. Target range, bearing, and in-game elevation in MIL."
+  },
+  {
+    "ru": "%1. Оценка табличной дальности, азимут и игровая наводка в MIL.",
+    "en": "%1. Estimated table range, bearing, and in-game elevation in MIL."
+  },
+  {
+    "ru": "Наводка: %1",
+    "en": "Elevation: %1"
+  },
+  {
+    "ru": "Дальность до цели должна быть конечной и неотрицательной",
+    "en": "Target range must be finite and nonnegative"
+  }
+]

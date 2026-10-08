@@ -1,0 +1,15 @@
+/.tools/
+/.recovery/
+/App/
+/dist/
+/source/terrain-packs/*.wdt
+/source/build/
+/source/out/
+/source/.vs/
+__pycache__/
+*.pyc
+*.user
+.DS_Store
+/analysis/verification/**/*.obj
+/analysis/verification/**/*.exe
+/analysis/verification/**/*.dll

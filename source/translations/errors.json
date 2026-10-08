@@ -1,0 +1,1162 @@
+[
+  {
+    "ru": "Координаты орудия и цели должны быть конечными числами",
+    "en": "Gun and target coordinates must be finite numbers"
+  },
+  {
+    "ru": "Координаты слишком велики для расчёта расстояния",
+    "en": "Coordinates are too large to calculate the distance"
+  },
+  {
+    "ru": "Таблица миномёта L81 поддерживает дальность от 132 до 684 м",
+    "en": "The L81 mortar table supports ranges from 132 to 684 m"
+  },
+  {
+    "ru": "Область захвата пуста",
+    "en": "The capture area is empty"
+  },
+  {
+    "ru": "Область захвата слишком велика: до 16 млн пикселей и 16384 по каждой стороне.",
+    "en": "The capture area is too large: up to 16 million pixels and 16384 pixels per side."
+  },
+  {
+    "ru": "Не удалось прочитать параметры монитора",
+    "en": "Could not read monitor settings"
+  },
+  {
+    "ru": "Отступ области захвата не может быть отрицательным.",
+    "en": "Capture area padding cannot be negative."
+  },
+  {
+    "ru": "Окно игры не имеет видимой области для поиска координат.",
+    "en": "The game window has no visible area to search for coordinates."
+  },
+  {
+    "ru": "Окно игры не имеет области для чтения координат карты.",
+    "en": "The game window has no area for reading map coordinates."
+  },
+  {
+    "ru": "Точка карты находится за пределами окна игры.",
+    "en": "The map point is outside the game window."
+  },
+  {
+    "ru": "Масштаб подписей карты должен быть положительным и конечным.",
+    "en": "Map label scale must be positive and finite."
+  },
+  {
+    "ru": "Масштаб области координат карты слишком велик.",
+    "en": "The map coordinate area scale is too large."
+  },
+  {
+    "ru": "Окно игры слишком мало для полной подписи координат карты.",
+    "en": "The game window is too small for the complete map coordinate label."
+  },
+  {
+    "ru": "Не удалось получить список мониторов.",
+    "en": "Could not list monitors."
+  },
+  {
+    "ru": "Выбранный монитор отключён",
+    "en": "The selected monitor is disconnected"
+  },
+  {
+    "ru": "Разрешение выбранного монитора изменилось. Выберите область заново или используйте поиск в чате.",
+    "en": "The selected monitor resolution has changed. Select the area again or use chat search."
+  },
+  {
+    "ru": "Область больше не помещается на мониторе. Выберите её заново.",
+    "en": "The area no longer fits on the monitor. Select it again."
+  },
+  {
+    "ru": "Не удалось открыть экран для захвата.",
+    "en": "Could not access the screen for capture."
+  },
+  {
+    "ru": "Не удалось создать контекст захвата.",
+    "en": "Could not create a capture context."
+  },
+  {
+    "ru": "Не удалось создать изображение для захвата",
+    "en": "Could not create an image for capture"
+  },
+  {
+    "ru": "Не удалось подготовить буфер захвата.",
+    "en": "Could not prepare the capture buffer."
+  },
+  {
+    "ru": "Windows не смогла захватить область экрана",
+    "en": "Windows could not capture the screen area"
+  },
+  {
+    "ru": "Windows не смогла завершить захват экрана.",
+    "en": "Windows could not complete the screen capture."
+  },
+  {
+    "ru": "Цель должна отличаться от позиции орудия",
+    "en": "The target must differ from the gun position"
+  },
+  {
+    "ru": "Координаты орудия должны быть конечными числами",
+    "en": "Gun coordinates must be finite numbers"
+  },
+  {
+    "ru": "Выберите поддерживаемый режим поправок",
+    "en": "Select a supported correction mode"
+  },
+  {
+    "ru": "Сохранены 256 попаданий — предел этого сеанса. Сбросьте поправки, чтобы начать новый сеанс; прямой расчёт останется доступен.",
+    "en": "256 impacts saved: the limit for this session. Reset corrections to start a new session; direct calculation will remain available."
+  },
+  {
+    "ru": "Сохранены 256 попаданий — предел этого сеанса. Сбросьте поправки, чтобы продолжить пристрелку; исходная калибровка сохранится",
+    "en": "256 impacts saved: the limit for this session. Reset corrections to continue ranging; the initial calibration will be retained"
+  },
+  {
+    "ru": "Координаты должны быть конечными числами",
+    "en": "Coordinates must be finite numbers"
+  },
+  {
+    "ru": "Азимут выстрела должен быть конечным числом",
+    "en": "Shot bearing must be a finite number"
+  },
+  {
+    "ru": "Значение MIL должно быть конечным числом",
+    "en": "The MIL value must be a finite number"
+  },
+  {
+    "ru": "Высота цели должна быть конечным числом",
+    "en": "Target height must be a finite number"
+  },
+  {
+    "ru": "Высота попадания должна быть конечным числом",
+    "en": "Impact height must be a finite number"
+  },
+  {
+    "ru": "Попадание слишком далеко от выбранной цели: ",
+    "en": "The impact is too far from the selected target: "
+  },
+  {
+    "ru": " м. Для этой цели допустимо до ",
+    "en": " m. This target allows up to "
+  },
+  {
+    "ru": " м (не более 400 м и 20% дальности). Проверьте цель и точку попадания.",
+    "en": " m (no more than 400 m and 20% of the range). Check the target and impact point."
+  },
+  {
+    "ru": "Записанные азимут и MIL отличаются от текущего расчёта на ",
+    "en": "The recorded bearing and MIL differ from the current calculation by "
+  },
+  {
+    "ru": " м по вектору прицела. Для этой цели допустимо до ",
+    "en": " m along the aiming vector. This target allows up to "
+  },
+  {
+    "ru": " м. Проверьте настройки выполненного выстрела.",
+    "en": " m. Check the settings of the shot you fired."
+  },
+  {
+    "ru": "Накопленная поправка отклоняет вектор прицела от прямого расчёта на ",
+    "en": "The accumulated correction shifts the aiming vector from the direct calculation by "
+  },
+  {
+    "ru": " м. Проверьте попадания или сбросьте поправки.",
+    "en": " m. Check the impacts or reset corrections."
+  },
+  {
+    "ru": "Шаблон координат слишком сложный: используйте две числовые группы, метки и разделители без ветвлений",
+    "en": "The coordinate pattern is too complex: use two numeric groups, labels and separators without alternatives"
+  },
+  {
+    "ru": "Координата содержит неверное число",
+    "en": "The coordinate contains an invalid number"
+  },
+  {
+    "ru": "Координата слишком большая или содержит неверное число",
+    "en": "The coordinate is too large or contains an invalid number"
+  },
+  {
+    "ru": "Координата должна быть конечным числом",
+    "en": "The coordinate must be a finite number"
+  },
+  {
+    "ru": "Шаблон координат должен содержать две группы: x и y",
+    "en": "The coordinate pattern must contain two groups: x and y"
+  },
+  {
+    "ru": "Текст OCR или шаблон координат слишком длинный",
+    "en": "OCR text or the coordinate pattern is too long"
+  },
+  {
+    "ru": "Не найдена полная пара координат x и y",
+    "en": "No complete pair of x and y coordinates was found"
+  },
+  {
+    "ru": "Неверный шаблон координат: ",
+    "en": "Invalid coordinate pattern: "
+  },
+  {
+    "ru": "Шаблон координат превышает безопасный предел сложности поиска",
+    "en": "The coordinate pattern exceeds the safe search complexity limit"
+  },
+  {
+    "ru": "Координаты слишком длинные",
+    "en": "Coordinates are too long"
+  },
+  {
+    "ru": "Введите x12.34, y56.78 или 12.34 56.78",
+    "en": "Enter x12.34, y56.78 or 12.34 56.78"
+  },
+  {
+    "ru": "Азимут и поправка прицела должны быть конечными числами",
+    "en": "Bearing and sight correction must be finite numbers"
+  },
+  {
+    "ru": "MIL прицела должен быть конечным числом",
+    "en": "Sight MIL must be a finite number"
+  },
+  {
+    "ru": "MIL миномётного прицела должен быть конечным числом",
+    "en": "Mortar sight MIL must be a finite number"
+  },
+  {
+    "ru": "Горячая клавиша не может быть пустой",
+    "en": "The hotkey cannot be empty"
+  },
+  {
+    "ru": "Горячая клавиша содержит пустую часть сочетания",
+    "en": "The hotkey contains an empty part"
+  },
+  {
+    "ru": "Модификаторы должны стоять перед обычной клавишей и не повторяться",
+    "en": "Modifiers must precede the regular key and must not repeat"
+  },
+  {
+    "ru": "Сочетание должно содержать одну обычную клавишу",
+    "en": "The shortcut must contain one regular key"
+  },
+  {
+    "ru": "Эта клавиша не поддерживается",
+    "en": "This key is not supported"
+  },
+  {
+    "ru": "Добавьте обычную клавишу после модификатора",
+    "en": "Add a regular key after the modifier"
+  },
+  {
+    "ru": "Горячие клавиши не должны повторяться",
+    "en": "Hotkeys must not repeat"
+  },
+  {
+    "ru": "Укажите от 1 до 32768 горячих клавиш",
+    "en": "Specify between 1 and 32768 hotkeys"
+  },
+  {
+    "ru": "Неверный код горячей клавиши или модификатора",
+    "en": "Invalid hotkey or modifier code"
+  },
+  {
+    "ru": "F12 зарезервирована Windows для отладчика. Выберите другую клавишу",
+    "en": "F12 is reserved by Windows for the debugger. Select another key"
+  },
+  {
+    "ru": "Сочетания с Win зарезервированы Windows. Используйте Alt, Ctrl или Shift",
+    "en": "Win shortcuts are reserved by Windows. Use Alt, Ctrl or Shift"
+  },
+  {
+    "ru": "Ошибка ожидания горячих клавиш Windows.",
+    "en": "Error waiting for Windows hotkeys."
+  },
+  {
+    "ru": "Ошибка обработчика горячей клавиши.",
+    "en": "Hotkey handler error."
+  },
+  {
+    "ru": "Не удалось обработать горячие клавиши.",
+    "en": "Could not process hotkeys."
+  },
+  {
+    "ru": "Windows не смогла освободить горячую клавишу.",
+    "en": "Windows could not release a hotkey."
+  },
+  {
+    "ru": "Не указан обработчик горячих клавиш",
+    "en": "No hotkey handler was specified"
+  },
+  {
+    "ru": "Не удалось подготовить горячие клавиши Windows",
+    "en": "Could not prepare Windows hotkeys"
+  },
+  {
+    "ru": "Не удалось запустить поток горячих клавиш Windows",
+    "en": "Could not start the Windows hotkey thread"
+  },
+  {
+    "ru": "Горячие клавиши Windows не ответили вовремя",
+    "en": "Windows hotkeys did not respond in time"
+  },
+  {
+    "ru": "Не удалось дождаться горячих клавиш Windows: код ",
+    "en": "Could not wait for Windows hotkeys: code "
+  },
+  {
+    "ru": "Не удалось зарегистрировать ",
+    "en": "Could not register "
+  },
+  {
+    "ru": ": сочетание занято другой программой. Выберите другое",
+    "en": ": the shortcut is used by another application. Select another"
+  },
+  {
+    "ru": ": ошибка Windows ",
+    "en": ": Windows error "
+  },
+  {
+    "ru": "Поток горячих клавиш завершит текущий обработчик самостоятельно.",
+    "en": "The hotkey thread will finish the current handler on its own."
+  },
+  {
+    "ru": "Не удалось инициализировать COM для загрузки изображения",
+    "en": "Could not initialize COM to load the image"
+  },
+  {
+    "ru": "Не удалось создать загрузчик изображений Windows",
+    "en": "Could not create the Windows image loader"
+  },
+  {
+    "ru": "Не удалось открыть изображение: проверьте файл и его формат",
+    "en": "Could not open the image: check the file and its format"
+  },
+  {
+    "ru": "Не удалось прочитать кадр изображения",
+    "en": "Could not read the image frame"
+  },
+  {
+    "ru": "Не удалось определить размеры изображения",
+    "en": "Could not determine image dimensions"
+  },
+  {
+    "ru": "Изображение слишком большое: допустимо до 16 млн пикселей и 16384 пикселей по каждой стороне",
+    "en": "The image is too large: up to 16 million pixels and 16384 pixels per side"
+  },
+  {
+    "ru": "Размер пикселей изображения не поддерживается загрузчиком Windows",
+    "en": "The image pixel format is not supported by the Windows loader"
+  },
+  {
+    "ru": "Не удалось преобразовать изображение в BGR",
+    "en": "Could not convert the image to BGR"
+  },
+  {
+    "ru": "Не удалось прочитать пиксели изображения",
+    "en": "Could not read image pixels"
+  },
+  {
+    "ru": "Ошибка ожидания событий мыши.",
+    "en": "Error waiting for mouse events."
+  },
+  {
+    "ru": "Ошибка обработки средней кнопки мыши.",
+    "en": "Error processing the middle mouse button."
+  },
+  {
+    "ru": "Не удалось отключить обработчик мыши.",
+    "en": "Could not disable the mouse handler."
+  },
+  {
+    "ru": "Не указан обработчик средней кнопки мыши.",
+    "en": "No middle mouse button handler was specified."
+  },
+  {
+    "ru": "Не удалось подготовить обработчик мыши.",
+    "en": "Could not prepare the mouse handler."
+  },
+  {
+    "ru": "Не удалось запустить поток обработки мыши.",
+    "en": "Could not start the mouse event thread."
+  },
+  {
+    "ru": "Обработчик мыши не ответил вовремя.",
+    "en": "The mouse handler did not respond in time."
+  },
+  {
+    "ru": "Не удалось включить среднюю кнопку мыши (код Windows ",
+    "en": "Could not enable the middle mouse button (Windows code "
+  },
+  {
+    "ru": "Обработчик средней кнопки мыши включён.",
+    "en": "The middle mouse button handler is enabled."
+  },
+  {
+    "ru": "Поток мыши завершит текущий обработчик самостоятельно.",
+    "en": "The mouse thread will finish the current handler on its own."
+  },
+  {
+    "ru": "Метаданные OCR-модели содержат неверный UTF-8",
+    "en": "OCR model metadata contains invalid UTF-8"
+  },
+  {
+    "ru": "Изображение OCR должно содержать корректные BGR-пиксели и не превышать 16 млн пикселей",
+    "en": "The OCR image must contain valid BGR pixels and no more than 16 million pixels"
+  },
+  {
+    "ru": "Неверные границы обрезки OCR-изображения",
+    "en": "Invalid OCR image crop bounds"
+  },
+  {
+    "ru": "Область OCR слишком широкая: выделите только строку координат",
+    "en": "The OCR area is too wide: select only the coordinate line"
+  },
+  {
+    "ru": "Распознавание отменено",
+    "en": "Recognition cancelled"
+  },
+  {
+    "ru": "Неверные размеры CTC-результата OCR",
+    "en": "Invalid OCR CTC result dimensions"
+  },
+  {
+    "ru": "OCR-модель вернула неверную уверенность распознавания",
+    "en": "The OCR model returned invalid recognition confidence"
+  },
+  {
+    "ru": "Слишком много деталей для безопасного поиска координат",
+    "en": "Too many details to safely search for coordinates"
+  },
+  {
+    "ru": "Слишком много фоновых деталей для поиска координат",
+    "en": "Too many background details to search for coordinates"
+  },
+  {
+    "ru": "Слишком много деталей для поиска плашки канала чата",
+    "en": "Too many details to search for the chat channel label"
+  },
+  {
+    "ru": "Найдено слишком много возможных полей ввода чата",
+    "en": "Too many possible chat input fields were found"
+  },
+  {
+    "ru": "Слишком много символов для безопасного поиска координат",
+    "en": "Too many characters to safely search for coordinates"
+  },
+  {
+    "ru": "Слишком много строк для безопасного поиска координат",
+    "en": "Too many lines to safely search for coordinates"
+  },
+  {
+    "ru": "В области слишком много строк для безопасного поиска координат",
+    "en": "The area contains too many lines to safely search for coordinates"
+  },
+  {
+    "ru": "OCR-модель не содержит таблицу символов",
+    "en": "The OCR model has no character table"
+  },
+  {
+    "ru": "ONNX Runtime не смог отменить распознавание",
+    "en": "ONNX Runtime could not cancel recognition"
+  },
+  {
+    "ru": "OCR-модель вернула неверный тип результата",
+    "en": "The OCR model returned an invalid result type"
+  },
+  {
+    "ru": "OCR-модель вернула неожиданный размер результата",
+    "en": "The OCR model returned an unexpected result size"
+  },
+  {
+    "ru": "Не найдена полная строка координат. Отметьте координаты на карте ещё раз.",
+    "en": "No complete coordinate line was found. Mark the coordinates on the map again."
+  },
+  {
+    "ru": "На изображении не найдены полные координаты X и Y",
+    "en": "No complete X and Y coordinates were found in the image"
+  },
+  {
+    "ru": "В поле карты не найдены все цифры координаты",
+    "en": "Not all coordinate digits were found in the map field"
+  },
+  {
+    "ru": "В поле карты найдены несколько числовых строк",
+    "en": "Multiple numeric lines were found in the map field"
+  },
+  {
+    "ru": "В поле карты есть неполная координата или другая ось. Повторите отметку.",
+    "en": "The map field contains an incomplete coordinate or another axis. Mark it again."
+  },
+  {
+    "ru": "Не удалось прочитать полное число с двумя дробными цифрами на карте",
+    "en": "Could not read a complete number with two decimal places on the map"
+  },
+  {
+    "ru": " м",
+    "en": " m"
+  },
+  {
+    "ru": "Расстояние на карте: ",
+    "en": "Map distance: "
+  },
+  {
+    "ru": " ед. · 1 ед. = 100 м",
+    "en": " units · 1 unit = 100 m"
+  },
+  {
+    "ru": "Нет свободного сочетания для нового сценария: измените дополнительные горячие клавиши",
+    "en": "No free shortcut for the new workflow: change the advanced hotkeys"
+  },
+  {
+    "ru": " (код Windows ",
+    "en": " (Windows code "
+  },
+  {
+    "ru": "Некорректная горячая клавиша выхода из игрового режима.",
+    "en": "Invalid hotkey for leaving game mode."
+  },
+  {
+    "ru": "Не удалось найти папку настроек пользователя.",
+    "en": "Could not find the user settings folder."
+  },
+  {
+    "ru": "Не удалось подготовить файл настроек",
+    "en": "Could not prepare the settings file"
+  },
+  {
+    "ru": "Не удалось создать файл настроек",
+    "en": "Could not create the settings file"
+  },
+  {
+    "ru": "Не удалось создать временный файл настроек.",
+    "en": "Could not create a temporary settings file."
+  },
+  {
+    "ru": "Не удалось подготовить кодировку настроек",
+    "en": "Could not prepare settings encoding"
+  },
+  {
+    "ru": "Не удалось определить размер настроек",
+    "en": "Could not determine settings size"
+  },
+  {
+    "ru": "Файл настроек превышает безопасный предел 8 МиБ",
+    "en": "The settings file exceeds the safe limit of 8 MiB"
+  },
+  {
+    "ru": "Не удалось прочитать копию настроек",
+    "en": "Could not read the settings copy"
+  },
+  {
+    "ru": "Кодировка файла настроек не поддерживается: требуется ANSI или UTF-16LE",
+    "en": "The settings file encoding is not supported: ANSI or UTF-16LE is required"
+  },
+  {
+    "ru": "Файл настроек содержит неполную строку UTF-16LE",
+    "en": "The settings file contains an incomplete UTF-16LE string"
+  },
+  {
+    "ru": "Файл настроек содержит недопустимый нулевой байт",
+    "en": "The settings file contains an invalid null byte"
+  },
+  {
+    "ru": "Копия настроек содержит недопустимый текст ANSI",
+    "en": "The settings copy contains invalid ANSI text"
+  },
+  {
+    "ru": "Настройки после преобразования в Unicode превышают безопасный предел 8 МиБ",
+    "en": "The settings exceed the safe limit of 8 MiB after conversion to Unicode"
+  },
+  {
+    "ru": "Не удалось преобразовать копию настроек в Unicode",
+    "en": "Could not convert the settings copy to Unicode"
+  },
+  {
+    "ru": "Не удалось подготовить запись настроек Unicode",
+    "en": "Could not prepare writing Unicode settings"
+  },
+  {
+    "ru": "Не удалось записать кодировку настроек",
+    "en": "Could not write settings encoding"
+  },
+  {
+    "ru": "Не удалось записать настройки Unicode",
+    "en": "Could not write Unicode settings"
+  },
+  {
+    "ru": "Не удалось завершить преобразование настроек Unicode",
+    "en": "Could not complete settings conversion to Unicode"
+  },
+  {
+    "ru": "Не удалось открыть сохранённые настройки",
+    "en": "Could not open the saved settings"
+  },
+  {
+    "ru": "Не удалось записать настройки на диск",
+    "en": "Could not write settings to disk"
+  },
+  {
+    "ru": "Не удалось сохранить настройки",
+    "en": "Could not save settings"
+  },
+  {
+    "ru": "Некорректная числовая настройка: использовано значение по умолчанию.",
+    "en": "Invalid numeric setting: the default value was used."
+  },
+  {
+    "ru": "Поправка прицела должна быть конечным числом",
+    "en": "Sight correction must be a finite number"
+  },
+  {
+    "ru": "Не удалось сохранить числовую настройку",
+    "en": "Could not save a numeric setting"
+  },
+  {
+    "ru": "Не удалось удалить старое значение настройки",
+    "en": "Could not remove the old setting value"
+  },
+  {
+    "ru": "Некорректная клавиша выхода из игрового режима: использовано Alt+C.",
+    "en": "Invalid key for leaving game mode: Alt+C was used."
+  },
+  {
+    "ru": "Не удалось сохранить копию прежних настроек",
+    "en": "Could not save a copy of the previous settings"
+  },
+  {
+    "ru": "Не удалось подготовить копию настроек",
+    "en": "Could not prepare a settings copy"
+  },
+  {
+    "ru": "Сохранённые настройки Unicode превышают безопасный предел 8 МиБ",
+    "en": "The saved Unicode settings exceed the safe limit of 8 MiB"
+  },
+  {
+    "ru": "Не удалось заменить файл настроек; прежние настройки сохранены",
+    "en": "Could not replace the settings file; previous settings were retained"
+  },
+  {
+    "ru": "Файл рельефа неожиданно закончился",
+    "en": "Unexpected end of terrain file"
+  },
+  {
+    "ru": "В метаданных рельефа отсутствует текстовое поле",
+    "en": "Terrain metadata is missing a text field"
+  },
+  {
+    "ru": "Путь рельефа содержит ссылку или перенаправление",
+    "en": "The terrain path contains a link or redirection"
+  },
+  {
+    "ru": "Не удалось проверить путь рельефа",
+    "en": "Could not verify the terrain path"
+  },
+  {
+    "ru": "В метаданных рельефа отсутствует числовое поле",
+    "en": "Terrain metadata is missing a numeric field"
+  },
+  {
+    "ru": "Метаданные рельефа содержат нечисловое значение",
+    "en": "Terrain metadata contains a nonnumeric value"
+  },
+  {
+    "ru": "Метаданные рельефа содержат неверное целое число",
+    "en": "Terrain metadata contains an invalid integer"
+  },
+  {
+    "ru": "Не удалось открыть файл рельефа",
+    "en": "Could not open the terrain file"
+  },
+  {
+    "ru": "Кэш рельефа должен содержать от 1 до 64 блоков",
+    "en": "The terrain cache must contain between 1 and 64 blocks"
+  },
+  {
+    "ru": "Файл рельефа обрезан",
+    "en": "The terrain file is truncated"
+  },
+  {
+    "ru": "Неизвестный заголовок файла рельефа",
+    "en": "Unknown terrain file header"
+  },
+  {
+    "ru": "Неверный размер метаданных рельефа",
+    "en": "Invalid terrain metadata size"
+  },
+  {
+    "ru": "Неверное количество блоков рельефа",
+    "en": "Invalid number of terrain blocks"
+  },
+  {
+    "ru": "Некорректные метаданные рельефа",
+    "en": "Invalid terrain metadata"
+  },
+  {
+    "ru": "Формат рельефа не поддерживается",
+    "en": "The terrain format is not supported"
+  },
+  {
+    "ru": "Количество блоков рельефа не совпадает",
+    "en": "Terrain block count does not match"
+  },
+  {
+    "ru": "Неверное название карты в пакете рельефа",
+    "en": "Invalid map name in the terrain package"
+  },
+  {
+    "ru": "Неверная геометрия блоков рельефа",
+    "en": "Invalid terrain block geometry"
+  },
+  {
+    "ru": "В рельефе не задан масштаб координат",
+    "en": "Terrain coordinate scale is not defined"
+  },
+  {
+    "ru": "Неверный масштаб или границы рельефа",
+    "en": "Invalid terrain scale or bounds"
+  },
+  {
+    "ru": "Границы координат выходят за сетку рельефа",
+    "en": "Coordinate bounds extend beyond the terrain grid"
+  },
+  {
+    "ru": "Неверный размер, адрес или геометрия блока рельефа",
+    "en": "Invalid terrain block size, address or geometry"
+  },
+  {
+    "ru": "В рельефе есть повторяющиеся блоки",
+    "en": "The terrain contains duplicate blocks"
+  },
+  {
+    "ru": "Данные блока рельефа обрезаны",
+    "en": "Terrain block data is truncated"
+  },
+  {
+    "ru": "Файл рельефа содержит лишние или обрезанные данные",
+    "en": "The terrain file contains extra or truncated data"
+  },
+  {
+    "ru": "Нужный блок рельефа отсутствует",
+    "en": "The required terrain block is missing"
+  },
+  {
+    "ru": "Не удалось распаковать блок рельефа",
+    "en": "Could not decompress the terrain block"
+  },
+  {
+    "ru": "Контрольная сумма блока рельефа не совпадает",
+    "en": "Terrain block checksum does not match"
+  },
+  {
+    "ru": "Координаты рельефа должны быть конечными числами",
+    "en": "Terrain coordinates must be finite numbers"
+  },
+  {
+    "ru": "Высота рельефа выходит за пределы конечных чисел",
+    "en": "Terrain height is outside the finite number range"
+  },
+  {
+    "ru": "Не удалось инициализировать SHA-256",
+    "en": "Could not initialize SHA-256"
+  },
+  {
+    "ru": "Не удалось создать SHA-256",
+    "en": "Could not create SHA-256"
+  },
+  {
+    "ru": "Не удалось открыть рельеф для проверки",
+    "en": "Could not open terrain for verification"
+  },
+  {
+    "ru": "Не удалось вычислить SHA-256",
+    "en": "Could not calculate SHA-256"
+  },
+  {
+    "ru": "Не удалось полностью прочитать файл рельефа",
+    "en": "Could not read the complete terrain file"
+  },
+  {
+    "ru": "Не удалось определить папку приложения",
+    "en": "Could not determine the application folder"
+  },
+  {
+    "ru": "Не удалось определить папку данных пользователя",
+    "en": "Could not determine the user data folder"
+  },
+  {
+    "ru": "Некорректное описание пакета рельефа",
+    "en": "Invalid terrain package description"
+  },
+  {
+    "ru": ": не установлен",
+    "en": ": not installed"
+  },
+  {
+    "ru": "Размер рельефа превышает допустимый предел",
+    "en": "Terrain size exceeds the allowed limit"
+  },
+  {
+    "ru": "Контрольная сумма SHA-256 не совпадает",
+    "en": "SHA-256 checksum does not match"
+  },
+  {
+    "ru": "Название карты не совпадает",
+    "en": "Map name does not match"
+  },
+  {
+    "ru": ": проверка не пройдена (",
+    "en": ": verification failed ("
+  },
+  {
+    "ru": "Не удалось создать файл для установки рельефа",
+    "en": "Could not create a file to install terrain"
+  },
+  {
+    "ru": "Исходный файл рельефа больше недоступен",
+    "en": "The source terrain file is no longer available"
+  },
+  {
+    "ru": "Не удалось полностью записать рельеф",
+    "en": "Could not write all terrain data"
+  },
+  {
+    "ru": "Не удалось полностью прочитать исходный рельеф",
+    "en": "Could not read the complete source terrain"
+  },
+  {
+    "ru": "Исходный рельеф изменился во время установки",
+    "en": "The source terrain changed during installation"
+  },
+  {
+    "ru": "Не удалось завершить установку рельефа",
+    "en": "Could not complete terrain installation"
+  },
+  {
+    "ru": "Установленный рельеф не прошёл контрольную проверку",
+    "en": "Installed terrain failed verification"
+  },
+  {
+    "ru": ": установка не выполнена (",
+    "en": ": installation failed ("
+  },
+  {
+    "ru": "Выберите поддерживаемую траекторию SPH-2",
+    "en": "Select a supported SPH-2 trajectory"
+  },
+  {
+    "ru": "Направления двух выстрелов не дают устойчивую калибровку",
+    "en": "The two shot directions do not provide a stable calibration"
+  },
+  {
+    "ru": "Направление должно содержать конечные числа",
+    "en": "Direction must contain finite numbers"
+  },
+  {
+    "ru": "Направление слишком большое для поворота платформы",
+    "en": "Direction is too large for platform rotation"
+  },
+  {
+    "ru": "Орудие находится за границами данных рельефа",
+    "en": "The gun is outside terrain data bounds"
+  },
+  {
+    "ru": "Цель или попадание находится за границами данных рельефа",
+    "en": "The target or impact is outside terrain data bounds"
+  },
+  {
+    "ru": "Высоты орудия и цели должны быть конечными числами",
+    "en": "Gun and target heights must be finite numbers"
+  },
+  {
+    "ru": "Горизонтальная дальность должна быть положительной, а высота — конечной",
+    "en": "Horizontal range must be positive and height must be finite"
+  },
+  {
+    "ru": "Цель находится за пределами расчётной траектории",
+    "en": "The target is beyond the calculated trajectory"
+  },
+  {
+    "ru": "Выбранная траектория не поддерживает такую разницу высот",
+    "en": "The selected trajectory does not support this height difference"
+  },
+  {
+    "ru": "Наклон платформы выводит траекторию за поддерживаемые пределы",
+    "en": "Platform tilt takes the trajectory beyond supported limits"
+  },
+  {
+    "ru": "Азимут и угол возвышения должны быть конечными числами",
+    "en": "Bearing and elevation must be finite numbers"
+  },
+  {
+    "ru": "Недостаточно разных направлений для уточнения калибровки",
+    "en": "Not enough different directions to refine calibration"
+  },
+  {
+    "ru": "Ошибка исходной калибровки должна быть конечной и от 0° до 180°",
+    "en": "Initial calibration error must be finite and between 0° and 180°"
+  },
+  {
+    "ru": "Калибровка платформы содержит неверную матрицу поворота",
+    "en": "Platform calibration contains an invalid rotation matrix"
+  },
+  {
+    "ru": "Калибровка платформы содержит отражение вместо поворота",
+    "en": "Platform calibration contains a reflection instead of a rotation"
+  },
+  {
+    "ru": "Азимут и значение MIL должны быть конечными числами",
+    "en": "Bearing and MIL must be finite numbers"
+  },
+  {
+    "ru": "Попадание должно отличаться от позиции орудия",
+    "en": "The impact must differ from the gun position"
+  },
+  {
+    "ru": "Дальность вне поддерживаемой таблицы SPH-2",
+    "en": "Range is outside the supported SPH-2 table"
+  },
+  {
+    "ru": "Значение MIL вне поддерживаемой таблицы SPH-2",
+    "en": "MIL is outside the supported SPH-2 table"
+  },
+  {
+    "ru": "Высотная поправка должна быть конечным числом",
+    "en": "Height correction must be a finite number"
+  },
+  {
+    "ru": "Первая цель должна отличаться от позиции орудия",
+    "en": "The first target must differ from the gun position"
+  },
+  {
+    "ru": "Вторая цель должна отличаться от позиции орудия",
+    "en": "The second target must differ from the gun position"
+  },
+  {
+    "ru": "Разница азимутов двух целей должна быть от 30° до 150°",
+    "en": "The bearing difference between the two targets must be between 30° and 150°"
+  },
+  {
+    "ru": "Первое попадание должно отличаться от позиции орудия",
+    "en": "The first impact must differ from the gun position"
+  },
+  {
+    "ru": "Второе попадание должно отличаться от позиции орудия",
+    "en": "The second impact must differ from the gun position"
+  },
+  {
+    "ru": "Цель первого выстрела",
+    "en": "First shot target"
+  },
+  {
+    "ru": "Цель второго выстрела",
+    "en": "Second shot target"
+  },
+  {
+    "ru": "Попадания не согласуются с общей поправкой: расхождение ",
+    "en": "The impacts are inconsistent with a shared correction: deviation "
+  },
+  {
+    "ru": "° (допустимо до ",
+    "en": "° (allowed up to "
+  },
+  {
+    "ru": "°). Проверьте азимут и MIL обоих выстрелов; после перемещения орудия повторите пристрелку.",
+    "en": "°). Check the bearing and MIL of both shots; repeat ranging after moving the gun."
+  },
+  {
+    "ru": "Вес исходной калибровки должен быть конечным положительным числом",
+    "en": "Initial calibration weight must be a finite positive number"
+  },
+  {
+    "ru": "Вес уточнения калибровки должен быть конечным неотрицательным числом",
+    "en": "Calibration refinement weight must be a finite nonnegative number"
+  },
+  {
+    "ru": "Направления выстрелов не дают конечное уточнение калибровки",
+    "en": "Shot directions do not provide a finite calibration refinement"
+  },
+  {
+    "ru": "Не удалось сохранить среду COM для Windows OCR",
+    "en": "Could not retain the COM environment for Windows OCR"
+  },
+  {
+    "ru": "Windows OCR получил неверные размеры или пиксели изображения",
+    "en": "Windows OCR received invalid image dimensions or pixels"
+  },
+  {
+    "ru": "Предыдущее Windows OCR ещё завершается. Повторите захват через несколько секунд.",
+    "en": "The previous Windows OCR operation is still finishing. Repeat the capture in a few seconds."
+  },
+  {
+    "ru": "В Windows не установлен английский пакет OCR (en-US)",
+    "en": "The English OCR language pack (en-US) is not installed in Windows"
+  },
+  {
+    "ru": "Область распознавания превышает предел Windows OCR: выделите строку координат",
+    "en": "The recognition area exceeds the Windows OCR limit: select the coordinate line"
+  },
+  {
+    "ru": "Windows OCR не ответил за 3 секунды. Уменьшите область или повторите захват",
+    "en": "Windows OCR did not respond within 3 seconds. Reduce the area or repeat the capture"
+  },
+  {
+    "ru": "Снять блокировку мини-карточки",
+    "en": "Unlock mini card"
+  },
+  {
+    "ru": "Неизвестная карта игры",
+    "en": "Unknown game map"
+  },
+  {
+    "ru": "%1 м",
+    "en": "%1 m"
+  },
+  {
+    "ru": "Расстояние на карте: %1 ед. · 1 ед. = 100 м",
+    "en": "Map distance: %1 units · 1 unit = 100 m"
+  },
+  {
+    "ru": "Попадание слишком далеко от выбранной цели: %1 м. Для этой цели допустимо до %2 м (не более 400 м и 20% дальности). Проверьте цель и точку попадания.",
+    "en": "The impact is too far from the selected target: %1 m. This target allows up to %2 m (no more than 400 m and 20% of the range). Check the target and impact point."
+  },
+  {
+    "ru": "Записанные азимут и MIL отличаются от текущего расчёта на %1 м по вектору прицела. Для этой цели допустимо до %2 м. Проверьте настройки выполненного выстрела.",
+    "en": "The recorded bearing and MIL differ from the current calculation by %1 m along the aiming vector. This target allows up to %2 m. Check the settings of the shot you fired."
+  },
+  {
+    "ru": "Накопленная поправка отклоняет вектор прицела от прямого расчёта на %1 м. Для этой цели допустимо до %2 м. Проверьте попадания или сбросьте поправки.",
+    "en": "The accumulated correction shifts the aiming vector from the direct calculation by %1 m. This target allows up to %2 m. Check the impacts or reset corrections."
+  },
+  {
+    "ru": "Попадания не согласуются с общей поправкой: расхождение %1° (допустимо до %2°). Проверьте азимут и MIL обоих выстрелов; после перемещения орудия повторите пристрелку.",
+    "en": "The impacts are inconsistent with a shared correction: deviation %1° (allowed up to %2°). Check the bearing and MIL of both shots; repeat ranging after moving the gun."
+  },
+  {
+    "ru": "Не удалось зарегистрировать %1: сочетание занято другой программой. Выберите другое",
+    "en": "Could not register %1: the shortcut is used by another application. Select another"
+  },
+  {
+    "ru": "Не удалось зарегистрировать %1: ошибка Windows %2",
+    "en": "Could not register %1: Windows error %2"
+  },
+  {
+    "ru": "Не удалось дождаться горячих клавиш Windows: код %1",
+    "en": "Could not wait for Windows hotkeys: code %1"
+  },
+  {
+    "ru": "Не удалось включить среднюю кнопку мыши (код Windows %1)",
+    "en": "Could not enable the middle mouse button (Windows code %1)"
+  },
+  {
+    "ru": "Windows вернула неполный набор горячих клавиш",
+    "en": "Windows returned an incomplete set of hotkeys"
+  },
+  {
+    "ru": "Не удалось проверить окно игры.",
+    "en": "Could not verify the game window."
+  },
+  {
+    "ru": "Откройте одно окно WARDOGS и используйте клавишу захвата. Или выберите область вручную.",
+    "en": "Open a single WARDOGS window and use the capture hotkey. Or select the area manually."
+  },
+  {
+    "ru": "Окно WARDOGS свёрнуто. Откройте игру перед захватом.",
+    "en": "The WARDOGS window is minimized. Open the game before capturing."
+  },
+  {
+    "ru": "Не удалось определить размер окна WARDOGS.",
+    "en": "Could not determine the WARDOGS window size."
+  },
+  {
+    "ru": "Не удалось определить положение окна WARDOGS.",
+    "en": "Could not determine the WARDOGS window position."
+  },
+  {
+    "ru": "Чат выходит за границы одного монитора. Переместите окно игры или выберите одну строку вручную.",
+    "en": "The chat spans more than one monitor. Move the game window or select a single line manually."
+  },
+  {
+    "ru": "Средняя кнопка считывает карту только в активном окне WARDOGS.",
+    "en": "The middle mouse button reads the map only in the active WARDOGS window."
+  },
+  {
+    "ru": "Не удалось определить границы карты WARDOGS.",
+    "en": "Could not determine the WARDOGS map bounds."
+  },
+  {
+    "ru": "Монитор карты недоступен.",
+    "en": "The map monitor is unavailable."
+  },
+  {
+    "ru": "Подпись карты выходит за границы одного монитора.",
+    "en": "The map label spans more than one monitor."
+  },
+  {
+    "ru": "Границы подписи карты изменились.",
+    "en": "The map label bounds have changed."
+  },
+  {
+    "ru": "Буфер обмена недоступен. Повторите копирование.",
+    "en": "The clipboard is unavailable. Try copying again."
+  },
+  {
+    "ru": "Не удалось сохранить расчёт в буфере обмена. Повторите копирование.",
+    "en": "Could not save the calculation to the clipboard. Try copying again."
+  },
+  {
+    "ru": "Расчёт не записан в буфер обмена. Повторите копирование.",
+    "en": "The calculation was not copied to the clipboard. Try copying again."
+  },
+  {
+    "ru": "Для выбранной карты не загружены проверенные данные высот",
+    "en": "Verified terrain height data is not loaded for the selected map"
+  },
+  {
+    "ru": "Орудие находится за пределами высотной карты",
+    "en": "The gun is outside the height map"
+  },
+  {
+    "ru": "Цель находится за пределами высотной карты",
+    "en": "The target is outside the height map"
+  },
+  {
+    "ru": "Для выбранной карты нет описания высот",
+    "en": "No terrain height description is available for the selected map"
+  },
+  {
+    "ru": "Цель изменилась. Попадание не относится к текущему расчёту.",
+    "en": "The target has changed. The impact does not belong to the current calculation."
+  },
+  {
+    "ru": "Траектория изменилась. Попадание не относится к текущей наводке.",
+    "en": "The trajectory has changed. The impact does not belong to the current aim."
+  },
+  {
+    "ru": "Сначала задайте координаты орудия.",
+    "en": "Set the gun coordinates first."
+  },
+  {
+    "ru": "Перед автозахватом перейдите в WARDOGS и нажмите клавишу захвата. Другое окно закрывает игру.",
+    "en": "Switch to WARDOGS before automatic capture and press the capture hotkey. Another window is covering the game."
+  },
+  {
+    "ru": "Размер или положение окна игры изменились. Повторите захват орудия.",
+    "en": "The game window size or position has changed. Capture the gun position again."
+  },
+  {
+    "ru": "Курсор или окно изменились. Повторите захват этой точки.",
+    "en": "The cursor or window has changed. Capture this point again."
+  },
+  {
+    "ru": "Курсор или границы игры изменились. Повторите захват этой точки.",
+    "en": "The cursor or game bounds have changed. Capture this point again."
+  },
+  {
+    "ru": "Подведите курсор к точке попадания на карте и повторите клавишу чтения попадания.",
+    "en": "Move the cursor to the impact point on the map and press the impact capture hotkey again."
+  },
+  {
+    "ru": "Подведите курсор к отметке на карте и нажмите среднюю кнопку ещё раз.",
+    "en": "Move the cursor to the mark on the map and press the middle mouse button again."
+  },
+  {
+    "ru": "Откройте M → ПКМ → Отметить координаты и повторите захват орудия.",
+    "en": "Open M → Right click → Mark coordinates and capture the gun position again."
+  }
+]

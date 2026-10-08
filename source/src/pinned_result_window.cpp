@@ -1,0 +1,931 @@
+#include "pinned_result_window.hpp"
+#include "localization.hpp"
+
+#include "app_icon.hpp"
+#include "vehicle_solution_widget.hpp"
+#include "wardogs/hotkeys.hpp"
+
+#include <Windows.h>
+
+#include <QEvent>
+#include <QContextMenuEvent>
+#include <QCursor>
+#include <QFrame>
+#include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QHoverEvent>
+#include <QIcon>
+#include <QImage>
+#include <QLabel>
+#include <QKeySequenceEdit>
+#include <QMouseEvent>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QPushButton>
+#include <QResizeEvent>
+#include <QScreen>
+#include <QShowEvent>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QStyle>
+#include <QStyleOptionSlider>
+#include <QToolButton>
+#include <QTimer>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <exception>
+#include <utility>
+
+namespace {
+
+constexpr int resize_margin = 8;
+
+QSize minimum_size(bool vehicle) { return vehicle ? QSize{350, 96} : QSize{320, 96}; }
+QSize default_size(bool vehicle) { return vehicle ? QSize{420, 116} : QSize{430, 112}; }
+
+class JumpSlider final : public QSlider {
+public:
+    using QSlider::QSlider;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() != Qt::LeftButton) {
+            QSlider::mousePressEvent(event);
+            return;
+        }
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        const QRect handle = style()->subControlRect(
+            QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        if (handle.contains(event->position().toPoint())) {
+            QSlider::mousePressEvent(event);
+            return;
+        }
+        jump_dragging_ = true;
+        set_value_at(event->position().toPoint());
+        event->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (jump_dragging_ && (event->buttons() & Qt::LeftButton)) {
+            set_value_at(event->position().toPoint());
+            event->accept();
+            return;
+        }
+        QSlider::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (jump_dragging_ && event->button() == Qt::LeftButton) {
+            set_value_at(event->position().toPoint());
+            jump_dragging_ = false;
+            event->accept();
+            return;
+        }
+        QSlider::mouseReleaseEvent(event);
+    }
+
+private:
+    void set_value_at(QPoint position) {
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        const QRect groove = style()->subControlRect(
+            QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
+        const QRect handle = style()->subControlRect(
+            QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        const int slider_minimum = groove.left();
+        const int slider_maximum = groove.right() - handle.width() + 1;
+        const int pointer = position.x() - handle.width() / 2;
+        setSliderPosition(QStyle::sliderValueFromPosition(
+            minimum(), maximum(), pointer - slider_minimum,
+            std::max(1, slider_maximum - slider_minimum), option.upsideDown));
+    }
+
+    bool jump_dragging_{};
+};
+
+class RoundedPopup final : public QWidget {
+public:
+    explicit RoundedPopup(QWidget* parent)
+        : QWidget(parent, Qt::Popup | Qt::FramelessWindowHint |
+                              Qt::NoDropShadowWindowHint) {
+        setAttribute(Qt::WA_TranslucentBackground);
+    }
+
+    void set_effective_opacity(qreal opacity) {
+        effective_opacity_ = opacity;
+        setWindowOpacity(effective_opacity_);
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        (void)event;
+        QPainter painter(this);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(rect(), Qt::transparent);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(QStringLiteral("#111b28")));
+        painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                                10.0, 10.0);
+    }
+
+    void showEvent(QShowEvent* event) override {
+        QWidget::showEvent(event);
+        setWindowOpacity(effective_opacity_);
+        QTimer::singleShot(0, this, [this] {
+            if (isVisible()) setWindowOpacity(effective_opacity_);
+        });
+    }
+
+private:
+    qreal effective_opacity_{1.0};
+};
+
+void set_popup_opacity(QWidget* popup, qreal opacity) {
+    static_cast<RoundedPopup*>(popup)->set_effective_opacity(opacity);
+}
+
+QIcon lock_icon(bool locked) {
+    QImage image(24, 24, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QColor color(locked ? QStringLiteral("#63d8c5")
+                              : QStringLiteral("#94a3b8"));
+    painter.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap,
+                        Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(5.5, 10.0, 13.0, 10.0), 2.0, 2.0);
+    QPainterPath shackle;
+    if (locked) {
+        shackle.moveTo(8.0, 10.0);
+        shackle.lineTo(8.0, 7.5);
+        shackle.cubicTo(8.0, 2.8, 16.0, 2.8, 16.0, 7.5);
+        shackle.lineTo(16.0, 10.0);
+    } else {
+        shackle.moveTo(10.0, 10.0);
+        shackle.lineTo(10.0, 7.5);
+        shackle.cubicTo(10.0, 3.0, 17.0, 3.0, 17.0, 7.5);
+    }
+    painter.drawPath(shackle);
+    painter.setBrush(color);
+    painter.drawEllipse(QPointF(12.0, 14.4), 1.2, 1.2);
+    painter.drawLine(QPointF(12.0, 15.4), QPointF(12.0, 17.3));
+    return QIcon(QPixmap::fromImage(image));
+}
+
+QIcon reticle_icon(bool enabled) {
+    QImage image(24, 24, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QColor color(enabled ? QStringLiteral("#63d8c5")
+                               : QStringLiteral("#94a3b8"));
+    painter.setPen(QPen(color, 1.7, Qt::SolidLine, Qt::RoundCap));
+    painter.drawEllipse(QPointF(12, 12), 5.5, 5.5);
+    painter.drawEllipse(QPointF(12, 12), 1.4, 1.4);
+    painter.drawLine(QPointF(12, 2.5), QPointF(12, 7));
+    painter.drawLine(QPointF(12, 17), QPointF(12, 21.5));
+    painter.drawLine(QPointF(2.5, 12), QPointF(7, 12));
+    painter.drawLine(QPointF(17, 12), QPointF(21.5, 12));
+    return QIcon(QPixmap::fromImage(image));
+}
+
+}  // namespace
+
+PinnedResultWindow::PinnedResultWindow(std::function<void()> exit_callback,
+                                       QWidget* parent)
+    : PinnedResultWindow(std::move(exit_callback), Preferences{}, {}, parent) {}
+
+PinnedResultWindow::PinnedResultWindow(
+    std::function<void()> exit_callback, Preferences preferences,
+    PreferencesChanged preferences_changed, QWidget* parent)
+    : QWidget(parent, Qt::Window | Qt::FramelessWindowHint |
+                          Qt::WindowStaysOnTopHint |
+                          Qt::WindowDoesNotAcceptFocus),
+      exit_callback_(std::move(exit_callback)),
+      preferences_changed_(std::move(preferences_changed)),
+      preferences_(preferences) {
+    preferences_.opacity_percent = std::clamp(
+        preferences_.opacity_percent, Preferences::minimum_opacity_percent,
+        Preferences::maximum_opacity_percent);
+    setObjectName(QStringLiteral("pinnedWindow"));
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_ShowWithoutActivating);
+    setAttribute(Qt::WA_Hover);
+    setMouseTracking(true);
+    setCursor(Qt::ArrowCursor);
+    setWindowOpacity(preferences_.opacity_percent / 100.0);
+    setWindowTitle(wardogs::i18n::text(QStringLiteral("Решение · WARDOGS")));
+    setWindowIcon(wardogs_application_icon());
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    frame_ = new QFrame;
+    frame_->setObjectName(QStringLiteral("pinnedFrame"));
+    frame_->setProperty("error", false);
+    frame_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* layout = new QVBoxLayout(frame_);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+
+    mortar_panel_ = new QWidget;
+    auto* mortar_layout = new QHBoxLayout(mortar_panel_);
+    mortar_layout->setContentsMargins(0, 0, 0, 0);
+    mortar_layout->setSpacing(8);
+    mortar_layout->addWidget(
+        result_card(QStringLiteral("#f0b45d"), wardogs::i18n::text(QStringLiteral("ДАЛЬНОСТЬ")), distance_, &mortar_mil_), 1);
+    mortar_layout->addWidget(result_card(QStringLiteral("#63d8c5"), wardogs::i18n::text(QStringLiteral("АЗИМУТ")), bearing_), 1);
+    mortar_mil_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Наводка L81 по игровой шкале MIL")));
+    mortar_mil_->setToolTip(wardogs::i18n::text(QStringLiteral("MIL — игровая шкала наведения L81, а не расстояние в милях. Значение берётся из таблицы дальности.")));
+    layout->addWidget(mortar_panel_);
+
+    vehicle_panel_ = new QWidget;
+    auto* vehicle_layout = new QVBoxLayout(vehicle_panel_);
+    vehicle_layout->setContentsMargins(0, 0, 0, 0);
+    vehicle_layout->setSpacing(6);
+    low_ = new VehicleSolutionWidget(wardogs::Arc::low, true);
+    high_ = new VehicleSolutionWidget(wardogs::Arc::high, true);
+    vehicle_layout->addWidget(low_);
+    vehicle_layout->addWidget(high_);
+    layout->addWidget(vehicle_panel_);
+    vehicle_panel_->hide();
+    workflow_status_ = new QLabel;
+    workflow_status_->setObjectName(QStringLiteral("pinnedWorkflowStatus"));
+    workflow_status_->setTextFormat(Qt::PlainText);
+    workflow_status_->setWordWrap(true);
+    workflow_status_->setFixedHeight(32);
+    workflow_status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    workflow_status_->setStyleSheet(QStringLiteral("color:#c2cfdf;font-size:12px;"));
+    workflow_status_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Состояние считывания координат")));
+    layout->addWidget(workflow_status_);
+    workflow_status_->hide();
+    outer->addWidget(frame_);
+    setMinimumSize(minimum_size(false));
+    resize(default_size(false));
+    build_context_menu();
+    apply_font_scale();
+    apply_mouse_transparency();
+    wardogs::i18n::watch(this);
+}
+
+void PinnedResultWindow::build_context_menu() {
+    context_menu_ = new RoundedPopup(this);
+    context_menu_->setObjectName(QStringLiteral("pinnedContextMenu"));
+    set_popup_opacity(context_menu_, preferences_.opacity_percent / 100.0);
+
+    auto* layout = new QVBoxLayout(context_menu_);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(8);
+    auto* card_caption = new QLabel(wardogs::i18n::text(QStringLiteral("Карточка · прозрачность")));
+    card_caption->setObjectName(QStringLiteral("muted"));
+    layout->addWidget(card_caption);
+
+    auto* controls = new QWidget(context_menu_);
+    auto* controls_layout = new QHBoxLayout(controls);
+    controls_layout->setContentsMargins(0, 0, 0, 0);
+    controls_layout->setSpacing(8);
+
+    lock_button_ = new QToolButton(context_menu_);
+    lock_button_->setObjectName(QStringLiteral("pinnedLockButton"));
+    lock_button_->setProperty("pinnedMenuButton", true);
+    lock_button_->setCheckable(true);
+    lock_button_->setAutoRaise(false);
+    lock_button_->setFixedSize(42, 40);
+    lock_button_->setIconSize(QSize(22, 22));
+    controls_layout->addWidget(lock_button_);
+
+    opacity_slider_ = new JumpSlider(Qt::Horizontal, context_menu_);
+    opacity_slider_->setObjectName(QStringLiteral("pinnedOpacitySlider"));
+    opacity_slider_->setProperty("pinnedMenuSlider", true);
+    opacity_slider_->setRange(Preferences::minimum_opacity_percent,
+                              Preferences::maximum_opacity_percent);
+    opacity_slider_->setValue(preferences_.opacity_percent);
+    opacity_slider_->setMinimumWidth(150);
+    opacity_slider_->setToolTip(
+        wardogs::i18n::text(QStringLiteral("Прозрачность карточки: %1%")).arg(preferences_.opacity_percent));
+    opacity_slider_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Прозрачность карточки результата")));
+    controls_layout->addWidget(opacity_slider_);
+    layout->addWidget(controls);
+
+    auto* reticle_caption = new QLabel(wardogs::i18n::text(QStringLiteral("Прицел · прозрачность")));
+    reticle_caption->setObjectName(QStringLiteral("muted"));
+    layout->addWidget(reticle_caption);
+
+    auto* ghost_row = new QWidget(context_menu_);
+    ghost_row->setObjectName(QStringLiteral("pinnedGhostRow"));
+    auto* ghost_layout = new QHBoxLayout(ghost_row);
+    ghost_layout->setContentsMargins(0, 0, 0, 0);
+    ghost_layout->setSpacing(8);
+    ghost_button_ = new QToolButton(context_menu_);
+    ghost_button_->setObjectName(QStringLiteral("ghostReticleToggle"));
+    ghost_button_->setProperty("pinnedMenuButton", true);
+    ghost_button_->setCheckable(true);
+    ghost_button_->setAutoRaise(false);
+    ghost_button_->setFixedSize(42, 40);
+    ghost_button_->setIconSize(QSize(22, 22));
+    ghost_layout->addWidget(ghost_button_);
+    ghost_opacity_slider_ = new JumpSlider(Qt::Horizontal, context_menu_);
+    ghost_opacity_slider_->setObjectName(
+        QStringLiteral("ghostReticleOpacitySlider"));
+    ghost_opacity_slider_->setProperty("pinnedMenuSlider", true);
+    ghost_opacity_slider_->setRange(20, 100);
+    ghost_opacity_slider_->setValue(ghost_opacity_percent_);
+    ghost_opacity_slider_->setMinimumWidth(150);
+    ghost_opacity_slider_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Прозрачность прицела")));
+    ghost_layout->addWidget(ghost_opacity_slider_);
+    layout->addWidget(ghost_row);
+
+    auto* hotkey_row = new QWidget(context_menu_);
+    hotkey_row->setObjectName(QStringLiteral("pinnedUnlockRow"));
+    auto* hotkey_layout = new QVBoxLayout(hotkey_row);
+    hotkey_layout->setContentsMargins(0, 1, 0, 0);
+    hotkey_layout->setSpacing(4);
+    auto* hotkey_label = new QLabel(wardogs::i18n::text(QStringLiteral("Разблокировать")), hotkey_row);
+    hotkey_label->setObjectName(QStringLiteral("pinnedUnlockLabel"));
+    hotkey_layout->addWidget(hotkey_label);
+    unlock_hotkey_ = new QKeySequenceEdit(
+        QKeySequence(QString::fromStdWString(preferences_.unlock_hotkey)),
+        hotkey_row);
+    unlock_hotkey_->setObjectName(QStringLiteral("pinnedUnlockHotkey"));
+    unlock_hotkey_->setMaximumSequenceLength(1);
+    unlock_hotkey_->setMinimumWidth(140);
+    unlock_hotkey_->setMaximumWidth(280);
+    unlock_hotkey_->setToolTip(wardogs::i18n::text(QStringLiteral("Сочетание работает даже при заблокированной карточке")));
+    unlock_hotkey_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Горячая клавиша разблокировки")));
+    hotkey_layout->addWidget(unlock_hotkey_, 1);
+    layout->addWidget(hotkey_row);
+    auto* interaction_hint = new QLabel(wardogs::i18n::text(QStringLiteral(
+        "Перетаскивайте карточку и её края.\nБлокировка пропускает нажатия в игру.")));
+    interaction_hint->setObjectName(QStringLiteral("muted"));
+    interaction_hint->setWordWrap(true);
+    interaction_hint->setMaximumWidth(280);
+    layout->addWidget(interaction_hint);
+    auto* return_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Вернуться в калькулятор")));
+    return_button->setObjectName(QStringLiteral("pinnedReturnButton"));
+    connect(return_button, &QPushButton::clicked, this, [this] {
+        context_menu_->hide();
+        if (exit_callback_) exit_callback_();
+    });
+    layout->addWidget(return_button);
+
+    connect(lock_button_, &QToolButton::toggled, this,
+            [this](bool locked) { set_locked(locked); });
+    connect(opacity_slider_, &QSlider::valueChanged, this,
+            [this](int value) { set_opacity_percent(value); });
+    connect(ghost_button_, &QToolButton::toggled,
+            this, [this](bool enabled) {
+                ghost_enabled_ = enabled;
+                ghost_button_->setIcon(reticle_icon(enabled));
+                ghost_button_->setToolTip(enabled
+                    ? wardogs::i18n::text(QStringLiteral("Выключить прицел"))
+                    : wardogs::i18n::text(QStringLiteral("Показать прицел")));
+                if (ghost_enabled_changed_) ghost_enabled_changed_(enabled);
+            });
+    connect(ghost_opacity_slider_, &QSlider::valueChanged,
+            this, [this](int value) {
+                ghost_opacity_percent_ = std::clamp(value, 20, 100);
+                ghost_opacity_slider_->setToolTip(
+                    wardogs::i18n::text(QStringLiteral("Прозрачность прицела: %1%"))
+                        .arg(ghost_opacity_percent_));
+                if (ghost_opacity_changed_)
+                    ghost_opacity_changed_(ghost_opacity_percent_);
+            });
+    connect(unlock_hotkey_, &QKeySequenceEdit::editingFinished, this, [this] {
+        try {
+            const auto parsed = wardogs::parse_hotkey(
+                unlock_hotkey_->keySequence()
+                    .toString(QKeySequence::PortableText)
+                    .toStdWString());
+            auto candidate = preferences_;
+            candidate.unlock_hotkey = parsed.display;
+            if (!commit_preferences(std::move(candidate))) {
+                update_unlock_hotkey_control();
+                unlock_hotkey_->setToolTip(
+                    wardogs::i18n::text(QStringLiteral("Сочетание занято или совпадает с другим действием")));
+                return;
+            }
+            update_unlock_hotkey_control();
+            unlock_hotkey_->setToolTip(
+                wardogs::i18n::text(QStringLiteral("Сочетание работает даже при заблокированной карточке")));
+        } catch (const std::exception&) {
+            update_unlock_hotkey_control();
+            unlock_hotkey_->setToolTip(wardogs::i18n::text(QStringLiteral("Введите одно действительное сочетание клавиш")));
+        }
+    });
+    update_lock_control();
+    update_unlock_hotkey_control();
+    set_ghost_enabled(false);
+    set_ghost_opacity_percent(ghost_opacity_percent_);
+    wardogs::i18n::watch(context_menu_);
+}
+
+void PinnedResultWindow::configure_ghost_controls(
+    bool enabled, int opacity_percent,
+    GhostEnabledChanged enabled_changed,
+    GhostOpacityChanged opacity_changed) {
+    ghost_enabled_changed_ = std::move(enabled_changed);
+    ghost_opacity_changed_ = std::move(opacity_changed);
+    set_ghost_enabled(enabled);
+    set_ghost_opacity_percent(opacity_percent);
+}
+
+void PinnedResultWindow::set_ghost_enabled(bool enabled) {
+    ghost_enabled_ = enabled;
+    if (!ghost_button_) return;
+    const QSignalBlocker blocker(ghost_button_);
+    ghost_button_->setChecked(enabled);
+    ghost_button_->setIcon(reticle_icon(enabled));
+    ghost_button_->setToolTip(enabled
+        ? wardogs::i18n::text(QStringLiteral("Выключить прицел"))
+        : wardogs::i18n::text(QStringLiteral("Показать прицел")));
+    ghost_button_->setAccessibleName(ghost_button_->toolTip());
+}
+
+void PinnedResultWindow::set_ghost_opacity_percent(int opacity_percent) {
+    ghost_opacity_percent_ = std::clamp(opacity_percent, 20, 100);
+    if (!ghost_opacity_slider_) return;
+    const QSignalBlocker blocker(ghost_opacity_slider_);
+    ghost_opacity_slider_->setValue(ghost_opacity_percent_);
+    ghost_opacity_slider_->setToolTip(
+        wardogs::i18n::text(QStringLiteral("Прозрачность прицела: %1%"))
+            .arg(ghost_opacity_percent_));
+}
+
+void PinnedResultWindow::update_lock_control() {
+    if (!lock_button_) return;
+    const QSignalBlocker blocker(lock_button_);
+    lock_button_->setChecked(preferences_.locked);
+    lock_button_->setIcon(lock_icon(preferences_.locked));
+    lock_button_->setToolTip(preferences_.locked
+                                 ? wardogs::i18n::text(QStringLiteral("Разблокировать карточку"))
+                                 : wardogs::i18n::text(QStringLiteral("Заблокировать карточку")));
+    lock_button_->setAccessibleName(lock_button_->toolTip());
+    setToolTip(preferences_.locked
+        ? wardogs::i18n::text(QStringLiteral("Карточка заблокирована. Разблокировка: %1"))
+              .arg(QString::fromStdWString(preferences_.unlock_hotkey))
+        : wardogs::i18n::text(QStringLiteral("Тяните карточку для перемещения, края — для размера. "
+                         "Правая кнопка — настройки, двойной щелчок — возврат.")));
+}
+
+void PinnedResultWindow::update_unlock_hotkey_control() {
+    if (!unlock_hotkey_) return;
+    const QSignalBlocker blocker(unlock_hotkey_);
+    unlock_hotkey_->setKeySequence(
+        QKeySequence(QString::fromStdWString(preferences_.unlock_hotkey)));
+}
+
+void PinnedResultWindow::configure_unlock_hotkey(const std::wstring& hotkey) {
+    preferences_.unlock_hotkey = wardogs::parse_hotkey(hotkey).display;
+    update_unlock_hotkey_control();
+    update_lock_control();
+}
+
+bool PinnedResultWindow::commit_preferences(Preferences preferences) {
+    if (preferences_changed_ && !preferences_changed_(preferences)) return false;
+    preferences_ = std::move(preferences);
+    return true;
+}
+
+void PinnedResultWindow::set_locked(bool locked) {
+    if (preferences_.locked == locked) return;
+    auto candidate = preferences_;
+    candidate.locked = locked;
+    if (!commit_preferences(std::move(candidate))) {
+        update_lock_control();
+        return;
+    }
+    dragging_ = false;
+    resize_edges_.clear();
+    setCursor(Qt::ArrowCursor);
+    update_lock_control();
+    if (locked && context_menu_) context_menu_->hide();
+    apply_mouse_transparency();
+}
+
+void PinnedResultWindow::set_opacity_percent(int opacity_percent) {
+    const int clamped = std::clamp(
+        opacity_percent, Preferences::minimum_opacity_percent,
+        Preferences::maximum_opacity_percent);
+    if (preferences_.opacity_percent == clamped) {
+        if (opacity_slider_)
+            opacity_slider_->setToolTip(
+                wardogs::i18n::text(QStringLiteral("Прозрачность карточки: %1%")).arg(clamped));
+        return;
+    }
+    auto candidate = preferences_;
+    candidate.opacity_percent = clamped;
+    if (!commit_preferences(std::move(candidate))) return;
+    setWindowOpacity(clamped / 100.0);
+    if (context_menu_) set_popup_opacity(context_menu_, clamped / 100.0);
+    if (opacity_slider_) {
+        const QSignalBlocker blocker(opacity_slider_);
+        opacity_slider_->setValue(clamped);
+        opacity_slider_->setToolTip(
+            wardogs::i18n::text(QStringLiteral("Прозрачность карточки: %1%")).arg(clamped));
+    }
+}
+
+void PinnedResultWindow::apply_mouse_transparency() {
+    const bool was_visible = isVisible();
+    setAttribute(Qt::WA_TransparentForMouseEvents, preferences_.locked);
+    const bool has_input_transparency =
+        windowFlags().testFlag(Qt::WindowTransparentForInput);
+    if (has_input_transparency != preferences_.locked) {
+        const QRect previous_geometry = geometry();
+        auto flags = windowFlags();
+        if (preferences_.locked)
+            flags |= Qt::WindowTransparentForInput;
+        else
+            flags &= ~Qt::WindowTransparentForInput;
+        setWindowFlags(flags);
+        setGeometry(previous_geometry);
+    }
+    const auto handle = reinterpret_cast<HWND>(winId());
+    auto extended_style = GetWindowLongPtrW(handle, GWL_EXSTYLE);
+    extended_style |= WS_EX_LAYERED | WS_EX_NOACTIVATE;
+    extended_style |= WS_EX_APPWINDOW;
+    extended_style &= ~static_cast<LONG_PTR>(WS_EX_TOOLWINDOW);
+    if (preferences_.locked)
+        extended_style |= WS_EX_TRANSPARENT;
+    else
+        extended_style &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+    SetWindowLongPtrW(handle, GWL_EXSTYLE, extended_style);
+    SetWindowPos(handle, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                     SWP_FRAMECHANGED);
+    if (was_visible && !isVisible()) {
+        show();
+        raise();
+    }
+}
+
+QWidget* PinnedResultWindow::result_card(const QString& color, const QString& caption,
+                                         QLabel*& value,
+                                         QLabel** secondary) {
+    auto* card = new QFrame;
+    card->setObjectName(QStringLiteral("resultCard"));
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(8, 5, 8, 6);
+    layout->setSpacing(0);
+    auto* heading = new QLabel(caption);
+    heading->setObjectName(QStringLiteral("pinnedMetricCaption"));
+    heading->setAlignment(Qt::AlignCenter);
+    heading->setStyleSheet(QStringLiteral("color:#8da1b9;font-size:10px;font-weight:600;"));
+    layout->addWidget(heading);
+    value = new QLabel(QStringLiteral("—"));
+    value->setAlignment(Qt::AlignCenter);
+    value->setStyleSheet(QStringLiteral(
+        "color:%1;font-family:'Bahnschrift';font-size:30px;font-weight:700;")
+                             .arg(color));
+    layout->addWidget(value);
+    if (secondary) {
+        *secondary = new QLabel(QStringLiteral("—"));
+        (*secondary)->setObjectName(QStringLiteral("pinnedMortarMil"));
+        (*secondary)->setAlignment(Qt::AlignCenter);
+        (*secondary)->setStyleSheet(QStringLiteral(
+            "color:#e8eef7;font-family:'Bahnschrift';font-size:18px;"
+            "font-weight:700;"));
+        layout->addWidget(*secondary);
+    }
+    return card;
+}
+
+bool PinnedResultWindow::event(QEvent* event) {
+    if (event->type() == QEvent::LanguageChange) {
+        update_lock_control();
+        set_ghost_enabled(ghost_enabled_);
+        set_ghost_opacity_percent(ghost_opacity_percent_);
+        if (opacity_slider_)
+            opacity_slider_->setToolTip(
+                wardogs::i18n::text(QStringLiteral("Прозрачность карточки: %1%"))
+                    .arg(preferences_.opacity_percent));
+        update_workflow_status_layout(workflow_status_extra());
+        apply_font_scale();
+    }
+    if (event->type() == QEvent::HoverMove && !dragging_ && resize_edges_.empty()) {
+        const auto* hover = static_cast<QHoverEvent*>(event);
+        setCursor(preferences_.locked
+                      ? Qt::ArrowCursor
+                      : cursor_for_edges(
+                            resize_edges_at(hover->position().toPoint())));
+    }
+    return QWidget::event(event);
+}
+
+bool PinnedResultWindow::nativeEvent(const QByteArray& event_type, void* message,
+                                     qintptr* result) {
+    auto* native_message = static_cast<MSG*>(message);
+    if (native_message && native_message->message == WM_NCHITTEST &&
+        preferences_.locked) {
+        *result = HTTRANSPARENT;
+        return true;
+    }
+    if (native_message && native_message->message == WM_SETCURSOR) {
+        LPCWSTR cursor_id = IDC_ARROW;
+        if (!preferences_.locked) {
+            const auto edges = resize_edges_at(mapFromGlobal(QCursor::pos()));
+            if (edges == Edges{"left", "top"} ||
+                edges == Edges{"bottom", "right"})
+                cursor_id = IDC_SIZENWSE;
+            else if (edges == Edges{"right", "top"} ||
+                     edges == Edges{"bottom", "left"})
+                cursor_id = IDC_SIZENESW;
+            else if (edges.contains("left") || edges.contains("right"))
+                cursor_id = IDC_SIZEWE;
+            else if (edges.contains("top") || edges.contains("bottom"))
+                cursor_id = IDC_SIZENS;
+        }
+        ::SetCursor(::LoadCursorW(nullptr, cursor_id));
+        *result = TRUE;
+        return true;
+    }
+    return QWidget::nativeEvent(event_type, message, result);
+}
+
+void PinnedResultWindow::set_mode(bool vehicle_mode) {
+    mortar_panel_->setVisible(!vehicle_mode);
+    vehicle_panel_->setVisible(vehicle_mode);
+    if (vehicle_mode != vehicle_mode_) {
+        mode_sizes_[vehicle_mode_] = size();
+        vehicle_mode_ = vehicle_mode;
+        setMinimumSize(minimum_size(vehicle_mode_) + QSize(0, workflow_status_extra()));
+        resize(mode_sizes_[vehicle_mode_].expandedTo(minimumSize()));
+    }
+    apply_font_scale();
+}
+
+void PinnedResultWindow::set_values(const QString& distance,
+                                    const QString& bearing,
+                                    const QString& mortar_mil) {
+    distance_->setText(wardogs::i18n::text(distance));
+    bearing_->setText(wardogs::i18n::text(bearing));
+    mortar_mil_->setText(mortar_mil.isEmpty() ? QStringLiteral("—")
+                                               : wardogs::i18n::text(QStringLiteral("Наводка: %1"))
+                                                     .arg(mortar_mil));
+}
+
+void PinnedResultWindow::set_vehicle_values(const VehicleSolutionWidget& low,
+                                            const VehicleSolutionWidget& high) {
+    low_->copy_from(low);
+    high_->copy_from(high);
+}
+
+void PinnedResultWindow::set_selected_arc(std::optional<wardogs::Arc> arc) {
+    low_->set_selected(arc == wardogs::Arc::low);
+    high_->set_selected(arc == wardogs::Arc::high);
+}
+
+void PinnedResultWindow::set_error(bool error) {
+    frame_->setProperty("error", error);
+    frame_->style()->unpolish(frame_);
+    frame_->style()->polish(frame_);
+    frame_->update();
+}
+
+int PinnedResultWindow::workflow_status_extra() const {
+    return workflow_status_ && !workflow_status_->isHidden() ? workflow_status_->height() + 6 : 0;
+}
+
+void PinnedResultWindow::set_workflow_status(const QString& text) {
+    const int previous_extra = workflow_status_extra();
+    const bool visible = !text.isEmpty();
+    const auto localized = wardogs::i18n::text(text);
+    workflow_status_->setText(localized);
+    workflow_status_->setToolTip(localized);
+    workflow_status_->setAccessibleDescription(localized);
+    workflow_status_->setVisible(visible);
+    update_workflow_status_layout(previous_extra);
+}
+
+void PinnedResultWindow::update_workflow_status_layout(int previous_extra) {
+    if (!workflow_status_ || updating_workflow_status_layout_) return;
+    updating_workflow_status_layout_ = true;
+    const QSize previous_size = size();
+    // Release the old fixed height before measuring: QLabel's heightForWidth
+    // otherwise includes minimumHeight and can grow but never shrink.
+    workflow_status_->setMinimumHeight(0);
+    workflow_status_->setMaximumHeight(QWIDGETSIZE_MAX);
+    const QMargins frame_padding = frame_->contentsMargins();
+    const QMargins layout_padding = frame_->layout()->contentsMargins();
+    const int horizontal_padding = frame_padding.left() + frame_padding.right() +
+        layout_padding.left() + layout_padding.right();
+    const int text_height = workflow_status_->heightForWidth(
+        std::max(1, width() - horizontal_padding));
+    workflow_status_->setFixedHeight(std::max(32, text_height));
+    const int extra = workflow_status_extra();
+    const int difference = extra - previous_extra;
+    if (difference != 0)
+        for (auto& [mode, saved_size] : mode_sizes_) {
+            (void)mode;
+            saved_size.rheight() += difference;
+        }
+    setMinimumSize(minimum_size(vehicle_mode_) + QSize(0, extra));
+    if (difference != 0)
+        resize(QSize(previous_size.width(), previous_size.height() + difference)
+                   .expandedTo(minimumSize()));
+    updating_workflow_status_layout_ = false;
+    apply_font_scale();
+}
+
+PinnedResultWindow::Edges PinnedResultWindow::resize_edges_at(QPoint position) const {
+    Edges result;
+    if (position.x() <= resize_margin)
+        result.insert("left");
+    else if (position.x() >= width() - resize_margin - 1)
+        result.insert("right");
+    if (position.y() <= resize_margin)
+        result.insert("top");
+    else if (position.y() >= height() - resize_margin - 1)
+        result.insert("bottom");
+    return result;
+}
+
+Qt::CursorShape PinnedResultWindow::cursor_for_edges(const Edges& edges) {
+    if (edges == Edges{"left", "top"} || edges == Edges{"bottom", "right"})
+        return Qt::SizeFDiagCursor;
+    if (edges == Edges{"right", "top"} || edges == Edges{"bottom", "left"})
+        return Qt::SizeBDiagCursor;
+    if (edges.contains("left") || edges.contains("right"))
+        return Qt::SizeHorCursor;
+    if (edges.contains("top") || edges.contains("bottom"))
+        return Qt::SizeVerCursor;
+    return Qt::ArrowCursor;
+}
+
+void PinnedResultWindow::resize_from_pointer(QPoint pointer) {
+    const auto delta = pointer - resize_start_global_;
+    auto resized = resize_start_geometry_;
+    if (resize_edges_.contains("left"))
+        resized.setLeft(std::min(resize_start_geometry_.left() + delta.x(),
+                                 resize_start_geometry_.right() - minimumWidth() + 1));
+    if (resize_edges_.contains("right"))
+        resized.setRight(std::max(resize_start_geometry_.right() + delta.x(),
+                                  resize_start_geometry_.left() + minimumWidth() - 1));
+    if (resize_edges_.contains("top"))
+        resized.setTop(std::min(resize_start_geometry_.top() + delta.y(),
+                                resize_start_geometry_.bottom() - minimumHeight() + 1));
+    if (resize_edges_.contains("bottom"))
+        resized.setBottom(std::max(
+            resize_start_geometry_.bottom() + delta.y(),
+            resize_start_geometry_.top() + minimumHeight() - 1));
+    setGeometry(resized);
+}
+
+void PinnedResultWindow::apply_font_scale() {
+    if (applying_font_scale_) return;
+    applying_font_scale_ = true;
+    const auto base = default_size(vehicle_mode_);
+    font_scale_ = std::clamp(
+        std::min(width() / static_cast<double>(base.width()),
+                 (height() - workflow_status_extra()) / static_cast<double>(base.height())),
+        0.78, 2.5);
+    if (vehicle_mode_) {
+        low_->set_compact_scale(font_scale_);
+        high_->set_compact_scale(font_scale_);
+        applying_font_scale_ = false;
+        return;
+    }
+    const int size = std::max(22, qRound(30 * font_scale_));
+    distance_->setStyleSheet(QStringLiteral(
+        "color:#f0b45d;font-family:'Bahnschrift';font-size:%1px;font-weight:700;")
+                                 .arg(size));
+    bearing_->setStyleSheet(QStringLiteral(
+        "color:#63d8c5;font-family:'Bahnschrift';font-size:%1px;font-weight:700;")
+                                .arg(size));
+    const int mil_size = std::max(15, qRound(18 * font_scale_));
+    mortar_mil_->setStyleSheet(QStringLiteral(
+        "color:#e8eef7;font-family:'Bahnschrift';font-size:%1px;"
+        "font-weight:700;")
+                                   .arg(mil_size));
+    applying_font_scale_ = false;
+}
+
+void PinnedResultWindow::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    mode_sizes_[vehicle_mode_] = event->size();
+    update_workflow_status_layout(workflow_status_extra());
+    if (low_ && !applying_font_scale_) apply_font_scale();
+}
+
+void PinnedResultWindow::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    apply_mouse_transparency();
+}
+
+void PinnedResultWindow::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        if (preferences_.locked) {
+            event->accept();
+            return;
+        }
+        const auto edges = resize_edges_at(event->position().toPoint());
+        if (!edges.empty()) {
+            resize_edges_ = edges;
+            resize_start_global_ = event->globalPosition().toPoint();
+            resize_start_geometry_ = geometry();
+            setCursor(cursor_for_edges(edges));
+            event->accept();
+            return;
+        }
+        dragging_ = true;
+        drag_offset_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void PinnedResultWindow::mouseMoveEvent(QMouseEvent* event) {
+    if (preferences_.locked) {
+        setCursor(Qt::ArrowCursor);
+        event->accept();
+        return;
+    }
+    if (!resize_edges_.empty() && (event->buttons() & Qt::LeftButton)) {
+        resize_from_pointer(event->globalPosition().toPoint());
+        event->accept();
+        return;
+    }
+    if (dragging_ && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPosition().toPoint() - drag_offset_);
+        event->accept();
+        return;
+    }
+    setCursor(cursor_for_edges(resize_edges_at(event->position().toPoint())));
+    QWidget::mouseMoveEvent(event);
+}
+
+void PinnedResultWindow::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        if (preferences_.locked) {
+            event->accept();
+            return;
+        }
+        resize_edges_.clear();
+        dragging_ = false;
+        setCursor(cursor_for_edges(resize_edges_at(event->position().toPoint())));
+        event->accept();
+        return;
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void PinnedResultWindow::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        if (preferences_.locked) {
+            event->accept();
+            return;
+        }
+        dragging_ = false;
+        resize_edges_.clear();
+        if (exit_callback_) exit_callback_();
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void PinnedResultWindow::leaveEvent(QEvent* event) {
+    if (!dragging_ && resize_edges_.empty())
+        setCursor(Qt::ArrowCursor);
+    QWidget::leaveEvent(event);
+}
+
+void PinnedResultWindow::contextMenuEvent(QContextMenuEvent* event) {
+    if (!context_menu_) build_context_menu();
+    update_lock_control();
+    const qreal opacity = preferences_.opacity_percent / 100.0;
+    set_popup_opacity(context_menu_, opacity);
+    context_menu_->move(context_menu_position());
+    context_menu_->show();
+    context_menu_->raise();
+    set_popup_opacity(context_menu_, opacity);
+    event->accept();
+}
+
+QPoint PinnedResultWindow::context_menu_position() const {
+    context_menu_->ensurePolished();
+    context_menu_->adjustSize();
+    constexpr int gap = 2;
+    const QSize menu_size = context_menu_->sizeHint().expandedTo(context_menu_->size());
+    QPoint position = mapToGlobal(QPoint(width() + gap, 0));
+    QScreen* screen = QGuiApplication::screenAt(mapToGlobal(rect().center()));
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    if (!screen) return position;
+    const QRect available = screen->availableGeometry();
+    if (position.x() + menu_size.width() > available.right() + 1)
+        position.setX(mapToGlobal(QPoint(-menu_size.width() - gap, 0)).x());
+    const int maximum_x = std::max(
+        available.left(), available.right() - menu_size.width() + 1);
+    const int maximum_y = std::max(
+        available.top(), available.bottom() - menu_size.height() + 1);
+    position.setX(std::clamp(position.x(), available.left(), maximum_x));
+    position.setY(std::clamp(position.y(), available.top(), maximum_y));
+    return position;
+}

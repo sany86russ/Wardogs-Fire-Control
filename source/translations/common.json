@@ -1,0 +1,8 @@
+[
+  {"ru":"Язык интерфейса", "en":"Interface language"},
+  {"ru":"Язык интерфейса · сохраняется автоматически", "en":"Interface language · saved automatically"},
+  {"ru":"Язык изменён для этого сеанса. Сохранить не удалось: ", "en":"Language changed for this session. Could not save: "},
+  {"ru":"%1 м", "en":"%1 m"},
+  {"ru":"%1 мс", "en":"%1 ms"},
+  {"ru":"Расстояние на карте: %1 ед. · 1 ед. = 100 м", "en":"Map distance: %1 units · 1 unit = 100 m"}
+]
