@@ -61,6 +61,8 @@ jobs:
       - name: Package binaries, public source and corresponding Qt source
         run: ./tools/ci-package.ps1 -IncludeSource -IncludeQtSources
       - name: Verify packaged HTTPS updater and real release download
+        env:
+          WARDOGS_CI_GITHUB_TOKEN: ${{ github.token }}
         run: |
           $probeDirectory = Join-Path $env:RUNNER_TEMP 'updater-runtime-probe'
           New-Item -ItemType Directory -Path $probeDirectory | Out-Null
