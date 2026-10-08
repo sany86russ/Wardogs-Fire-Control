@@ -226,7 +226,36 @@ void assert_dark_surface(QWidget* surface, QPalette::ColorRole text_role,
         return luminance(a) < luminance(b);
     });
     const auto background = samples[samples.size() / 2];
-    const auto foreground = surface->palette().color(QPalette::Active, text_role);
+    auto foreground = surface->palette().color(QPalette::Active, text_role);
+    auto rendered_content = image;
+    QString foreground_source = QStringLiteral("item-view text palette and rendered contents");
+    if (page_gutter) {
+        // A viewport does not paint text. QSS can leave its WindowText black
+        // while child labels correctly render light glyphs. Measure an actual
+        // fully visible label instead of attributing the viewport's palette to
+        // text painted by another widget.
+        QLabel* label{};
+        for (auto* candidate : surface->findChildren<QLabel*>()) {
+            const QRect geometry(candidate->mapToGlobal(QPoint{}), candidate->size());
+            if (candidate->isVisible() && !candidate->text().isEmpty() &&
+                candidate->width() > 12 && candidate->height() > 12 && visible_geometry.contains(geometry)) {
+                label = candidate;
+                break;
+            }
+        }
+        require(label != nullptr, "a sampled page contains a fully visible real text label");
+        rendered_content = label->grab().toImage();
+        std::vector<QColor> glyph_pixels;
+        glyph_pixels.reserve(static_cast<std::size_t>(rendered_content.width()) * rendered_content.height());
+        for (int y = 0; y < rendered_content.height(); ++y)
+            for (int column = 0; column < rendered_content.width(); ++column)
+                glyph_pixels.push_back(rendered_content.pixelColor(column, y));
+        require(glyph_pixels.size() >= 20, "the actual text label has enough rendered pixels to measure");
+        std::nth_element(glyph_pixels.begin(), glyph_pixels.begin() + 19, glyph_pixels.end(),
+                         [](const auto& a, const auto& b) { return luminance(a) > luminance(b); });
+        foreground = glyph_pixels[19]; // At least twenty actual label pixels reach this luminance.
+        foreground_source = QStringLiteral("rendered QLabel: ") + label->objectName();
+    }
     const double background_luminance = luminance(background);
     const double contrast = luminance(foreground) - background_luminance;
     check(background_luminance < 80,
@@ -234,13 +263,14 @@ void assert_dark_surface(QWidget* surface, QPalette::ColorRole text_role,
     check(contrast >= 100,
           "the native text colour has clear luminance contrast against the rendered background");
     int contrasting_pixels{};
-    for (int y = 0; y < image.height() && contrasting_pixels < 20; ++y)
-        for (int column = 0; column < image.width() && contrasting_pixels < 20; ++column)
-            if (luminance(image.pixelColor(column, y)) - background_luminance >= 100)
+    for (int y = 0; y < rendered_content.height() && contrasting_pixels < 20; ++y)
+        for (int column = 0; column < rendered_content.width() && contrasting_pixels < 20; ++column)
+            if (luminance(rendered_content.pixelColor(column, y)) - background_luminance >= 100)
                 ++contrasting_pixels;
     check(contrasting_pixels >= 20, "real native surfaces visibly render contrasting foreground content");
     surface_contrast.append(QJsonObject{{"surface", name}, {"background", background.name()},
         {"foreground", foreground.name()}, {"background_luminance", background_luminance},
+        {"foreground_source", foreground_source},
         {"luminance_difference", contrast}, {"contrasting_pixels_at_least", contrasting_pixels}});
 }
 
