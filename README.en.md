@@ -1,3 +1,5 @@
+![WARDOGS Fire Control — project cover](docs/screenshots/AVAen.png)
+
 # WARDOGS Fire Control
 
 **A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.

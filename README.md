@@ -1,3 +1,5 @@
+![WARDOGS Fire Control — обложка проекта](docs/screenshots/AVAru.png)
+
 # WARDOGS Fire Control
 
 **Нативный помощник для миномёта L81 и артиллерии SPH-2 в игре WARDOGS.** Координаты → дальность, азимут и MIL → наводка в игре.
