@@ -60,9 +60,11 @@ public static class WardogsRestartSmokeWindows
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindow(IntPtr window);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    public static int LastPostMessageError { get; private set; }
 
     public static bool OwnsMainWindow(IntPtr window, uint processId)
     {
@@ -90,8 +92,11 @@ public static class WardogsRestartSmokeWindows
 
     public static bool RequestClose(IntPtr window, uint processId)
     {
-        return OwnsMainWindow(window, processId) &&
-            PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero);
+        LastPostMessageError = 0;
+        if (!OwnsMainWindow(window, processId)) return false;
+        bool delivered = PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero);
+        if (!delivered) LastPostMessageError = Marshal.GetLastWin32Error();
+        return delivered;
     }
 }
 '@
@@ -229,10 +234,48 @@ function Copy-SmokeSessionLog {
 function Close-SmokeApplication {
     param([Diagnostics.Process]$Process, [string]$ExpectedPath, [IntPtr]$Window)
     Assert-SmokeProcessPath $Process $ExpectedPath
-    if (-not [WardogsRestartSmokeWindows]::RequestClose($Window, [uint32]$Process.Id) -or -not $Process.WaitForExit(10000)) {
-        throw 'The known portable application did not close gracefully.'
+    # Qt may recreate the native window after the startup probe. Only a freshly
+    # enumerated and ownership-checked HWND may receive the shutdown message.
+    $currentWindow = [WardogsRestartSmokeWindows]::FindMainWindow([uint32]$Process.Id)
+    $attempt = [ordered]@{
+        process_id = $Process.Id; startup_window = $Window.ToInt64(); close_window = $currentWindow.ToInt64()
+        started_utc = [DateTime]::UtcNow.ToString('o'); request_delivered = $false; exited = $false
     }
+    $receipt.close_attempts += $attempt
+    if ($currentWindow -eq [IntPtr]::Zero -or -not [WardogsRestartSmokeWindows]::OwnsMainWindow($currentWindow, [uint32]$Process.Id)) {
+        throw "No current owned WARDOGS main window is available for graceful close, PID $($Process.Id)."
+    }
+    $attempt.request_delivered = [WardogsRestartSmokeWindows]::RequestClose($currentWindow, [uint32]$Process.Id)
+    $attempt.post_message_error = [WardogsRestartSmokeWindows]::LastPostMessageError
+    if (-not $attempt.request_delivered) {
+        throw "WM_CLOSE could not be delivered to the verified WARDOGS window, PID $($Process.Id), Win32 error $($attempt.post_message_error)."
+    }
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $attempt.exited = $Process.WaitForExit(30000)
+    $timer.Stop()
+    $attempt.wait_milliseconds = $timer.ElapsedMilliseconds
+    if (-not $attempt.exited) {
+        $Process.Refresh()
+        $attempt.responding_after_timeout = $Process.Responding
+        throw "WARDOGS received WM_CLOSE but did not exit within 30 seconds, PID $($Process.Id)."
+    }
+    $attempt.exit_code = $Process.ExitCode
     if ($Process.ExitCode -ne 0) { throw "Portable application exited with code $($Process.ExitCode)." }
+}
+
+function Copy-SmokeFailureLog {
+    param([string]$Version, [int]$ProcessId, [string]$DestinationName)
+    $session = 'session.start version=' + [Regex]::Escape($Version) + ' pid=' + $ProcessId + '(?:\s|$)'
+    foreach ($name in @('latest.log', 'latest.previous.log')) {
+        $path = Join-Path $profileRoot ('logs\' + $name)
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $text = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
+        if ($text -match $session) {
+            # Failed runs retain partial logs as diagnostics, never as acceptance proof.
+            Write-SmokeFile (Join-Path $EvidenceDirectory $DestinationName) $text
+            return
+        }
+    }
 }
 
 $receiptPath = Join-Path $EvidenceDirectory 'restart-smoke.json'
@@ -241,6 +284,7 @@ $receipt = [ordered]@{
     new_archive_sha256 = Get-WardogsFileHash $ArchivePath
     previous_archive_sha256 = Get-WardogsFileHash $PreviousArchivePath
     cleanup_process_ids = @()
+    close_attempts = @()
 }
 $oldProcess = $null
 $newProcess = $null
@@ -437,6 +481,12 @@ try {
                 }
             } catch { $receipt.cleanup_error = $_.Exception.Message }
         }
+    }
+    if ($receipt.state -eq 'failed' -and $profileRoot) {
+        try {
+            if ($oldProcess) { Copy-SmokeFailureLog $oldManifest.version $oldProcess.Id 'old-session-failure.log' }
+            if ($newProcess) { Copy-SmokeFailureLog $newManifest.version $newProcess.Id 'new-session-failure.log' }
+        } catch { $receipt.failure_log_copy_error = $_.Exception.Message }
     }
     foreach ($process in @($prepareProcess, $installProcess) + $cleanupApps) { if ($process) { $process.Dispose() } }
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
