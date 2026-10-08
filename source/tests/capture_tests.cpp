@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
 // This is an implementation detail used before any GDI acquisition. Keeping
 // its declaration here avoids expanding the public capture API for tests.
@@ -38,7 +39,12 @@ bool inside(RECT value, RECT client) {
 }
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    const bool geometry_only = argc == 2 && std::string_view(argv[1]) == "--geometry-only";
+    if (argc != 1 && !geometry_only) {
+        std::cerr << "Expected no arguments or --geometry-only\n";
+        return 2;
+    }
     using wardogs::detail::checked_capture_pixel_count;
     check(checked_capture_pixel_count(1, 1) == 1 &&
               checked_capture_pixel_count(4000, 4000) == 16'000'000,
@@ -132,6 +138,45 @@ int main() {
         rejects([&] { wardogs::make_map_coordinate_rects({long_min, long_min, long_max, long_max},
                                                         {0, 0}, scale); },
                 "invalid, empty, overflowed and oversized scaled fields are rejected");
+
+    const auto search_1080 = wardogs::make_map_coordinate_search_rects({0, 0, 1920, 1080}, {700, 500});
+    check(same_rect(search_1080.search, {508, 276, 988, 628}) &&
+              same_rect(search_1080.preferred.x_field, map_1080.x_field) &&
+              same_rect(search_1080.preferred.y_field, map_1080.y_field),
+          "one bounded neighborhood includes unchanged preferred fields and displaced labels");
+    const auto search_1440 = wardogs::make_map_coordinate_search_rects(
+        {0, 0, 2560, 1440}, {1000, 700}, 4.0 / 3.0);
+    check(same_rect(search_1440.search, {744, 401, 1384, 871}) &&
+              inside(search_1440.preferred.x_field, search_1440.search) &&
+              inside(search_1440.preferred.y_field, search_1440.search),
+          "native 1440p neighborhood and both priors use the same physical scale");
+    for (const POINT cursor : {POINT{-2000, -1000}, POINT{-81, -1000},
+                               POINT{-2000, 79}, POINT{-81, 79}, POINT{-1300, -500}}) {
+        const auto search = wardogs::make_map_coordinate_search_rects(negative_client, cursor);
+        check(inside(search.search, negative_client) &&
+                  inside(search.preferred.x_field, search.search) &&
+                  inside(search.preferred.y_field, search.search) &&
+                  cursor.x >= search.search.left && cursor.x < search.search.right &&
+                  cursor.y >= search.search.top && cursor.y < search.search.bottom,
+              "edge and negative-origin neighborhoods retain both priors and never expose another client");
+    }
+    for (const RECT client : {RECT{long_min, long_min, long_min + 1000, long_min + 1000},
+                              RECT{long_max - 1000, long_max - 1000, long_max, long_max}}) {
+        const auto search = wardogs::make_map_coordinate_search_rects(
+            client, {client.right - 1, client.bottom - 1}, 2.0);
+        check(inside(search.search, client) && inside(search.preferred.x_field, search.search) &&
+                  inside(search.preferred.y_field, search.search),
+              "extreme signed positions cannot overflow the neighborhood expansion");
+    }
+    rejects([&] { wardogs::make_map_coordinate_search_rects({long_min, long_min, long_max, long_max}, {0, 0}, 6.0); },
+            "neighborhood has a stricter 4 MP bound than general screenshot capture");
+    rejects([] { wardogs::make_map_coordinate_search_rects({0, 0, 1920, 1080}, {-1, 0}); },
+            "neighborhood rejects a cursor outside the current game client");
+    if (geometry_only) {
+        if (failures) return 1;
+        std::cout << "All capture geometry tests passed; no screen capture was performed\n";
+        return 0;
+    }
 
     // This small capture checks native monitor resolution and real GDI cleanup.
     // Pixel contents are neither saved nor printed, and input is never changed.

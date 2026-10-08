@@ -25,6 +25,14 @@ struct ImageRect {
     int bottom{};
 };
 
+struct MapOcrSearchLayout {
+    ImageRect x_prior{};
+    ImageRect y_prior{};
+    int cursor_x{};
+    int cursor_y{};
+    double scale{1.0};
+};
+
 // Detects plausible green/bright-neutral chat lines, never game coordinates.
 // Refuses noisy scenes with more than eight lines instead of dropping history.
 std::vector<ImageRect> find_chat_text_lines(const Image& image, std::stop_token stop = {});
@@ -50,6 +58,10 @@ struct OcrResult {
     // Both cursor fields explicitly contain their expected X/Y axis label.
     // Bare numbers stay readable for legacy/manual review, never automatic use.
     bool map_axes_labeled{};
+    // Both bounds refer to the same neighborhood screenshot. Ordinary OCR
+    // and the legacy independently captured fields leave them unavailable.
+    std::optional<ImageRect> map_x_bounds;
+    std::optional<ImageRect> map_y_bounds;
 };
 
 struct OcrCoordinateAssessment {
@@ -98,6 +110,11 @@ public:
     // field is inferred from chat or from the other axis on a recognition error.
     OcrResult recognize_map_coordinates(const Image& x_field, const Image& y_field,
                                        std::stop_token stop = {}) const;
+    // Searches the complete bounded neighborhood, retaining every competing
+    // semantic axis. A preferred field cannot hide another valid X/Y row.
+    OcrResult recognize_map_neighborhood(const Image& image,
+                                        const MapOcrSearchLayout& layout,
+                                        std::stop_token stop = {}) const;
     [[nodiscard]] std::size_t character_count() const;
 
 private:

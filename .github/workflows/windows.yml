@@ -51,7 +51,8 @@ jobs:
           python -m pip install --disable-pip-version-check aqtinstall==3.3.0
           if ($LASTEXITCODE -ne 0) { throw 'The Qt installer could not be installed.' }
           $sdkDirectory = Join-Path $env:RUNNER_TEMP 'qt-sdk'
-          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 --outputdir $sdkDirectory
+          $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 --outputdir $sdkDirectory --external $sevenZip
           if ($LASTEXITCODE -ne 0) { throw 'The Qt SDK could not be installed.' }
           "QT_ROOT=$(Join-Path $sdkDirectory '6.8.3/msvc2022_64')" >> $env:GITHUB_ENV
       - name: Build, run all CTest suites and deploy Qt

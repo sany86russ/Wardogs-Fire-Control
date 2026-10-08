@@ -12,7 +12,18 @@ try {
         $launchEnglish = [IO.File]::ReadAllText($launchSettingsPath) -match '(?im)^ui_language=en\s*$'
     }
     $launchDirectory = if ($Portable) { $PSScriptRoot } else {
-        Join-Path $PSScriptRoot 'App'
+        $localLocation = Join-Path $PSScriptRoot 'App.location.txt'
+        if (Test-Path -LiteralPath $localLocation -PathType Leaf) {
+            $configuredDirectory = [IO.File]::ReadAllText($localLocation).Trim()
+            if ($configuredDirectory -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$))' -or
+                    $configuredDirectory.Contains("`n") -or $configuredDirectory.Contains("`r")) {
+                if ($launchEnglish) { throw 'App.location.txt must contain one absolute application directory.' }
+                throw 'App.location.txt должен содержать один абсолютный путь к папке программы.'
+            }
+            $configuredDirectory
+        } else {
+            Join-Path $PSScriptRoot 'App'
+        }
     }
     $launchDirectory = [IO.Path]::GetFullPath($launchDirectory)
     $executable = Join-Path $launchDirectory 'WarDogsDistanceCalculator.exe'

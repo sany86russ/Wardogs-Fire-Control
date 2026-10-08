@@ -16,6 +16,7 @@
 #include "wardogs/core.hpp"
 #include "wardogs/hotkeys.hpp"
 #include "wardogs/logger.hpp"
+#include "wardogs/map_capture_consensus.hpp"
 #include "wardogs/ocr.hpp"
 #include "wardogs/settings.hpp"
 #include "wardogs/terrain_package.hpp"
@@ -426,13 +427,13 @@ struct OcrMessage {
 
 struct CapturedOcrJob {
     wardogs::Image image;
-    std::optional<wardogs::Image> map_y;
+    std::optional<wardogs::MapOcrSearchLayout> map_layout;
     OcrMessage context;
 };
 
 struct MapCapture {
-    wardogs::CaptureRegion x_field;
-    wardogs::CaptureRegion y_field;
+    wardogs::CaptureRegion search;
+    wardogs::MapOcrSearchLayout layout;
     HWND window{};
     RECT client{};
 };
@@ -447,33 +448,35 @@ MapCapture map_capture_regions(wardogs::MiddleMouseEvent event, double scale = 1
         throw std::runtime_error("Не удалось определить границы карты WARDOGS.");
     const RECT physical{origin.x, origin.y, origin.x + client.right, origin.y + client.bottom};
     const POINT cursor{event.x, event.y};
-    const auto fields = wardogs::make_map_coordinate_rects(physical, cursor, scale);
+    const auto fields = wardogs::make_map_coordinate_search_rects(physical, cursor, scale);
     const HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONULL);
     MONITORINFO info{sizeof(info)};
     if (!monitor || !GetMonitorInfoW(monitor, &info))
         throw std::runtime_error("Монитор карты недоступен.");
-    for (const auto& field : {fields.x_field, fields.y_field})
+    for (const auto& field : {fields.search})
         if (field.left < info.rcMonitor.left || field.top < info.rcMonitor.top ||
             field.right > info.rcMonitor.right || field.bottom > info.rcMonitor.bottom)
             throw std::runtime_error("Подпись карты выходит за границы одного монитора.");
-    return {wardogs::make_capture_region(monitor, fields.x_field),
-            wardogs::make_capture_region(monitor, fields.y_field), window, physical};
+    const auto local = [&](RECT field) -> wardogs::ImageRect {
+        return {field.left - fields.search.left, field.top - fields.search.top,
+                field.right - fields.search.left, field.bottom - fields.search.top};
+    };
+    wardogs::MapOcrSearchLayout layout{local(fields.preferred.x_field), local(fields.preferred.y_field),
+        cursor.x - fields.search.left, cursor.y - fields.search.top, scale};
+    return {wardogs::make_capture_region(monitor, fields.search), layout, window, physical};
 }
 
-wardogs::Image crop_map_field(const wardogs::Image& image, RECT field, RECT combined) {
-    const int x = field.left - combined.left, y = field.top - combined.top;
-    wardogs::Image result;
-    result.width = field.right - field.left;
-    result.height = field.bottom - field.top;
-    if (x < 0 || y < 0 || result.width <= 0 || result.height <= 0 ||
-        x + result.width > image.width || y + result.height > image.height)
-        throw std::runtime_error("Границы подписи карты изменились.");
-    result.bgr.resize(static_cast<std::size_t>(result.width) * result.height * 3);
-    for (int row = 0; row < result.height; ++row)
-        std::copy_n(image.bgr.begin() + (static_cast<std::size_t>(y + row) * image.width + x) * 3,
-                    static_cast<std::size_t>(result.width) * 3,
-                    result.bgr.begin() + static_cast<std::size_t>(row) * result.width * 3);
-    return result;
+bool map_source_matches(wardogs::MiddleMouseEvent event, const std::optional<RECT>& expected_client) {
+    const auto window = reinterpret_cast<HWND>(event.foreground_window);
+    POINT cursor{};
+    if (!window || GetForegroundWindow() != window || !is_wardogs_window(window) ||
+        !GetCursorPos(&cursor) || cursor.x != event.x || cursor.y != event.y) return false;
+    if (!expected_client) return true;
+    RECT client{};
+    POINT origin{};
+    if (!GetClientRect(window, &client) || !ClientToScreen(window, &origin)) return false;
+    const RECT physical{origin.x, origin.y, origin.x + client.right, origin.y + client.bottom};
+    return EqualRect(&physical, &*expected_client) != FALSE;
 }
 
 class MainWindow final : public QMainWindow {
@@ -1534,6 +1537,23 @@ public:
                   base_ == wardogs::Point{98.74, 111.85});
             check("native_base_automatically_arms_game_and_card_without_focus_theft", game_mode_ &&
                   pinned_mode_ && pinned_window_->isVisible() && GetForegroundWindow() == fixture);
+            const auto target_before_viewport_change = target_;
+            map_request_client_ = RECT{0, 0, 1, 1};
+            OcrMessage changed_viewport;
+            changed_viewport.success = true;
+            changed_viewport.point = {99.51, 113.81};
+            changed_viewport.map_coordinates = true;
+            changed_viewport.map_event = map_event;
+            changed_viewport.input_epoch = input_epoch_;
+            finish_ocr(changed_viewport);
+            check("native_viewport_change_before_apply_refuses_coordinates", target_ == target_before_viewport_change &&
+                  !pending_ocr_ && ocr_hold_ && !mouse_timer_->isActive() && !mortar_mil_result_);
+            start_map_ocr(map_event, false, OcrAction::target, true);
+            check("native_middle_initial_capture_waits_for_game_render", !busy_ &&
+                  mouse_timer_->isActive() && map_retry_event_ && ocr_hold_ && !mortar_mil_result_);
+            wait_for_ocr();
+            check("native_delayed_middle_capture_reaches_temporal_consensus", !busy_ &&
+                  !pending_ocr_ && target_ == wardogs::Point{99.51, 113.81} && !ocr_hold_ && mortar_mil_result_);
             start_map_ocr(map_event);
             wait_for_ocr();
             check("native_middle_map_fields_calculate_without_chat_or_review", converted &&
@@ -1582,6 +1602,14 @@ public:
                   history_ == sph_history_before_impact &&
                   (continuous_calibration_ ? continuous_calibration_->sample_count() : 0U) ==
                       sph_samples_before_impact);
+            start_map_ocr(map_event, false, OcrAction::calibration_impact, true);
+            const bool impact_cancel_cursor_moved = SetCursorPos(map_cursor.x + 1, map_cursor.y) != 0;
+            wait_for_ocr();
+            check("native_SPH2_cancelled_map_retry_restores_same_shot_guidance", impact_cancel_cursor_moved &&
+                  !busy_ && !pending_ocr_ && !ocr_hold_ && low_result_ && high_result_ &&
+                  target_ == sph_target_before_impact && history_ == sph_history_before_impact &&
+                  (continuous_calibration_ ? continuous_calibration_->sample_count() : 0U) == sph_samples_before_impact);
+            (void)SetCursorPos(map_cursor.x, map_cursor.y);
             handle_hotkey(4);
             check("native_SPH2_AltI_uses_map_capture_with_immutable_high_arc", busy_ && ocr_hold_ &&
                   !pending_ocr_ && target_ == sph_target_before_impact);
@@ -1826,6 +1854,12 @@ private:
     std::optional<CapturedOcrJob> queued_map_job_;
     std::optional<wardogs::MiddleMouseEvent> map_retry_event_;
     unsigned map_retry_count_{};
+    wardogs::MapCaptureConsensus map_consensus_;
+    std::optional<OcrMessage> map_best_result_;
+    std::optional<OcrMessage> map_request_context_;
+    OcrAction map_retry_action_{OcrAction::target};
+    std::optional<RECT> map_request_client_;
+    std::optional<std::chrono::steady_clock::time_point> map_requested_at_;
     bool ocr_hold_{};
     wardogs::TerrainDiscovery terrain_discovery_;
     std::unique_ptr<wardogs::TerrainPackage> terrain_;
@@ -1904,6 +1938,11 @@ private:
         ++input_epoch_;
         queued_map_job_.reset();
         map_retry_event_.reset();
+        map_consensus_ = {};
+        map_best_result_.reset();
+        map_request_context_.reset();
+        map_request_client_.reset();
+        map_requested_at_.reset();
         if (mouse_timer_) mouse_timer_->stop();
         if (preserve_review && pending_ocr_) pending_ocr_->input_epoch = input_epoch_;
         else discard_ocr_review();
@@ -2027,25 +2066,32 @@ private:
         }
     }
 
+    void cancel_map_capture(const QString& reason) {
+        const auto context = map_request_context_;
+        if (context) restore_failed_impact_guidance(*context);
+        advance_input_epoch();
+        update_readiness();
+        set_status(reason, true);
+        wardogs::log_info("capture.map_cancelled epoch=" + std::to_string(input_epoch_));
+    }
+
     void setup_tray() {
         mouse_timer_ = new QTimer(this);
         mouse_timer_->setSingleShot(true);
         connect(mouse_timer_, &QTimer::timeout, this, [this] {
-            if (!closing_ && settings_.game_integration_enabled && settings_.middle_mouse_enabled &&
-                base_set_ && !base_capture_pending_ && !selecting_ && !busy_ && map_retry_event_ &&
+            if (!closing_ && settings_.game_integration_enabled &&
+                (settings_.middle_mouse_enabled || map_retry_action_ == OcrAction::calibration_impact) &&
+                base_set_ && !base_capture_pending_ && !selecting_ && map_retry_event_ &&
                 !QApplication::activeModalWidget() &&
                 pending_mouse_epoch_ == input_epoch_ && wardogs_is_foreground()) {
-                POINT cursor{};
                 const auto event = *map_retry_event_;
-                if (GetCursorPos(&cursor) && cursor.x == event.x && cursor.y == event.y)
-                    start_map_ocr(event, true);
+                if (map_source_matches(event, map_request_client_))
+                    start_map_ocr(event, true, map_retry_action_);
                 else {
-                    map_retry_event_.reset();
-                    set_status(wardogs::i18n::text(QStringLiteral("Курсор переместился. Нажмите среднюю кнопку на новой цели.")), true);
+                    cancel_map_capture(wardogs::i18n::text(QStringLiteral("Курсор или окно изменились. Повторите захват этой точки.")));
                 }
             } else if (map_retry_event_ && pending_mouse_epoch_ == input_epoch_) {
-                map_retry_event_.reset();
-                set_status(wardogs::i18n::text(QStringLiteral("Повторное чтение отменено. Вернитесь в игру и нажмите среднюю кнопку на цели.")), true);
+                cancel_map_capture(wardogs::i18n::text(QStringLiteral("Повторное чтение отменено. Вернитесь в игру и нажмите среднюю кнопку на цели.")));
             }
         });
         if (diagnostic_ || !QSystemTrayIcon::isSystemTrayAvailable()) return;
@@ -2087,7 +2133,7 @@ private:
                     return;
                 }
                 wardogs::log_info("map.middle_request_accepted");
-                self->start_map_ocr(event);
+                self->start_map_ocr(event, false, OcrAction::target, true);
             }, Qt::QueuedConnection);
         });
     }
@@ -2153,8 +2199,8 @@ private:
             : wardogs::i18n::text(QStringLiteral("<h2>Три шага до расчёта</h2>"
                 "<p><b>1. Запустите программу и подтвердите карту игры вверху окна.</b> Для стрельбища выберите «Стрельбище · высот нет». L81 выбран по умолчанию; SPH-2 можно выбрать кнопкой орудия. Затем вернитесь в WARDOGS.</p>"
                 "<p><b>2. На карте M нажмите ПКМ у своего орудия → Mark Coordinates → %1.</b> Пара в поле чата задаст орудие автоматически. Отправлять текст и выделять область не нужно. Мини-карточка подтвердит координаты.</p>"
-                "<p><b>3. Ставьте цели средней кнопкой на карте.</b> Программа читает X/Y возле курсора и сразу показывает расстояние, азимут и наводку. В чат цель отправлять не нужно. Возврат к основному окну — <b>%2</b>.</p>"
-                "<p>При перемещении орудия повторите шаг 2. Если подпись обрезана или распознавание расходится, прежняя наводка скрывается: наведите курсор на цель и повторите среднюю кнопку. Проверка вручную доступна для сложного захвата.</p>"
+                "<p><b>3. Ставьте цели средней кнопкой на карте.</b> Удерживайте курсор неподвижно: после появления подписей программа находит X/Y возле курсора и подтверждает их по двум отдельным кадрам. В чат цель отправлять не нужно. Возврат к основному окну — <b>%2</b>.</p>"
+                "<p>При перемещении орудия повторите шаг 2. Если подпись обрезана или распознавание расходится, прежняя наводка скрывается: наведите курсор на цель и повторите среднюю кнопку. Если подписи закрыты, используйте M → ПКМ на цели → Отметить координаты → клавишу захвата цели (по умолчанию Alt+T). Проверка вручную доступна для сложного захвата.</p>"
                 "<h3>Ручной ввод и настройки</h3><p>Раскройте «Ручной ввод и диагностика» для координат, вставки текста и выбора собственной области. Форматы: <b>x12.34, y56.78</b> или <b>12.34 56.78</b>; точка (0, 0) разрешена. В настройках «Дополнительно» находятся клавиши, OCR, прицел и отдельный режим калькулятора. Блокировка карточки снимается через <b>%3</b>.</p>"
                 "<h3>Точность</h3><p>Одна единица карты равна 100 м. Север — 0°, восток — 90°. MIL берётся из игровых таблиц; вне табличной дальности он не выдаётся. Если пакет высот карты не установлен, рельеф не учтён. Поправка высоты по установленному пакету приближённая.</p>"
                 "<h3>SPH-2</h3><p><b>%4</b> выбирает траекторию; выбранная отмечена галочкой. Можно стрелять сразу по указанным азимуту и MIL. Если нужен учёт промаха, наведите курсор на фактическое попадание на карте и нажмите <b>%5</b>. Это необязательно; цель сохраняется. Первый принятый промах уточняет ту же траекторию рядом с целью. По одной точке программа не определяет общий наклон машины.</p>"
@@ -3135,6 +3181,8 @@ private:
             update_continuous_controls();
             update_calibration_summary();
             std::ostringstream diagnostic;
+            diagnostic.imbue(std::locale::classic());
+            diagnostic.precision(17);
             diagnostic << "continuous.impact_recorded source=" << utf8(source)
                        << " mode=local_only count=" << assessment.observation_count
                        << " arc=" << (firing.arc == wardogs::Arc::low ? "low" : "high")
@@ -3148,6 +3196,7 @@ private:
                        << " correction_mil=" << mil_change
                        << " next_bearing=" << corrected.bearing_deg << " next_mil=" << corrected.mil
                        << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
+                       << " base=" << base_.x << ',' << base_.y
                        << " target_height_delta_m=" << firing.target_height_delta_m
                        << " impact_height_delta_m=" << impact_height_delta;
             wardogs::log_info(diagnostic.str());
@@ -3534,9 +3583,15 @@ private:
                 .arg(wardogs::i18n::text(qtext(terrain_map_->spec.display_name))).arg(height_delta, 0, 'f', 1)
                           : wardogs::i18n::text(QStringLiteral(" · рельеф не учтён"))));
         std::ostringstream diagnostic;
+        diagnostic.imbue(std::locale::classic());
+        diagnostic.precision(17);
         diagnostic << "terrain.solution map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
-                   << " heights=" << static_cast<bool>(terrain_) << " target=" << result.target.x << ',' << result.target.y
+                   << " heights=" << static_cast<bool>(terrain_) << " base=" << result.base.x << ',' << result.base.y
+                   << " target=" << result.target.x << ',' << result.target.y
                    << " target_range_m=" << result.distance * 100.0 << " height_delta_m=" << height_delta;
+        diagnostic << " selected_arc=" << (effective_vehicle_arc() == wardogs::Arc::high ? "high" : "low")
+                   << " correction_count=" << (continuous_calibration_ ? continuous_calibration_->sample_count() : 0U)
+                   << " calibration_epoch=" << calibration_epoch_;
         if (low_result_) diagnostic << " low_bearing=" << low_result_->bearing_deg << " low_mil=" << low_result_->mil;
         if (high_result_) diagnostic << " high_bearing=" << high_result_->bearing_deg << " high_mil=" << high_result_->mil;
         wardogs::log_info(diagnostic.str());
@@ -3978,7 +4033,7 @@ private:
     }
 
     void start_map_ocr(wardogs::MiddleMouseEvent event, bool retry = false,
-                       OcrAction action = OcrAction::target) {
+                       OcrAction action = OcrAction::target, bool defer_initial = false) {
         if (!require_game_integration() || closing_ || selecting_ || !base_set_) return;
         if (base_capture_pending_) {
             wardogs::log_info("map.request_ignored reason=base_capture_pending");
@@ -3987,7 +4042,15 @@ private:
             return;
         }
         OcrMessage impact_context;
-        if (action == OcrAction::calibration_impact) {
+        if (retry && map_request_context_) impact_context = *map_request_context_;
+        if (retry && action == OcrAction::calibration_impact &&
+            (!map_request_context_ || impact_context.input_epoch != input_epoch_ ||
+             impact_context.calibration_epoch != calibration_epoch_)) {
+            wardogs::log_info("impact.stale_map_retry_discarded");
+            cancel_map_capture(wardogs::i18n::text(QStringLiteral("Исходные данные изменились. Захватите координаты заново.")));
+            return;
+        }
+        if (action == OcrAction::calibration_impact && !retry) {
             if (busy_ || pending_ocr_) {
                 set_status(wardogs::i18n::text(QStringLiteral("Дождитесь завершения предыдущего захвата")));
                 return;
@@ -3998,22 +4061,36 @@ private:
         if (!retry) {
             advance_input_epoch();
             map_retry_count_ = 0;
+            map_requested_at_ = std::chrono::steady_clock::now();
         }
         impact_context.action = action;
         impact_context.input_epoch = input_epoch_;
-        impact_context.calibration_epoch = calibration_epoch_;
+        if (!retry) impact_context.calibration_epoch = calibration_epoch_;
+        map_request_context_ = impact_context;
+        map_retry_action_ = action;
         map_retry_event_ = event;
         ocr_hold_ = true;
         clear_result(wardogs::i18n::text(QStringLiteral("Считываю координаты новой отметки на карте…")));
         update_readiness();
         try {
-            double scale = 1.0;
-            if (retry) {
-                RECT client{};
-                if (GetClientRect(reinterpret_cast<HWND>(event.foreground_window), &client))
-                    scale = std::clamp(static_cast<double>(client.bottom - client.top) / 1080.0, 0.5, 4.0);
-            }
+            RECT client{};
+            if (!GetClientRect(reinterpret_cast<HWND>(event.foreground_window), &client))
+                throw std::runtime_error("Не удалось определить границы карты WARDOGS.");
+            const double scale = std::clamp(static_cast<double>(client.bottom - client.top) / 1080.0, 0.5, 4.0);
             const auto capture = map_capture_regions(event, scale);
+            if (map_request_client_ && !EqualRect(&*map_request_client_, &capture.client))
+                throw std::runtime_error("Размер или положение окна игры изменились. Повторите захват этой точки.");
+            map_request_client_ = capture.client;
+            if (defer_initial) {
+                if (!map_source_matches(event, map_request_client_))
+                    throw std::runtime_error("Курсор или окно изменились. Повторите захват этой точки.");
+                pending_mouse_epoch_ = input_epoch_;
+                // Pin the viewport at the click, then wait for the game to
+                // render its marker without blocking the UI or taking focus.
+                mouse_timer_->start(std::clamp(settings_.mouse_capture_delay_ms, 80, 2000));
+                wardogs::log_info("capture.map_settle_scheduled epoch=" + std::to_string(input_epoch_));
+                return;
+            }
             // Returning to the main window does not disarm capture. Hide our
             // own UI before reading the game again, without taking its focus.
             if (!pinned_mode_) enter_pinned_mode();
@@ -4031,17 +4108,12 @@ private:
                 };
                 if (!pointer_matches())
                     throw std::runtime_error("Курсор или окно изменились. Повторите захват этой точки.");
-                auto combined = capture.x_field;
-                const auto& x = capture.x_field.relative;
-                const auto& y = capture.y_field.relative;
-                combined.relative = {std::min(x.left, y.left), std::min(x.top, y.top),
-                                     std::max(x.right, y.right), std::max(x.bottom, y.bottom)};
-                const auto frame = wardogs::capture_screen(combined);
+                auto frame = wardogs::capture_screen(capture.search);
                 const auto after = map_capture_regions(event, scale);
                 if (!pointer_matches() || !EqualRect(&after.client, &capture.client))
                     throw std::runtime_error("Курсор или границы игры изменились. Повторите захват этой точки.");
-                job.image = crop_map_field(frame, x, combined.relative);
-                job.map_y = crop_map_field(frame, y, combined.relative);
+                job.image = std::move(frame);
+                job.map_layout = capture.layout;
             } catch (...) {
                 if (pinned_visible) pinned_window_->show();
                 if (ghost_visible) sync_ghost_solution();
@@ -4049,22 +4121,22 @@ private:
             }
             if (pinned_visible) pinned_window_->show();
             if (ghost_visible) sync_ghost_solution();
-            last_capture_monitor_ = capture.x_field.monitor_device;
+            last_capture_monitor_ = capture.search.monitor_device;
             sync_ghost_monitor();
             job.context = std::move(impact_context);
             job.context.action = action;
-            job.context.calibration_epoch = calibration_epoch_;
-            job.context.input_epoch = input_epoch_;
             job.context.map_coordinates = true;
             job.context.map_event = event;
-            wardogs::log_info(std::string("capture.map source=cursor_fields chat=0 action=") +
-                action_name(action) + " retry=" + std::to_string(map_retry_count_));
+            wardogs::log_info(std::string("capture.map source=cursor_neighborhood chat=0 action=") +
+                action_name(action) + " retry=" + std::to_string(map_retry_count_) +
+                " width=" + std::to_string(job.image.width) + " height=" + std::to_string(job.image.height) +
+                " scale=" + std::to_string(scale));
             if (busy_) {
                 queued_map_job_ = std::move(job);
                 set_status(wardogs::i18n::text(QStringLiteral("Новая отметка принята · считываю последние координаты")));
             } else {
                 busy_ = true;
-                launch_ocr_worker(std::move(job.image), std::move(job.context), std::move(job.map_y));
+                launch_ocr_worker(std::move(job.image), std::move(job.context), std::move(job.map_layout));
             }
         } catch (const std::exception& error) {
             restore_failed_impact_guidance(impact_context);
@@ -4075,7 +4147,7 @@ private:
     }
 
     void launch_ocr_worker(wardogs::Image image, OcrMessage context,
-                           std::optional<wardogs::Image> map_y = std::nullopt) {
+                           std::optional<wardogs::MapOcrSearchLayout> map_layout = std::nullopt) {
         const auto action = context.action;
         if (worker_.joinable()) worker_.join();
         ocr_hold_ = true;
@@ -4088,7 +4160,7 @@ private:
                        ? wardogs::i18n::text(QStringLiteral("Распознавание координат…"))
                        : wardogs::i18n::text(QStringLiteral("Распознавание средствами Windows…")));
         QPointer<MainWindow> self(this);
-        worker_ = std::jthread([this, self, image = std::move(image), map_y = std::move(map_y), backend,
+        worker_ = std::jthread([this, self, image = std::move(image), map_layout = std::move(map_layout), backend,
                                 pattern, action,
                                 context = std::move(context)](std::stop_token stop) mutable {
             const auto started_at = std::chrono::steady_clock::now();
@@ -4102,7 +4174,7 @@ private:
                 if (backend == wardogs::OcrBackend::rapid) {
                     if (!rapid_) rapid_ = std::make_unique<wardogs::RapidOcr>(
                         executable_directory() / L"models" / L"PP-OCRv6_rec_small.onnx");
-                    result = map_y ? rapid_->recognize_map_coordinates(image, *map_y, stop)
+                    result = map_layout ? rapid_->recognize_map_neighborhood(image, *map_layout, stop)
                                    : message.automatic_chat ? rapid_->recognize_chat(image, stop)
                                                             : rapid_->recognize(image, stop);
                 } else {
@@ -4169,7 +4241,7 @@ private:
                     throw std::invalid_argument(message.map_coordinates
                         ? message.action == OcrAction::calibration_impact
                             ? "Подведите курсор к точке попадания на карте и повторите клавишу чтения попадания."
-                            : "Подведите курсор к отметке на карте и нажмите среднюю кнопку ещё раз."
+                            : "Удерживайте курсор на цели и повторите среднюю кнопку. Если подписи закрыты: M → ПКМ → Отметить координаты → клавиша захвата цели."
                         : "Откройте M → ПКМ → Отметить координаты и повторите захват орудия.");
                 message.point = *message.assessment.selected;
                 message.success = true;
@@ -4194,7 +4266,7 @@ private:
             auto job = std::move(*queued_map_job_);
             queued_map_job_.reset();
             busy_ = true;
-            launch_ocr_worker(std::move(job.image), std::move(job.context), std::move(job.map_y));
+            launch_ocr_worker(std::move(job.image), std::move(job.context), std::move(job.map_layout));
             return;
         }
         if (message.input_epoch != input_epoch_) {
@@ -4206,20 +4278,51 @@ private:
             wardogs::log_info("impact.stale_correction_result_discarded");
             return;
         }
-        if (message.action == OcrAction::target && message.map_coordinates && (!message.success || message.requires_review()) &&
-            message.map_event && settings_.game_integration_enabled &&
-            settings_.middle_mouse_enabled && base_set_ && map_retry_count_ < 2) {
-            POINT cursor{};
+        if (message.map_coordinates && message.map_event && !message.confirmed) {
+            const auto decision = map_consensus_.observe(
+                message.success ? std::optional{message.point} : std::nullopt,
+                message.success && !message.requires_review());
+            if (message.success && (!map_best_result_ ||
+                (map_best_result_->requires_review() && !message.requires_review())))
+                map_best_result_ = message;
+            wardogs::log_info("ocr.temporal epoch=" + std::to_string(input_epoch_) +
+                " frames=" + std::to_string(map_consensus_.frames()) +
+                " agreeing=" + std::to_string(map_consensus_.agreeing_frames()) +
+                " conflict=" + std::to_string(map_consensus_.conflict()));
             const auto event = *message.map_event;
-            if (GetForegroundWindow() == reinterpret_cast<HWND>(event.foreground_window) &&
-                GetCursorPos(&cursor) && cursor.x == event.x && cursor.y == event.y) {
+            const bool source_unchanged = map_source_matches(event, map_request_client_);
+            if (decision == wardogs::MapCaptureDecision::retry && source_unchanged &&
+                settings_.game_integration_enabled &&
+                (settings_.middle_mouse_enabled || message.action == OcrAction::calibration_impact) && base_set_) {
                 ++map_retry_count_;
                 map_retry_event_ = event;
+                map_retry_action_ = message.action;
                 pending_mouse_epoch_ = input_epoch_;
-                mouse_timer_->start(std::clamp(settings_.mouse_capture_delay_ms, 80, 350));
+                mouse_timer_->start(std::clamp(settings_.mouse_capture_delay_ms, 120, 350));
                 set_status(wardogs::i18n::text(QStringLiteral("Уточняю координаты отметки…")));
                 return;
             }
+            if (!source_unchanged) {
+                message.success = false;
+                message.error = wardogs::i18n::text(QStringLiteral("Курсор или окно изменились. Повторите захват этой точки."));
+            } else if (decision != wardogs::MapCaptureDecision::accept && map_best_result_) {
+                message = *map_best_result_;
+                message.force_review = true;
+                message.evidence_review_reason = map_consensus_.conflict()
+                    ? QStringLiteral("координаты в отдельных кадрах расходятся")
+                    : QStringLiteral("координаты не подтверждены двумя отдельными кадрами");
+                for (const auto& candidate : map_consensus_.candidates())
+                    if (std::find(message.assessment.candidates.begin(), message.assessment.candidates.end(), candidate) ==
+                        message.assessment.candidates.end()) message.assessment.candidates.push_back(candidate);
+                message.assessment.ambiguous = message.assessment.candidates.size() > 1;
+            }
+            map_retry_event_.reset();
+            map_request_context_.reset();
+            map_request_client_.reset();
+            if (map_requested_at_)
+                message.elapsed_ms = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - *map_requested_at_).count();
+            map_requested_at_.reset();
         }
         if (message.success && message.action == OcrAction::target &&
             (message.confirmed || !message.requires_review())) {
@@ -4245,6 +4348,7 @@ private:
                        << action_name(message.action) << " point="
                        << message.point.x << ',' << message.point.y
                        << " confidence=" << message.confidence
+                       << " elapsed_ms=" << message.elapsed_ms
                        << " review=" << message.requires_review();
             wardogs::log_info(diagnostic.str());
         }

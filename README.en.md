@@ -15,13 +15,15 @@ The app transfers map points into an aiming calculation: **Alt+X** reads the gun
 
 **Version 2.8.0:** GitHub release updates inside the app. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
-**2.9.0 source — next release in preparation:** a **Planning** window has been added. The stable download above still points to 2.8.0. Building the current source provides:
+**2.10.0 source — next release candidate:** improved map-label reading and diagnostic retention, including the **Planning** window prepared in 2.9. The stable download above still points to 2.8.0. Building the current source provides:
 
 - **Profiles and sources:** L81/SPH-2 operating limits, table provenance and conflicting external calculator data.
-- **Spotter corrections:** left, right, drop and add by 10/25/50/100 m in the gun → target frame, followed by a new aiming calculation.
+- **Spotter corrections:** left, right, closer and farther by 10/25/50/100 m in the gun → target frame, followed by a new aiming calculation.
 - **Named positions and targets:** exact coordinates saved by map and weapon, restored explicitly after confirming the map.
 - **Flight time:** personal observations with game version, source and uncertainty; interpolation within measured coverage only. A separate assumed physical model requires explicitly selected parameters.
 - **Terrain profile:** ground along the path and an estimated arc. Missing heights remain gaps; ground-intersection checks do not establish clearance of buildings, bridges or trees.
+- **Map reading:** bounded search for complete X/Y labels near the cursor and agreement between two separate screenshots, with at most four frames per request. The first middle-button screenshot waits for the marker to appear.
+- **Diagnostic history:** up to 32 archived logs plus current and previous, each up to 4 MiB.
 
 Game projectile speed and gravity are unverified, so time is unknown by default. Assumed-model seconds are distinguished from observations and do not change table MIL. See the [calculation reference](source/docs/CALCULATIONS-EN.md) and [guide](source/docs/QUICKSTART-EN.md).
 
@@ -203,7 +205,7 @@ The **RU / EN** selector is in the header beside the version. Russian is the def
 | **Mini card** | Opacity, locking and the unlock hotkey |
 | **Sight** | Size, opacity, bearing compensation and screen-scale parameters |
 
-The default capture delay is **250 ms**; it can be set to **0–2000 ms**. This waits for coordinate labels after a click; it is not a promised total recognition time.
+The default capture delay is **250 ms**; it can be set to **0–2000 ms**. In the 2.10 candidate, the actual first middle-button screenshot delay is at least **80 ms**, even with a zero setting. This waits for coordinate labels after a click; it is not a promised total recognition time.
 
 Settings are stored in <code>%LOCALAPPDATA%\WardogsFireControl\settings.ini</code>. If the new profile does not exist, the app can read the old <code>WarDogsDistanceCalculatorCpp</code> profile and save changes at the new location. A manually selected capture region is tied to the monitor's physical resolution; select it again after changing resolution.
 
@@ -307,27 +309,28 @@ The quick workflow uses **PP-OCRv6_rec_small + ONNX Runtime on the CPU**. Recogn
 
 Alt+X searches the **active draft**, not any older coordinate pair in chat history. Target acquisition reads **two separate labeled X/Y fields** beside the cursor. Completeness, confidence, agreement between passes and window context are checked. Weak, clipped or ambiguous readings open the review panel; the previous guidance is hidden until the situation is resolved.
 
-If a label appears late, target reading can be retried twice while the cursor and foreground window remain unchanged. If you select another point while OCR is running, only the current capture is applied; a stale response does not replace the new target. **There is no continuous screen scanning.**
+In the **2.10.0 candidate**, original rectangles guide a bounded search near the cursor. A number without a complete axis label is not accepted as X or Y; competing pairs require review. The first middle-button screenshot is delayed, by **250 ms** by default, so the game can show its marker. Automatic acceptance requires the same trustworthy pair from **two separate screenshots** with unchanged cursor, window and geometry. A request is limited to **four frames**; processing one frame again is not a second observation. If you select another point while OCR is running, only the current capture is applied; a stale response does not replace the new target. **There is no continuous screen scanning.**
 
 If recognition fails:
 
 1. For the gun, use **Mark Coordinates** again and check that a full pair is visible in the chat input.
 2. For a target, keep the cursor beside the selected point's labels and middle-click again.
-3. Keep the game on one monitor; WARDOGS must be the active window and available for capture.
-4. Use manual input, a custom region or editing in the review panel.
+3. Target fallback: **M → right-click target → Mark Coordinates → Alt+T**. A full pair must be visible in the active chat draft; no message needs to be sent. Enable **Auto-detect for additional captures** under **Settings → Advanced**, otherwise Alt+T uses the saved custom region.
+4. Keep the game on one monitor; WARDOGS must be the active window and available for capture.
+5. Use manual input, a custom region or editing in the review panel.
 
-Capture geometry targets known WARDOGS fields and has limited scaling adaptation. Support for every resolution, HUD style and future game update is not promised.
+Search remains within the active game client and a bounded cursor neighborhood. Map recognition uses RapidOCR; errors do not silently select another OCR engine. Five retained real X/Y pairs and their transformations support regression checks; new in-game firing trials have not been performed. Support for every resolution, HUD layout and future game update is not promised.
 
 ## Local data and privacy
 
-In the 2.9.0 source, **fire-missions.json**, **flight-profiles.json** and **planning.ini** retain named points, timing observations and planning parameters beside settings in the Windows user profile. They remain local, survive updates and are excluded from the application archive.
+In the 2.10.0 source, **fire-missions.json**, **flight-profiles.json** and **planning.ini** retain named points, timing observations and planning parameters beside settings in the Windows user profile. They remain local, survive updates and are excluded from the application archive.
 
 - Calculations, OCR and terrain reading run **on your computer**.
 - Calculating requires no account, API key or cloud subscription.
 - The app does not read game process memory, inject DLLs, control the sight or fire.
 - Screen capture is restricted to a region of the active WARDOGS window; this does not establish anti-cheat approval.
 - The clipboard is read when you click **Paste**, not monitored in the background.
-- The current session log is <code>%LOCALAPPDATA%\WardogsFireControl\logs\latest.log</code>; the previous log is <code>latest.previous.log</code>. Each file is limited to **4 MiB**.
+- The current session log is <code>%LOCALAPPDATA%\WardogsFireControl\logs\latest.log</code>; the previous log is <code>latest.previous.log</code>. The 2.10.0 candidate retains up to **32** older logs in **latest.archive**. Each file is limited to **4 MiB**: up to **128 MiB** of archives and **8 MiB** for current and previous files. A filesystem failure may retain an additional recovery file of up to 4 MiB; unrelated files are outside this limit and are not deleted. Bounded archives do not retain history forever.
 - Logs contain OCR and calculation diagnostics, not screenshots. They may include game coordinates and local paths; review them before attaching them publicly.
 
 ## Screenshots
@@ -391,7 +394,7 @@ The repository contains app source, tests, the OCR model, used components and li
 
 ## Limitations and feedback
 
-The app does not model wind, dispersion or target motion. In 2.9.0, flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. First-shot accuracy and any hit percentage are not guaranteed.
+The app does not model wind, dispersion or target motion. In the 2.10.0 candidate, flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. OCR resilience and log retention do not change ballistic tables or the physical model. New in-game firing trials have not been performed. First-shot accuracy and any hit percentage are not guaranteed.
 
 Automated checks cover calculations, extreme values, OCR on fixtures, rejection without state corruption, terrain, settings and localization. The 2.7.0 interface review included RU/EN at Windows scales of 100/150/200%. These results establish software behavior; they do not replace measured in-game firing trials, every HUD test or a developer decision on utility approval.
 

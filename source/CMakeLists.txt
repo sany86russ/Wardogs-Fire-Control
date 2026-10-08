@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.9.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.10.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -287,6 +287,11 @@ target_link_libraries(wardogs_logger_tests PRIVATE wardogs_core)
 target_compile_options(wardogs_logger_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_logger_tests COMMAND wardogs_logger_tests)
 
+add_executable(wardogs_map_capture_consensus_tests tests/map_capture_consensus_tests.cpp)
+target_link_libraries(wardogs_map_capture_consensus_tests PRIVATE wardogs_core)
+target_compile_options(wardogs_map_capture_consensus_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_map_capture_consensus_tests COMMAND wardogs_map_capture_consensus_tests)
+
 add_executable(wardogs_vehicle_ballistics_tests tests/vehicle_ballistics_tests.cpp)
 target_link_libraries(wardogs_vehicle_ballistics_tests PRIVATE wardogs_core)
 if(MSVC)
@@ -421,6 +426,15 @@ add_custom_command(TARGET ocr_benchmark POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.dll"
         "$<TARGET_FILE_DIR:ocr_benchmark>/onnxruntime.dll"
+)
+
+add_executable(map_ocr_benchmark tools/map_ocr_benchmark.cpp)
+target_link_libraries(map_ocr_benchmark PRIVATE wardogs_core psapi)
+target_compile_options(map_ocr_benchmark PRIVATE /W4 /permissive- /utf-8)
+add_custom_command(TARGET map_ocr_benchmark POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.dll"
+        "$<TARGET_FILE_DIR:map_ocr_benchmark>/onnxruntime.dll"
 )
 
 if(WIN32)
