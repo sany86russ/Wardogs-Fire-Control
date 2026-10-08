@@ -46,7 +46,7 @@ function New-TestManifest {
             [ordered]@{
                 path = $_.FullName.Substring($Root.Length + 1).Replace('\', '/')
                 length = $_.Length
-                sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                sha256 = Get-WardogsFileHash $_.FullName
             }
         })
     $manifest = [ordered]@{
@@ -98,7 +98,7 @@ function Complete-TestArchive {
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $relative, [IO.Compression.CompressionLevel]::Optimal)
         }
     } finally { $zip.Dispose() }
-    $Fixture.Context = Get-WardogsContext $Fixture.Install $Fixture.Work (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash $testVersion
+    $Fixture.Context = Get-WardogsContext $Fixture.Install $Fixture.Work (Get-WardogsFileHash $archive) $testVersion
 }
 
 function Add-TestZipEntry {
@@ -111,7 +111,7 @@ function Add-TestZipEntry {
         try { $bytes = [Text.Encoding]::UTF8.GetBytes('unexpected'); $stream.Write($bytes, 0, $bytes.Length) }
         finally { $stream.Dispose() }
     } finally { $zip.Dispose() }
-    $Fixture.Context.Sha256 = (Get-FileHash -LiteralPath $Fixture.Context.Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    $Fixture.Context.Sha256 = Get-WardogsFileHash $Fixture.Context.Archive
 }
 
 function Invoke-Test {
@@ -122,7 +122,7 @@ function Invoke-Test {
 }
 
 function Start-TestHelper {
-    param([object]$Fixture, [string]$HelperMode, [int]$TestParentId)
+    param([object]$Fixture, [string]$HelperMode, [int]$TestParentId, [switch]$EmptyModulePath)
     $values = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $helper, '-Mode', $HelperMode,
         '-InstallDirectory', $Fixture.Install, '-WorkDirectory', $Fixture.Work,
         '-ArchiveSha256', $Fixture.Context.Sha256, '-Version', $testVersion,
@@ -134,6 +134,7 @@ function Start-TestHelper {
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
+    if ($EmptyModulePath) { $info.EnvironmentVariables['PSModulePath'] = '' }
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $info
     if (-not $process.Start()) { throw 'Test helper could not be started.' }
@@ -299,6 +300,20 @@ Invoke-Test 'actual helper command records prepare errors without launching the 
         Assert-True (Test-Path -LiteralPath $errorPath -PathType Leaf) 'Prepare error log is missing.'
         Assert-True ([IO.File]::ReadAllText($errorPath).Contains('SHA-256')) 'Prepare error log does not identify the digest failure.'
     } finally { $process.Dispose() }
+}
+
+Invoke-Test 'PowerShell 5 helper prepares and installs with an empty inherited PSModulePath' {
+    $fixture = New-TestFixture 'empty-module-path'
+    Complete-TestArchive $fixture
+    foreach ($helperMode in @('Prepare', 'Install')) {
+        $process = Start-TestHelper $fixture $helperMode 0 -EmptyModulePath
+        try {
+            Assert-True ($process.WaitForExit(30000)) 'Helper with empty PSModulePath did not complete.'
+            if ($process.ExitCode -ne 0) { throw ('Helper with empty PSModulePath failed: ' + $process.StandardError.ReadToEnd()) }
+        } finally { $process.Dispose() }
+    }
+    Assert-True ([IO.File]::ReadAllText((Join-Path $fixture.Install 'a-first.dll')) -eq 'new: a-first.dll') 'Helper with empty module path did not update the fixture.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Work 'installed.json')) 'Helper with empty module path produced no installed receipt.'
 }
 
 Invoke-Test 'actual detached helper emits readiness then respects cancellation while parent stays open' {

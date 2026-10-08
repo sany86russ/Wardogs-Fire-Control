@@ -24,6 +24,14 @@ function Write-WardogsJson {
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 }
 
+function Get-WardogsFileHash {
+    param([string]$Path)
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+
 function Assert-WardogsPathWithoutReparse {
     param([string]$Path)
     $absolute = [IO.Path]::GetFullPath($Path).TrimEnd('\')
@@ -277,7 +285,7 @@ function Assert-WardogsStagedPackage {
         $path = Get-WardogsChildPath $Context.Stage $file.path
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
                 (Get-Item -LiteralPath $path).Length -ne $file.length -or
-                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $file.sha256) {
+                (Get-WardogsFileHash $path) -ine $file.sha256) {
             throw "Prepared file is missing or has changed: $($file.path)"
         }
         [void]$allowed.Add($file.path)
@@ -350,7 +358,7 @@ function Get-WardogsInstallPlan {
             # Only remove obsolete files that still match the old package. User replacements remain untouched.
             if ((Test-Path -LiteralPath $target -PathType Leaf) -and
                     (Get-Item -LiteralPath $target).Length -eq $file.length -and
-                    (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq $file.sha256) {
+                    (Get-WardogsFileHash $target) -ieq $file.sha256) {
                 $plan.Add([pscustomobject]@{ path = $file.path; action = 'remove'; existed = $true })
             }
         }
@@ -422,8 +430,8 @@ function Invoke-WardogsInstall {
                 $backupPath = Get-WardogsChildPath $Context.Backup $entry.path
                 New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($backupPath)) -Force | Out-Null
                 Copy-Item -LiteralPath $target -Destination $backupPath -ErrorAction Stop
-                if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine
-                        (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash) { throw "Backup verification failed: $($entry.path)" }
+                if ((Get-WardogsFileHash $target) -ine
+                        (Get-WardogsFileHash $backupPath)) { throw "Backup verification failed: $($entry.path)" }
             }
         }
         $journal = [ordered]@{ state = 'installing'; version = $Context.Version; operations = $plan; applied = @() }
@@ -447,7 +455,7 @@ function Invoke-WardogsInstall {
             foreach ($file in $verified.Manifest.files) {
                 $target = Get-WardogsChildPath $Context.Install $file.path
                 if ((Get-Item -LiteralPath $target).Length -ne $file.length -or
-                        (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine $file.sha256) { throw "Installed file verification failed: $($file.path)" }
+                        (Get-WardogsFileHash $target) -ine $file.sha256) { throw "Installed file verification failed: $($file.path)" }
             }
             Assert-WardogsExecutable (Join-Path $Context.Install 'WarDogsDistanceCalculator.exe') $Context.Version
             $journal.state = 'installed'
@@ -470,12 +478,12 @@ function Invoke-WardogsInstall {
                         # A locked destination can reject the write without changing it.
                         # Avoid trying to overwrite that already-intact original during rollback.
                         if (-not (Test-Path -LiteralPath $target -PathType Leaf) -or
-                                (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine
-                                (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash) {
+                                (Get-WardogsFileHash $target) -ine
+                                (Get-WardogsFileHash $backupPath)) {
                             Copy-Item -LiteralPath $backupPath -Destination $target -Force -ErrorAction Stop
                         }
-                        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine
-                                (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash) { throw 'Restored backup hash does not match.' }
+                        if ((Get-WardogsFileHash $target) -ine
+                                (Get-WardogsFileHash $backupPath)) { throw 'Restored backup hash does not match.' }
                     } elseif (Test-Path -LiteralPath $target -PathType Leaf) {
                         Remove-Item -LiteralPath $target -Force -ErrorAction Stop
                     }
