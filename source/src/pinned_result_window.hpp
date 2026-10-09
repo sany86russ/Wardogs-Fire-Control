@@ -48,6 +48,7 @@ public:
     void set_selected_arc(std::optional<wardogs::Arc> arc);
     void set_error(bool error);
     void set_workflow_status(const QString& text);
+    [[nodiscard]] bool hasHeightForWidth() const override;
     void set_locked(bool locked);
     [[nodiscard]] bool is_locked() const { return preferences_.locked; }
     void set_opacity_percent(int opacity_percent);

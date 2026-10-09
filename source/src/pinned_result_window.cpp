@@ -649,6 +649,14 @@ bool PinnedResultWindow::nativeEvent(const QByteArray& event_type, void* message
     return QWidget::nativeEvent(event_type, message, result);
 }
 
+bool PinnedResultWindow::hasHeightForWidth() const {
+    // Windows checks height-for-width before delivering resizeEvent, while
+    // the rows still use the previous canvas's font. The adaptive vehicle
+    // card owns its stable minimum and fits fonts after accepting that canvas;
+    // its children's wrapping must not impose the old font's native minimum.
+    return !vehicle_mode_ && QWidget::hasHeightForWidth();
+}
+
 void PinnedResultWindow::set_mode(bool vehicle_mode) {
     mortar_panel_->setVisible(!vehicle_mode);
     vehicle_panel_->setVisible(vehicle_mode);

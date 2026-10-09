@@ -35,6 +35,7 @@
 #include <QPlainTextEdit>
 #include <QScreen>
 #include <QTimer>
+#include <QWindow>
 
 #include <algorithm>
 #include <array>
@@ -281,6 +282,8 @@ void native_solution_geometry_tests() {
         framed.show();
         framed.resize(framed.minimumSize());
         QApplication::processEvents();
+        check(!framed.hasHeightForWidth() && framed.layout()->hasHeightForWidth(),
+              "the adaptive vehicle canvas retains child wrapping without exposing old-font native constraints");
         check_metric_geometry(framed, 2);
         const QSize minimum_canvas = framed.size();
         const QSize needed = framed.layout()->totalMinimumSize();
@@ -291,13 +294,25 @@ void native_solution_geometry_tests() {
         check_metric_geometry(framed, 2);
         check(framed.minimumWidth() <= minimum_canvas.width() && framed.minimumHeight() <= minimum_canvas.height(),
               "enlarging the font does not lock the card at the enlarged content minimum");
+        const QSize old_font_constraint = QLayout::closestAcceptableSize(&framed, minimum_canvas);
+        const int old_font_height_for_width = framed.layout()->minimumHeightForWidth(minimum_canvas.width());
+        std::cout << "Adaptive styled mini-card "
+                  << (language == wardogs::UiLanguage::russian ? "RU" : "EN")
+                  << " requested=" << minimum_canvas.width() << 'x' << minimum_canvas.height()
+                  << " old-font-layout=" << old_font_constraint.width() << 'x' << old_font_constraint.height()
+                  << " native-height-for-width=" << framed.hasHeightForWidth() << '\n';
         framed.resize(minimum_canvas);
         QApplication::processEvents();
         if (framed.size() != minimum_canvas) {
             const auto* footer = framed.findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus"));
+            const auto* handle = framed.windowHandle();
+            const QSize native_minimum = handle ? handle->minimumSize() : QSize{};
             std::cerr << "styled mini-card requested=" << minimum_canvas.width() << 'x' << minimum_canvas.height()
                       << " actual=" << framed.width() << 'x' << framed.height()
                       << " minimum=" << framed.minimumWidth() << 'x' << framed.minimumHeight()
+                      << " old-font-height-for-width=" << old_font_height_for_width
+                      << " current-height-for-width=" << framed.layout()->minimumHeightForWidth(framed.width())
+                      << " native-minimum=" << native_minimum.width() << 'x' << native_minimum.height()
                       << " footer=" << (footer ? footer->height() : -1) << '\n';
         }
         check(framed.size() == minimum_canvas,
@@ -309,6 +324,9 @@ void native_solution_geometry_tests() {
         check_metric_geometry(framed, 2);
         check(framed.height() < minimum_canvas.height(),
               "hiding the workflow footer releases only its reserved vertical space");
+        framed.set_mode(false);
+        check(framed.hasHeightForWidth() == framed.layout()->hasHeightForWidth(),
+              "the mortar canvas retains Qt's existing height-for-width policy");
         framed.hide();
     }
     std::cout << "Native four-metric solution geometry passed\n" << std::flush;
