@@ -60,7 +60,11 @@ The package contains the executable, Qt DLLs / Windows plugin, official Visual C
 
 [`windows.yml`](https://github.com/sany86russ/Wardogs-Fire-Control/blob/main/.github/workflows/windows.yml) runs for `main`, `codex/*` branches, Pull Requests targeting `main`, and manual dispatch. The runner is `windows-2022`, with Python 3.11, `aqtinstall==3.3.0` and Qt 6.8.3 MSVC x64. Release builds use two compilation processes; tests run sequentially. Test reports and build artifacts are retained in Actions for 14 days.
 
-A tag such as `v2.7.0` must exactly match the version in `source/CMakeLists.txt`. Only a successful build of such a tag creates a GitHub Release. Branch and Pull Request builds do not publish releases. Release assets include:
+A tag such as `v2.11.0` must exactly match the version in `source/CMakeLists.txt`. Only a successful build of such a tag creates a GitHub Release. Branch and Pull Request builds do not publish releases.
+
+Before creating a tag, add a detailed Russian and English release description to the same commit at `docs/releases/<tag>.md`, for example `docs/releases/v2.11.0.md`. The workflow reads this file from the tested tag and fails publication if it is missing. The user-facing change history is in [ChangeLog EN](../source/docs/RELEASE-NOTES-EN.md) and [RU](../source/docs/RELEASE-NOTES-RU.md).
+
+Release assets include:
 
 - `WardogsFireControl-v<version>-win-x64.zip` — portable application;
 - `WardogsFireControl-v<version>-source.zip` — source from the public commit;
@@ -72,8 +76,8 @@ Qt source is downloaded from the [official archive](https://download.qt.io/archi
 Tag release files receive GitHub attestations. With GitHub CLI installed, verify the origin of a downloaded file:
 
 ```powershell
-gh attestation verify .\WardogsFireControl-v2.7.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
-Get-FileHash .\WardogsFireControl-v2.7.0-win-x64.zip -Algorithm SHA256
+gh attestation verify .\WardogsFireControl-v2.11.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+Get-FileHash .\WardogsFireControl-v2.11.0-win-x64.zip -Algorithm SHA256
 ```
 
 Compare SHA-256 with `SHA256SUMS.txt` from the same release. CI checks establish a successful build and the implemented software workflows. They do not establish game publisher approval, a live shot's result, support for every monitor configuration or overlay visibility in true exclusive fullscreen.

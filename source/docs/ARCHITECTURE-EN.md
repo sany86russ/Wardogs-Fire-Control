@@ -1,6 +1,6 @@
 # WARDOGS Fire Control — architecture and development
 
-The **2.11.0 candidate** unifies map confirmation, accepted gun/target coordinates, the selected final command and ranging. Automatic ground assessment and a separate accepted-point history are added; 2.10 OCR and diagnostic archives remain. The published stable release is **2.8.0**. This describes source rather than establishing publication or a new successful CI run.
+Version **2.11.0** unifies map confirmation, accepted gun/target coordinates, the selected final command and ranging. Automatic ground assessment and a separate accepted-point history are added; OCR and diagnostic-archive changes developed in 2.10 are included in 2.11. This document describes that version's architecture; results for a particular build are available in GitHub Actions.
 
 **firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores up to 500 named points and separately up to 64 recently accepted points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides additional tools: manual target shifting, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
 
@@ -33,7 +33,7 @@ A physical middle-button press pins client geometry at the click and first sched
 
 Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_Distance_Calculator), tag `v1.4.0`, commit `e1e14b2df5e59b6452a7aba105c36711b355d954`. Attribution and the license are preserved. Further workflow, reliability and interface development by SoNiX. This is a standalone build from published source; bit-for-bit equivalence to earlier third-party EXEs is not claimed. See the [coordinate workflow sources, in Russian](COORDINATE-WORKFLOW-RESEARCH-RU.md).
 
-| Feature | 2.11.0 candidate implementation |
+| Feature | 2.11.0 implementation |
 | --- | --- |
 | Manual gun and target coordinates | Original author's parser; explicit gun-not-set state; a real `(0,0)` point is allowed |
 | Range, bearing and compass directions | One game unit equals 100 m; NaN/Inf/overflow protection |

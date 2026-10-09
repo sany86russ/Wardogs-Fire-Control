@@ -60,7 +60,11 @@ $env:QT_ROOT = 'C:\Qt\6.8.3\msvc2022_64'
 
 [`windows.yml`](https://github.com/sany86russ/Wardogs-Fire-Control/blob/main/.github/workflows/windows.yml) выполняется для `main`, веток `codex/*`, Pull Request в `main` и по ручному запуску. Runner — `windows-2022`; Python 3.11, `aqtinstall==3.3.0`, Qt 6.8.3 MSVC x64. Сборка выполняется в Release с двумя процессами, тесты — последовательно. Отчёты тестов и артефакты сохраняются в Actions на 14 дней.
 
-Тег вида `v2.7.0` должен точно соответствовать версии в `source/CMakeLists.txt`. Только успешная сборка такого тега создаёт GitHub Release. Обычная ветка или Pull Request не публикует релиз. В релиз входят:
+Тег вида `v2.11.0` должен точно соответствовать версии в `source/CMakeLists.txt`. Только успешная сборка такого тега создаёт GitHub Release. Обычная ветка или Pull Request не публикует релиз.
+
+Перед созданием тега добавьте в тот же коммит подробное описание выпуска на русском и английском в `docs/releases/<тег>.md`, например `docs/releases/v2.11.0.md`. Workflow читает этот файл из проверяемого тега; без него публикация останавливается с ошибкой. Пользовательская история изменений хранится в [ChangeLog RU](../source/docs/RELEASE-NOTES-RU.md) и [EN](../source/docs/RELEASE-NOTES-EN.md).
+
+В релиз входят:
 
 - `WardogsFireControl-v<версия>-win-x64.zip` — готовая программа;
 - `WardogsFireControl-v<версия>-source.zip` — исходники из публичного коммита;
@@ -72,8 +76,8 @@ $env:QT_ROOT = 'C:\Qt\6.8.3\msvc2022_64'
 Для файлов тегового релиза создаются GitHub attestations. При установленном GitHub CLI происхождение скачанного файла проверяется так:
 
 ```powershell
-gh attestation verify .\WardogsFireControl-v2.7.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
-Get-FileHash .\WardogsFireControl-v2.7.0-win-x64.zip -Algorithm SHA256
+gh attestation verify .\WardogsFireControl-v2.11.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+Get-FileHash .\WardogsFireControl-v2.11.0-win-x64.zip -Algorithm SHA256
 ```
 
 Сравните SHA-256 с `SHA256SUMS.txt` из того же релиза. Проверки CI подтверждают сборку и предусмотренные программные сценарии. Они не подтверждают разрешение издателя игры, результат живого выстрела, работу всех конфигураций мониторов или видимость наложений в настоящем эксклюзивном полноэкранном режиме.

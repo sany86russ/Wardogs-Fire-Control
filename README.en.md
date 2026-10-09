@@ -4,7 +4,7 @@
 
 **A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.
 
-[![Version](https://img.shields.io/badge/version-2.8.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.11.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-launch)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#language-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
@@ -13,9 +13,9 @@
 
 The app transfers map points into an aiming calculation: **Alt+X** reads the gun position from the active chat draft; the **middle mouse button** reads a target beside the map cursor. Results are available in the main window, an always-on-top mini card and an auxiliary sight overlay. Fully manual operation is also available.
 
-**Version 2.8.0:** GitHub release updates inside the app. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
+**GitHub updates:** check and install new releases inside the app, available since 2.8.0. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
-**2.11.0 source — next release candidate:** one cycle, **map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined command**. The stable download above still points to **2.8.0**; candidate features are available when building the current source.
+**Version 2.11.0:** one cycle, **map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined command**. This release includes planning, improved coordinate capture and log archives developed in 2.9–2.10. **[Detailed ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).**
 
 - **Ranging beside the result:** latest accepted miss in metres, already applied bearing/MIL changes, observation count and reset. Do not add the correction to final values a second time.
 - **One selected command:** main window, mini card, sight and Alt+I share the same final bearing/MIL. Analysis of another arc in additional tools is explicitly shown as baseline.
@@ -27,7 +27,7 @@ The app transfers map points into an aiming calculation: **Alt+X** reads the gun
 
 Game speed and gravity are unverified; the timing model is disabled by default. Alt+I does not measure flight seconds. Tables are retained; agreement with the current game requires separate verification. [2.11 workflow](source/docs/USAGE-EN.md) · [Detailed calculations](source/docs/CALCULATIONS-EN.md).
 
-![WARDOGS Fire Control main window in English](docs/screenshots/en-main.png)
+![WARDOGS Fire Control 2.11 main window in English](docs/screenshots/en-fire-control-2.11.png)
 
 > This is an unofficial community utility for the **WARDOGS game**. It is not affiliated with BULKHEAD and is not intended for real weapons. Developer approval for OCR, global hotkeys and overlays has not been confirmed; freedom from sanctions is not guaranteed. Read the [interaction limits and rules](source/docs/ANTICHEAT-EN.md) before using game features.
 
@@ -83,7 +83,7 @@ The app calculates aiming commands. Setting the in-game bearing and MIL, decidin
 **Requirements:** Windows 10/11 x64. Normal use does not require app installation, administrator privileges, the Qt SDK, Visual Studio or Python.
 
 1. Open the [latest release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Download **WardogsFireControl-v2.8.0-win-x64.zip** from **Assets**.
+2. Download **WardogsFireControl-v2.11.0-win-x64.zip** from **Assets**.
 3. **Extract the entire ZIP** into its own folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** inside the extracted package.
 
@@ -96,13 +96,13 @@ Use **borderless windowed mode** for the mini card and sight. Overlays in exclus
 Release archives are accompanied by a SHA-256 checksum file. Compare its entry with:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.8.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.11.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 The checksum checks download integrity. With GitHub CLI installed, you can also verify build provenance through GitHub attestations:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.8.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.11.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Updating inside the app
@@ -134,9 +134,9 @@ Middle-click still places the in-game marker. Once the gun position has been acc
 
 **Set the gun position again after moving it.** Changing the map clears coordinates, history and corrections. The app does not detect the map name automatically.
 
-The **2.11 source** workflow is **confirm map → Alt+X: gun → middle click: target → fire → Alt+I: impact → refined guidance**. Recording an impact is optional; the first solution is available immediately. The detailed [English guide](source/docs/USAGE-EN.md) and [Russian guide](source/docs/USAGE-RU.md) cover ranging, saved points and additional tools.
+The **2.11** workflow is **confirm map → Alt+X: gun → middle click: target → fire → Alt+I: impact → refined guidance**. Recording an impact is optional; the first solution is available immediately. The detailed [English guide](source/docs/USAGE-EN.md) and [Russian guide](source/docs/USAGE-RU.md) cover ranging, saved points and additional tools.
 
-**2.11 candidate interface — unified workflow and ranging.** This screenshot of the actual app from a GitHub runner shows a demonstration target at **2200 m**.
+**2.11 interface — unified workflow and ranging.** This screenshot of the actual app from a GitHub runner shows a demonstration target at **2200 m**.
 
 ![WARDOGS Fire Control 2.11 unified workflow and ranging](docs/screenshots/en-fire-control-2.11.png)
 
@@ -183,7 +183,7 @@ Ranging hints express **left/right** as bearing degrees and **closer/farther** a
 
 Corrections apply to the **same arc** near the recorded target and fade to zero at **50 m**. Repeated corrections do not accumulate endlessly. An impact that is too far away or incompatible is rejected without replacing the current solution. Set the gun again after moving the vehicle; reset corrections manually if its body orientation changes at the same position.
 
-**SPH-2 mini card in the 2.11 candidate.** This is a separate demonstration calculation at **1562 m**, using a different target from the main-window screenshot above.
+**SPH-2 mini card in version 2.11.** This is a separate demonstration calculation at **1562 m**, using a different target from the main-window screenshot above.
 
 ![WARDOGS Fire Control 2.11 SPH-2 mini card with ranging](docs/screenshots/en-sph2-mini-2.11.png)
 
@@ -222,7 +222,7 @@ The **RU / EN** selector is in the header beside the version. Russian is the def
 | **Mini card** | Opacity, locking and the unlock hotkey |
 | **Sight** | Size, opacity, bearing compensation and screen-scale parameters |
 
-The default capture delay is **250 ms**; it can be set to **0–2000 ms**. In the 2.10 candidate, the actual first middle-button screenshot delay is at least **80 ms**, even with a zero setting. This waits for coordinate labels after a click; it is not a promised total recognition time.
+The default capture delay is **250 ms**; it can be set to **0–2000 ms**. In 2.11, the actual first middle-button screenshot delay is at least **80 ms**, even with a zero setting. This waits for coordinate labels after a click; it is not a promised total recognition time.
 
 Settings are stored in <code>%LOCALAPPDATA%\WardogsFireControl\settings.ini</code>. If the new profile does not exist, the app can read the old <code>WarDogsDistanceCalculatorCpp</code> profile and save changes at the new location. A manually selected capture region is tied to the monitor's physical resolution; select it again after changing resolution.
 
@@ -338,7 +338,7 @@ The quick workflow uses **PP-OCRv6_rec_small + ONNX Runtime on the CPU**. Recogn
 
 Alt+X searches the **active draft**, not any older coordinate pair in chat history. Target acquisition reads **two separate labeled X/Y fields** beside the cursor. Completeness, confidence, agreement between passes and window context are checked. Weak, clipped or ambiguous readings open the review panel; the previous guidance is hidden until the situation is resolved.
 
-In the **2.10.0 candidate**, original rectangles guide a bounded search near the cursor. A number without a complete axis label is not accepted as X or Y; competing pairs require review. The first middle-button screenshot is delayed, by **250 ms** by default, so the game can show its marker. Automatic acceptance requires the same trustworthy pair from **two separate screenshots** with unchanged cursor, window and geometry. A request is limited to **four frames**; processing one frame again is not a second observation. If you select another point while OCR is running, only the current capture is applied; a stale response does not replace the new target. **There is no continuous screen scanning.**
+In **2.11.0**, original rectangles guide a bounded search near the cursor. A number without a complete axis label is not accepted as X or Y; competing pairs require review. The first middle-button screenshot is delayed, by **250 ms** by default, so the game can show its marker. Automatic acceptance requires the same trustworthy pair from **two separate screenshots** with unchanged cursor, window and geometry. A request is limited to **four frames**; processing one frame again is not a second observation. If you select another point while OCR is running, only the current capture is applied; a stale response does not replace the new target. **There is no continuous screen scanning.**
 
 If recognition fails:
 
@@ -352,19 +352,19 @@ Search remains within the active game client and a bounded cursor neighborhood. 
 
 ## Local data and privacy
 
-In the 2.11 source, **recent-fire-missions.json** (up to 64 recently accepted points), **fire-missions.json** (up to 500 named records), **flight-profiles.json** and **planning.ini** keep points, personal observations and parameters in the Windows profile beside settings. They remain local, survive updates and are not included in the app archive.
+In 2.11, **recent-fire-missions.json** (up to 64 recently accepted points), **fire-missions.json** (up to 500 named records), **flight-profiles.json** and **planning.ini** keep points, personal observations and parameters in the Windows profile beside settings. They remain local, survive updates and are not included in the app archive.
 
 - Calculations, OCR and terrain reading run **on your computer**.
 - Calculating requires no account, API key or cloud subscription.
 - The app does not read game process memory, inject DLLs, control the sight or fire.
 - Screen capture is restricted to a region of the active WARDOGS window; this does not establish anti-cheat approval.
 - The clipboard is read when you click **Paste**, not monitored in the background.
-- The current session log is <code>%LOCALAPPDATA%\WardogsFireControl\logs\latest.log</code>; the previous log is <code>latest.previous.log</code>. The 2.10.0 candidate retains up to **32** older logs in **latest.archive**. Each file is limited to **4 MiB**: up to **128 MiB** of archives and **8 MiB** for current and previous files. A filesystem failure may retain an additional recovery file of up to 4 MiB; unrelated files are outside this limit and are not deleted. Bounded archives do not retain history forever.
+- The current session log is <code>%LOCALAPPDATA%\WardogsFireControl\logs\latest.log</code>; the previous log is <code>latest.previous.log</code>. Version 2.11.0 retains up to **32** older logs in **latest.archive**. Each file is limited to **4 MiB**: up to **128 MiB** of archives and **8 MiB** for current and previous files. A filesystem failure may retain an additional recovery file of up to 4 MiB; unrelated files are outside this limit and are not deleted. Bounded archives do not retain history forever.
 - Logs contain OCR and calculation diagnostics, not screenshots. They may include game coordinates and local paths; review them before attaching them publicly.
 
 ## Screenshots
 
-The new **2.11.0 candidate** screenshots come from the actual app on a GitHub runner: the main window uses a **2200 m** target, and the mini card uses a separate **1562 m** target. The remaining images are historical **2.7.0** screenshots retained to show the other windows. Demonstration values are not evidence of in-game hit accuracy.
+The **2.11.0** screenshots come from the actual app on a GitHub runner: the main window uses a **2200 m** target, and the mini card uses a separate **1562 m** target. The remaining images are historical **2.7.0** screenshots retained to show the other windows. Demonstration values are not evidence of in-game hit accuracy.
 
 | Window | RU | EN |
 |---|---|---|

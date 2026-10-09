@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -16,6 +17,9 @@ namespace {
 // Only the diagnostic child uses this handshake. The fixture receives focus
 // before exercising the application's unchanged foreground safety gate.
 constexpr UINT prepare_capture_message = WM_APP + 0x331;
+// This bounds the complete functional self-test, including model startup and
+// all native capture scenarios. Per-operation OCR waits remain unchanged.
+constexpr auto capture_workflow_budget = std::chrono::seconds(35);
 
 class FixtureCursorRestore {
 public:
@@ -158,6 +162,23 @@ struct OwnedWindow {
 struct ChildProcess {
     PROCESS_INFORMATION process{};
     bool finished{};
+    DWORD exit_code{STILL_ACTIVE};
+
+    DWORD stop_checked() {
+        if (finished) return exit_code;
+        if (WaitForSingleObject(process.hProcess, 0) != WAIT_OBJECT_0) {
+            // Only the child created by this fixture can be terminated.
+            if (!TerminateProcess(process.hProcess, 124))
+                throw std::runtime_error("Cannot stop the application test child");
+            if (WaitForSingleObject(process.hProcess, 1000) != WAIT_OBJECT_0)
+                throw std::runtime_error("Application test child did not stop during cleanup");
+        }
+        if (!GetExitCodeProcess(process.hProcess, &exit_code))
+            throw std::runtime_error("Cannot read the application cleanup result");
+        finished = true;
+        return exit_code;
+    }
+
     ~ChildProcess() {
         if (process.hProcess) {
             // This is exclusively the child created by this local test.
@@ -170,6 +191,36 @@ struct ChildProcess {
         if (process.hThread) CloseHandle(process.hThread);
     }
 };
+
+void retain_capture_diagnostics(const std::filesystem::path& report,
+                                std::chrono::steady_clock::time_point started,
+                                DWORD exit_code, bool timed_out) {
+    auto directory_name = report.stem();
+    directory_name += L"-diagnostics";
+    const auto directory = report.parent_path() / directory_name;
+    std::filesystem::create_directories(directory);
+    const auto log = report.parent_path() / L"diagnostic.log";
+    const bool log_exists = std::filesystem::is_regular_file(log);
+    if (log_exists)
+        std::filesystem::copy_file(log, directory / L"diagnostic.log",
+                                   std::filesystem::copy_options::overwrite_existing);
+    std::ofstream summary;
+    summary.exceptions(std::ios::failbit | std::ios::badbit);
+    summary.open(directory / L"fixture-summary.json", std::ios::out | std::ios::trunc);
+    summary << "{\n  \"elapsed_ms\": "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - started).count()
+            << ",\n  \"budget_ms\": "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(capture_workflow_budget).count()
+            << ",\n  \"exit_code\": " << exit_code
+            << ",\n  \"timed_out\": " << (timed_out ? "true" : "false")
+            << ",\n  \"report_exists\": "
+            << (std::filesystem::is_regular_file(report) ? "true" : "false")
+            << ",\n  \"diagnostic_log_exists\": " << (log_exists ? "true" : "false")
+            << "\n}\n";
+    summary.close();
+    std::wcout << L"Native fixture retained diagnostics at " << directory.wstring() << L'\n';
+}
 
 class TestDesktop {
 public:
@@ -326,32 +377,48 @@ int wmain(int argc, wchar_t** argv) {
         startup.cb = sizeof(startup);
         startup.lpDesktop = desktop.child_desktop();
         ChildProcess child;
+        const auto started = std::chrono::steady_clock::now();
         if (!CreateProcessW(app.c_str(), command.data(), nullptr, nullptr, FALSE, 0,
                             nullptr, app.parent_path().c_str(), &startup, &child.process))
             throw std::runtime_error("Cannot start the application capture workflow");
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
-        while (std::chrono::steady_clock::now() < deadline && IsWindow(window.value)) {
-            const DWORD ready = MsgWaitForMultipleObjects(1, &child.process.hProcess,
-                                                          FALSE, 100, QS_ALLINPUT);
-            if (ready == WAIT_OBJECT_0) {
-                DWORD exit_code{};
-                if (!GetExitCodeProcess(child.process.hProcess, &exit_code))
-                    throw std::runtime_error("Cannot read the application test result");
-                child.finished = true;
-                DestroyWindow(window.value);
-                window.value = nullptr;
-                desktop.restore_checked();
-                cursor.restore_checked();
-                return static_cast<int>(exit_code);
+        const auto deadline = started + capture_workflow_budget;
+        bool timed_out = false;
+        try {
+            while (std::chrono::steady_clock::now() < deadline && IsWindow(window.value)) {
+                const DWORD ready = MsgWaitForMultipleObjects(1, &child.process.hProcess,
+                                                              FALSE, 100, QS_ALLINPUT);
+                if (ready == WAIT_OBJECT_0) {
+                    if (!GetExitCodeProcess(child.process.hProcess, &child.exit_code))
+                        throw std::runtime_error("Cannot read the application test result");
+                    child.finished = true;
+                    retain_capture_diagnostics(report, started, child.exit_code, false);
+                    DestroyWindow(window.value);
+                    window.value = nullptr;
+                    desktop.restore_checked();
+                    cursor.restore_checked();
+                    return static_cast<int>(child.exit_code);
+                }
+                if (ready == WAIT_FAILED) throw std::runtime_error("Native fixture message wait failed");
+                MSG message{};
+                while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
             }
-            if (ready == WAIT_FAILED) throw std::runtime_error("Native fixture message wait failed");
-            MSG message{};
-            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
+            timed_out = std::chrono::steady_clock::now() >= deadline;
+            if (timed_out)
+                throw std::runtime_error("Application capture workflow did not finish within 35 seconds");
+            throw std::runtime_error("Native fixture window closed before the application test finished");
+        } catch (const std::exception& error) {
+            try {
+                const DWORD exit_code = child.stop_checked();
+                retain_capture_diagnostics(report, started, exit_code, timed_out);
+            } catch (const std::exception& cleanup_error) {
+                throw std::runtime_error(std::string(error.what()) +
+                                         "; native cleanup/diagnostics failed: " + cleanup_error.what());
             }
+            throw;
         }
-        throw std::runtime_error("Application capture workflow did not finish within 25 seconds");
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
         return 1;

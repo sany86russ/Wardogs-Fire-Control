@@ -2,7 +2,7 @@
 
 [Русский](USAGE-RU.md) · [App overview](../../README.en.md) · [Mathematics](CALCULATIONS-EN.md)
 
-This guide describes the 2.11 source workflow. Check the release page for the stable download version. L81 and SPH-2 tables are unchanged; the interface brings input, the selected command and optional ranging into one cycle. First-shot accuracy and agreement between table metres and the game's RNG are not promised.
+This guide describes the version 2.11 workflow. The complete package for the intended version is available on its release page. L81 and SPH-2 tables are unchanged; the interface brings input, the selected command and optional ranging into one cycle. First-shot accuracy and agreement between table metres and the game's RNG are not promised.
 
 ## Before calculating
 
@@ -143,6 +143,6 @@ Actual controls can differ from these examples after a Windows hotkey conflict. 
 
 Settings, accepted points, personal measurements and logs reside in <code>%LOCALAPPDATA%\WardogsFireControl</code>. OCR and calculations run locally; diagnostics can contain game coordinates and local paths. Review logs before attaching them publicly.
 
-A target around 2200 m illustrates the sequence rather than measured firing. Check a build's verification receipts for its test status; this guide does not claim a successful new CI build or in-game trial. Workflow changes do not extend weapon ranges or promise a hit percentage.
+Check a build's GitHub Actions results for its test status. Software checks do not establish recognition of every live HUD or firing quality in the current match. Workflow changes do not extend weapon ranges or promise a hit percentage.
 
 [Game-interaction rules](ANTICHEAT-EN.md) · [Detailed calculations](CALCULATIONS-EN.md) · [Launch quick start](QUICKSTART-EN.md)
