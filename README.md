@@ -137,6 +137,10 @@ OCR и расчёты выполняются локально. Интернет 
 
 Цикл исходников **2.11**: **подтверждение карты → Alt+X: орудие → средняя кнопка: цель → выстрел → Alt+I: попадание → уточнённая наводка**. Запись попадания необязательна; первый расчёт доступен сразу. Подробное [руководство RU](source/docs/USAGE-RU.md) и [EN](source/docs/USAGE-EN.md) описывает пристрелку, сохранённые точки и дополнительные инструменты.
 
+**Интерфейс кандидата 2.11 — единый цикл и пристрелка.** Снимок реального приложения из GitHub runner показывает демонстрационную цель на дальности **2200 м**.
+
+![Единый цикл и пристрелка WARDOGS Fire Control 2.11](docs/screenshots/ru-fire-control-2.11.png)
+
 ### Ручной сценарий
 
 Раскройте **Ручной ввод и диагностика**, введите координаты орудия и цели либо нажмите **Вставить**. Например:
@@ -179,6 +183,12 @@ SPH-2 даёт решение сразу. Обязательных двух пр
 В подсказке пристрелки направление **левее/правее** выражено в градусах азимута; **ближе/дальше** — изменением MIL. Для движения дальше **низкая траектория увеличивает MIL**, а **высокая уменьшает MIL**. Пристрелка оценивает эти изменения по принятому попаданию; она не определяет физический наклон машины.
 
 Поправки действуют для **той же траектории** рядом с записанной целью и плавно исчезают на расстоянии **50 м**. Повторные поправки не складываются без конца. Слишком далёкое или несовместимое попадание отклоняется; текущая наводка сохраняется. После перемещения машины задайте орудие заново; после изменения положения корпуса на прежней точке сбросьте поправки вручную.
+
+**Мини-карточка SPH-2 в кандидате 2.11.** Здесь показан отдельный демонстрационный расчёт на **1562 м**: это другая цель, чем в основном снимке выше.
+
+![Мини-карточка SPH-2 с пристрелкой в WARDOGS Fire Control 2.11](docs/screenshots/ru-sph2-mini-2.11.png)
+
+Исторический вид расчёта SPH-2 в версии 2.7:
 
 ![Расчёт SPH-2](docs/screenshots/ru-vehicle.png)
 
@@ -354,17 +364,19 @@ Alt+X ищет именно **активный черновик**, а не лю�
 
 ## Скриншоты
 
-Это сохранённые снимки интерфейса версии **2.7.0** на русском и английском. Они показывают окна программы; демонстрационные значения не подтверждают точность игровых попаданий.
+Новые снимки **кандидата 2.11.0** получены из реального приложения на GitHub runner: основное окно показывает цель на **2200 м**, мини-карточка — отдельную цель на **1562 м**. Остальные изображения — исторические снимки **2.7.0**, сохранённые для обзора остальных окон. Демонстрационные значения не подтверждают точность игровых попаданий.
 
 | Окно | RU | EN |
 |---|---|---|
-| Главное окно | [Открыть](docs/screenshots/ru-main.png) | [Open](docs/screenshots/en-main.png) |
-| SPH-2 | [Открыть](docs/screenshots/ru-vehicle.png) | [Open](docs/screenshots/en-vehicle.png) |
-| Настройки | [Открыть](docs/screenshots/ru-settings.png) | [Open](docs/screenshots/en-settings.png) |
-| Дополнительные настройки | [Открыть](docs/screenshots/ru-recognition.png) | [Open](docs/screenshots/en-recognition.png) |
-| Ручной ввод | [Открыть](docs/screenshots/ru-manual.png) | [Open](docs/screenshots/en-manual.png) |
-| Поправки по попаданию | [Открыть](docs/screenshots/ru-calibration.png) | [Open](docs/screenshots/en-calibration.png) |
-| Компактное окно | [Открыть](docs/screenshots/ru-compact.png) | [Open](docs/screenshots/en-compact.png) |
+| Единый цикл и пристрелка · 2.11 | [Открыть](docs/screenshots/ru-fire-control-2.11.png) | [Open](docs/screenshots/en-fire-control-2.11.png) |
+| Мини-карточка SPH-2 · 2.11 | [Открыть](docs/screenshots/ru-sph2-mini-2.11.png) | [Open](docs/screenshots/en-sph2-mini-2.11.png) |
+| Главное окно · 2.7 | [Открыть](docs/screenshots/ru-main.png) | [Open](docs/screenshots/en-main.png) |
+| SPH-2 · 2.7 | [Открыть](docs/screenshots/ru-vehicle.png) | [Open](docs/screenshots/en-vehicle.png) |
+| Настройки · 2.7 | [Открыть](docs/screenshots/ru-settings.png) | [Open](docs/screenshots/en-settings.png) |
+| Дополнительные настройки · 2.7 | [Открыть](docs/screenshots/ru-recognition.png) | [Open](docs/screenshots/en-recognition.png) |
+| Ручной ввод · 2.7 | [Открыть](docs/screenshots/ru-manual.png) | [Open](docs/screenshots/en-manual.png) |
+| Поправки по попаданию · 2.7 | [Открыть](docs/screenshots/ru-calibration.png) | [Open](docs/screenshots/en-calibration.png) |
+| Компактное окно · 2.7 | [Открыть](docs/screenshots/ru-compact.png) | [Open](docs/screenshots/en-compact.png) |
 
 <details>
 <summary>Ручной ввод и дополнительные настройки</summary>

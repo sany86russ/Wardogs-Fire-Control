@@ -136,6 +136,10 @@ Middle-click still places the in-game marker. Once the gun position has been acc
 
 The **2.11 source** workflow is **confirm map → Alt+X: gun → middle click: target → fire → Alt+I: impact → refined guidance**. Recording an impact is optional; the first solution is available immediately. The detailed [English guide](source/docs/USAGE-EN.md) and [Russian guide](source/docs/USAGE-RU.md) cover ranging, saved points and additional tools.
 
+**2.11 candidate interface — unified workflow and ranging.** This screenshot of the actual app from a GitHub runner shows a demonstration target at **2200 m**.
+
+![WARDOGS Fire Control 2.11 unified workflow and ranging](docs/screenshots/en-fire-control-2.11.png)
+
 ### Manual workflow
 
 Expand **Manual input and diagnostics**, enter the gun and target coordinates or click **Paste**. For example:
@@ -178,6 +182,12 @@ The main window, mini card, sight and Alt+I recording use **one selected final c
 Ranging hints express **left/right** as bearing degrees and **closer/farther** as a MIL change. To move farther, the **low arc increases MIL** and the **high arc decreases MIL**. Ranging estimates these changes from an accepted impact; it does not determine the vehicle's physical tilt.
 
 Corrections apply to the **same arc** near the recorded target and fade to zero at **50 m**. Repeated corrections do not accumulate endlessly. An impact that is too far away or incompatible is rejected without replacing the current solution. Set the gun again after moving the vehicle; reset corrections manually if its body orientation changes at the same position.
+
+**SPH-2 mini card in the 2.11 candidate.** This is a separate demonstration calculation at **1562 m**, using a different target from the main-window screenshot above.
+
+![WARDOGS Fire Control 2.11 SPH-2 mini card with ranging](docs/screenshots/en-sph2-mini-2.11.png)
+
+Historical SPH-2 calculation view from version 2.7:
 
 ![SPH-2 calculation](docs/screenshots/en-vehicle.png)
 
@@ -354,17 +364,19 @@ In the 2.11 source, **recent-fire-missions.json** (up to 64 recently accepted po
 
 ## Screenshots
 
-These are saved **2.7.0** interface screenshots in Russian and English. They show the app's windows; demonstration values are not evidence of in-game hit accuracy.
+The new **2.11.0 candidate** screenshots come from the actual app on a GitHub runner: the main window uses a **2200 m** target, and the mini card uses a separate **1562 m** target. The remaining images are historical **2.7.0** screenshots retained to show the other windows. Demonstration values are not evidence of in-game hit accuracy.
 
 | Window | RU | EN |
 |---|---|---|
-| Main window | [Open](docs/screenshots/ru-main.png) | [Open](docs/screenshots/en-main.png) |
-| SPH-2 | [Open](docs/screenshots/ru-vehicle.png) | [Open](docs/screenshots/en-vehicle.png) |
-| Settings | [Open](docs/screenshots/ru-settings.png) | [Open](docs/screenshots/en-settings.png) |
-| Advanced settings | [Open](docs/screenshots/ru-recognition.png) | [Open](docs/screenshots/en-recognition.png) |
-| Manual input | [Open](docs/screenshots/ru-manual.png) | [Open](docs/screenshots/en-manual.png) |
-| Impact corrections | [Open](docs/screenshots/ru-calibration.png) | [Open](docs/screenshots/en-calibration.png) |
-| Compact window | [Open](docs/screenshots/ru-compact.png) | [Open](docs/screenshots/en-compact.png) |
+| Unified workflow and ranging · 2.11 | [Open](docs/screenshots/ru-fire-control-2.11.png) | [Open](docs/screenshots/en-fire-control-2.11.png) |
+| SPH-2 mini card · 2.11 | [Open](docs/screenshots/ru-sph2-mini-2.11.png) | [Open](docs/screenshots/en-sph2-mini-2.11.png) |
+| Main window · 2.7 | [Open](docs/screenshots/ru-main.png) | [Open](docs/screenshots/en-main.png) |
+| SPH-2 · 2.7 | [Open](docs/screenshots/ru-vehicle.png) | [Open](docs/screenshots/en-vehicle.png) |
+| Settings · 2.7 | [Open](docs/screenshots/ru-settings.png) | [Open](docs/screenshots/en-settings.png) |
+| Advanced settings · 2.7 | [Open](docs/screenshots/ru-recognition.png) | [Open](docs/screenshots/en-recognition.png) |
+| Manual input · 2.7 | [Open](docs/screenshots/ru-manual.png) | [Open](docs/screenshots/en-manual.png) |
+| Impact corrections · 2.7 | [Open](docs/screenshots/ru-calibration.png) | [Open](docs/screenshots/en-calibration.png) |
+| Compact window · 2.7 | [Open](docs/screenshots/ru-compact.png) | [Open](docs/screenshots/en-compact.png) |
 
 <details>
 <summary>Manual input and advanced settings</summary>
