@@ -24,6 +24,7 @@ public:
     using QLabel::QLabel;
 
     void refresh_minimum() {
+        const QSize previous = minimumSize();
         const QFontMetrics metrics(font());
         const auto padding = contentsMargins();
         const int text_width = std::max(metrics.horizontalAdvance(text()), metrics.boundingRect(text()).width());
@@ -33,6 +34,19 @@ public:
         setMinimumSize(width, 0);
         setMinimumHeight(std::max(metrics.height() + padding.top() + padding.bottom() + 2 * margin() + 2,
                                   wordWrap() ? heightForWidth(width) : 0));
+        if (minimumSize() == previous) return;
+        // A metric lives in a QWidget with its own layout. Propagate that
+        // layout's new minimum before the card's outer layout reads its cached
+        // QWidgetItem, including while the card is hidden between displays.
+        if (auto* column = parentWidget(); column && column->layout()) {
+            column->layout()->invalidate();
+            column->layout()->activate();
+            column->updateGeometry();
+            if (auto* card = column->parentWidget(); card && card->layout()) {
+                card->layout()->invalidate();
+                card->layout()->activate();
+            }
+        }
     }
 
 protected:
@@ -97,7 +111,9 @@ QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
                                           const QString& object_name, int width,
                                           QLabel** caption_label) {
     auto* block = new QWidget;
-    block->setMinimumWidth(compact_ ? std::max(65, width - 35) : std::max(85, width - 40));
+    // An explicit QWidget minimum would replace, rather than bound, the
+    // minimum from its child layout. Let the current caption/value determine
+    // that minimum; the outer stretch factor still controls column proportions.
     block->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* column = new QVBoxLayout(block);
     column->setContentsMargins(0, 0, 0, 0);
@@ -264,6 +280,14 @@ void VehicleSolutionWidget::refresh_metric_minimums() {
         caption->ensurePolished();
         static_cast<MetricTextLabel*>(caption)->refresh_minimum();
     }
+    for (auto* column : findChildren<QWidget*>(QString{}, Qt::FindDirectChildrenOnly)) {
+        if (!column->layout()) continue;
+        column->layout()->invalidate();
+        column->layout()->activate();
+        column->updateGeometry();
+    }
+    layout()->invalidate();
+    layout()->activate();
     updateGeometry();
 }
 

@@ -160,6 +160,8 @@ void check_metric_geometry(QWidget& card, int row_count) {
                   "native target metres, bearing degrees, set MIL and table estimate fit without truncation");
             check(card.rect().contains(QRect(value->mapTo(&card, QPoint{}), value->size())),
                   "each native metric is fully inside the shown solution card");
+            check(value->parentWidget()->rect().contains(value->geometry()),
+                  "each native metric fits its own column without overlapping adjacent columns");
         }
     }
     const auto captions = card.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
@@ -167,17 +169,22 @@ void check_metric_geometry(QWidget& card, int row_count) {
     for (const auto* caption : captions) {
         const auto text_width = QFontMetrics(caption->font()).horizontalAdvance(caption->text());
         const int required_height = caption->heightForWidth(caption->width());
-        const bool inside = card.rect().contains(QRect(caption->mapTo(&card, QPoint{}), caption->size()));
+        const QPoint mapped = caption->mapTo(&card, QPoint{});
+        const bool inside = card.rect().contains(QRect(mapped, caption->size()));
         if (!caption->isVisible() || caption->height() < required_height || !inside)
             std::cerr << "caption=" << caption->text().toStdString()
                       << " size=" << caption->width() << 'x' << caption->height()
                       << " text_width=" << text_width << " required_height=" << required_height
                       << " minimum=" << caption->minimumWidth() << 'x' << caption->minimumHeight()
                       << " card=" << card.width() << 'x' << card.height()
+                      << " mapped=" << mapped.x() << ',' << mapped.y()
+                      << " column=" << caption->parentWidget()->width() << 'x' << caption->parentWidget()->height()
                       << " inside=" << inside << '\n';
         check(caption->isVisible() && caption->height() >= caption->heightForWidth(caption->width()) &&
                   card.rect().contains(QRect(caption->mapTo(&card, QPoint{}), caption->size())),
               "native metric captions fit at the tested card/font scale");
+        check(caption->parentWidget()->rect().contains(caption->geometry()),
+              "each native caption fits its own column without overlapping adjacent columns");
         check(caption->minimumWidth() >= text_width &&
                   caption->minimumHeight() >= caption->heightForWidth(caption->minimumWidth()),
               "production short captions reserve their complete translated text and rendered height");
