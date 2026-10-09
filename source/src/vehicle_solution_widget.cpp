@@ -125,7 +125,7 @@ QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
         label->setWordWrap(true);
         if (compact_) {
             label->setAlignment(Qt::AlignCenter);
-            label->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:9px;"));
+            label->setStyleSheet(QStringLiteral("color:#b5c5dc;font-size:10px;font-weight:600;"));
         }
         label->refresh_minimum();
         column->addWidget(label);
@@ -261,7 +261,7 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
     distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(distance_size));
     table_distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(std::max(14, size - 2)));
     for (auto* caption : findChildren<QLabel*>(QStringLiteral("solutionMetricCaption")))
-        caption->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:%1px;").arg(std::clamp(qRound(9 * scale), 8, 10)));
+        caption->setStyleSheet(QStringLiteral("color:#b5c5dc;font-size:%1px;font-weight:600;").arg(std::clamp(qRound(10 * scale), 10, 12)));
     bearing_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(size));
     const auto color = unavailable() ? QStringLiteral("#ff9d9d")
                                      : QStringLiteral("#e8eef7");

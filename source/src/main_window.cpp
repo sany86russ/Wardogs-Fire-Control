@@ -737,12 +737,13 @@ public:
             if (!scroll || !table) return false;
             scroll->ensureWidgetVisible(table, 0, 10);
         } else if (mode == QStringLiteral("fire-control")) {
-            // Mode changes post a fit-to-screen callback. Set the diagnostic
-            // canvas after it settles so every result and the ranging report
-            // are rendered, including on the runner's small desktop.
-            resize(1120,1040);
+            // Fix only the diagnostic canvas after startup layout settles.
+            // Native maximum tracking size on a small desktop can constrain a
+            // plain resize, hiding the ranging report below the scroll viewport.
+            setFixedSize(1120,1040);
         }
         QApplication::processEvents();
+        if (mode == QStringLiteral("fire-control")) QApplication::processEvents();
         const QFileInfo file(path);
         if (!QDir().mkpath(file.absolutePath())) return false;
         QJsonArray widgets;
@@ -795,6 +796,7 @@ public:
         const auto bytes = QJsonDocument(QJsonObject{
             {QStringLiteral("language"), settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru")},
             {QStringLiteral("mode"), mode}, {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
+            {QStringLiteral("snapshot_width"), view->width()}, {QStringLiteral("snapshot_height"), view->height()},
             {QStringLiteral("widgets"), widgets}}).toJson();
         const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
         return written && view->grab().save(file.absoluteFilePath(), "PNG");
@@ -4882,7 +4884,7 @@ QFrame#resultCard { background:#0d1521; border:0; border-radius:10px; }
 QFrame#vehicleSolutionCard { background:#0d1521; border:0; border-radius:10px; }
 QFrame#vehicleSolutionCard[unavailable="true"] { background:#171b25; }
 QLabel#solutionArc { color:#8291a5; font-size:12px; font-weight:600; }
-QLabel#solutionMetricCaption { color:#66768a; font-size:11px; }
+QLabel#solutionMetricCaption { color:#b5c5dc; font-size:11px; font-weight:600; }
 QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil {
     font-family:"Bahnschrift"; font-size:25px; font-weight:700; }
 QLabel#solutionDistance { color:#fbbf24; }

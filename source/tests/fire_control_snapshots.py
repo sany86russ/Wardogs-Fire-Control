@@ -45,17 +45,29 @@ def main():
     exe=(build/'WarDogsDistanceCalculator.exe').resolve(strict=True)
     evidence=build/'Testing/fire-control-app'
     evidence.mkdir(parents=True,exist_ok=True)
-    results=[]
+    cases=[]
     for language in ('ru','en'):
         for mode in ('fire-control','vehicle-pinned'):
             path=evidence/f'{language}-{mode}.png'
             subprocess.run([str(exe),f'--language={language}',f'--{mode}-ui-snapshot={path}'],
                            check=True,timeout=30,creationflags=subprocess.CREATE_NO_WINDOW)
+            cases.append((path,language,mode))
+    # Retain every actual native view before checking any pixels, so a failure
+    # in one language/card does not conceal the other diagnostic surfaces.
+    results=[]
+    failures=[]
+    for path,language,mode in cases:
+        try:
             results.append(verify(path,language,mode))
             print('PASS',path.name,'four metrics and ranging have visible native pixels')
+        except (AssertionError,ValueError) as error:
+            failures.append({'file':path.name,'error':str(error)})
+            print('FAIL',path.name,str(error))
     (evidence/'fire-control-pixels.json').write_text(json.dumps({
         'boundary':'Native application pixels and layout only; no game accuracy claim.',
-        'screenshots':results,'failures':0},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        'screenshots':results,'failures':len(failures),'errors':failures},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__=='__main__': main()
