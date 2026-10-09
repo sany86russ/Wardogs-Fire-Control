@@ -42,6 +42,8 @@
 namespace {
 
 constexpr int resize_margin = 8;
+constexpr double minimum_font_scale = 0.78;
+constexpr double maximum_font_scale = 2.5;
 
 QSize minimum_size(bool vehicle) { return vehicle ? QSize{480, 128} : QSize{320, 96}; }
 QSize default_size(bool vehicle) { return vehicle ? QSize{540, 148} : QSize{430, 112}; }
@@ -673,11 +675,13 @@ void PinnedResultWindow::set_vehicle_values(const VehicleSolutionWidget& low,
                                             const VehicleSolutionWidget& high) {
     low_->copy_from(low);
     high_->copy_from(high);
+    if (vehicle_mode_) apply_font_scale();
 }
 
 void PinnedResultWindow::set_selected_arc(std::optional<wardogs::Arc> arc) {
     low_->set_selected(arc == wardogs::Arc::low);
     high_->set_selected(arc == wardogs::Arc::high);
+    if (vehicle_mode_) apply_font_scale();
 }
 
 void PinnedResultWindow::set_error(bool error) {
@@ -685,6 +689,7 @@ void PinnedResultWindow::set_error(bool error) {
     frame_->style()->unpolish(frame_);
     frame_->style()->polish(frame_);
     frame_->update();
+    if (vehicle_mode_) apply_font_scale();
 }
 
 int PinnedResultWindow::workflow_status_extra() const {
@@ -780,16 +785,54 @@ void PinnedResultWindow::apply_font_scale() {
     if (applying_font_scale_) return;
     applying_font_scale_ = true;
     const auto base = default_size(vehicle_mode_);
-    font_scale_ = std::clamp(
-        std::min(width() / static_cast<double>(base.width()),
-                 (height() - workflow_status_extra()) / static_cast<double>(base.height())),
-        0.78, 2.5);
+    const auto requested_scale = [&] {
+        return std::clamp(
+            std::min(width() / static_cast<double>(base.width()),
+                     (height() - workflow_status_extra()) / static_cast<double>(base.height())),
+            minimum_font_scale, maximum_font_scale);
+    };
     if (vehicle_mode_) {
-        low_->set_compact_scale(font_scale_);
-        high_->set_compact_scale(font_scale_);
+        frame_->ensurePolished();
+        const auto measure = [&](double scale) {
+            low_->set_compact_scale(scale);
+            high_->set_compact_scale(scale);
+            // Propagate the actual row minima, including stylesheet borders,
+            // through both containers before measuring the top-level layout.
+            for (auto* panel : {vehicle_panel_, static_cast<QWidget*>(frame_)}) {
+                panel->layout()->invalidate();
+                panel->layout()->activate();
+                panel->updateGeometry();
+            }
+            layout()->invalidate();
+            return layout()->totalMinimumSize();
+        };
+        // The resize floor is measured with the smallest permitted font. A
+        // minimum based on an enlarged font would prevent shrinking the card.
+        const QSize content_floor = measure(minimum_font_scale);
+        setMinimumSize((minimum_size(true) + QSize(0, workflow_status_extra()))
+                           .expandedTo(content_floor));
+        const double requested = requested_scale();
+        font_scale_ = requested;
+        const QSize requested_minimum = measure(requested);
+        if (requested_minimum.width() > width() || requested_minimum.height() > height()) {
+            // Find the largest font that fits the current canvas. Integer font
+            // sizes make this monotonic; eight bounded steps avoid resize loops.
+            double fits = minimum_font_scale;
+            double clips = requested;
+            for (int attempt = 0; attempt < 8; ++attempt) {
+                const double candidate = (fits + clips) / 2;
+                const QSize needed = measure(candidate);
+                if (needed.width() <= width() && needed.height() <= height()) fits = candidate;
+                else clips = candidate;
+            }
+            font_scale_ = fits;
+            measure(font_scale_);
+        }
+        layout()->activate();
         applying_font_scale_ = false;
         return;
     }
+    font_scale_ = requested_scale();
     const int size = std::max(22, qRound(30 * font_scale_));
     distance_->setStyleSheet(QStringLiteral(
         "color:#f0b45d;font-family:'Bahnschrift';font-size:%1px;font-weight:700;")
@@ -808,6 +851,7 @@ void PinnedResultWindow::apply_font_scale() {
 void PinnedResultWindow::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     mode_sizes_[vehicle_mode_] = event->size();
+    if (applying_font_scale_) return;
     update_workflow_status_layout(workflow_status_extra());
     if (low_ && !applying_font_scale_) apply_font_scale();
 }
@@ -815,6 +859,7 @@ void PinnedResultWindow::resizeEvent(QResizeEvent* event) {
 void PinnedResultWindow::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     apply_mouse_transparency();
+    apply_font_scale();
 }
 
 void PinnedResultWindow::mousePressEvent(QMouseEvent* event) {

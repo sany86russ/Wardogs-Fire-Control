@@ -22,6 +22,7 @@
 #include <QKeySequenceEdit>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLayout>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMetaObject>
@@ -147,6 +148,14 @@ void check_coordinate_pattern_settings() {
 
 void check_metric_geometry(QWidget& card, int row_count) {
     QApplication::processEvents();
+    const auto fits_ancestors = [&](const QWidget* child) {
+        for (auto* ancestor = child->parentWidget(); ancestor; ancestor = ancestor->parentWidget()) {
+            if (!ancestor->rect().contains(QRect(child->mapTo(ancestor, QPoint{}), child->size())))
+                return false;
+            if (ancestor == &card) return true;
+        }
+        return false;
+    };
     for (const auto* name : {"solutionDistance", "solutionBearing", "solutionMil", "solutionTableDistance"}) {
         const auto values = card.findChildren<QLabel*>(QString::fromLatin1(name));
         check(values.size() == row_count, "each displayed trajectory has all four metric values");
@@ -162,6 +171,8 @@ void check_metric_geometry(QWidget& card, int row_count) {
                   "each native metric is fully inside the shown solution card");
             check(value->parentWidget()->rect().contains(value->geometry()),
                   "each native metric fits its own column without overlapping adjacent columns");
+            check(fits_ancestors(value),
+                  "each native metric remains fully visible through every enclosing panel");
         }
     }
     const auto captions = card.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
@@ -185,6 +196,8 @@ void check_metric_geometry(QWidget& card, int row_count) {
               "native metric captions fit at the tested card/font scale");
         check(caption->parentWidget()->rect().contains(caption->geometry()),
               "each native caption fits its own column without overlapping adjacent columns");
+        check(fits_ancestors(caption),
+              "each native caption remains fully visible through every enclosing panel");
         check(caption->minimumWidth() >= text_width &&
                   caption->minimumHeight() >= caption->heightForWidth(caption->minimumWidth()),
               "production short captions reserve their complete translated text and rendered height");
@@ -251,6 +264,45 @@ void native_solution_geometry_tests() {
             full->hide();
         }
         mini.hide();
+
+        // Exercise the real mini-card border and workflow footer together.
+        // Their padding is absent from the bare widget/font geometry cases.
+        PinnedResultWindow framed([] {});
+        framed.setStyleSheet(QStringLiteral(
+            "QWidget {font-size:13px;}"
+            "QFrame#pinnedFrame {border:3px solid transparent;}"
+            "QFrame#pinnedFrame QFrame#vehicleSolutionCard {border:1px solid #334155;}"));
+        framed.set_mode(true);
+        framed.set_vehicle_values(low, high);
+        framed.set_selected_arc(wardogs::Arc::high);
+        framed.set_workflow_status(language == wardogs::UiLanguage::russian
+            ? QStringLiteral("Навесная · Стрельбище · высот нет · рельеф не учтён · смена F4\nAlt+I у попадания — необязательная поправка.")
+            : QStringLiteral("High arc · Firing range · no heights · terrain unavailable · F4\nAlt+I at the impact applies an optional correction."));
+        framed.show();
+        framed.resize(framed.minimumSize());
+        QApplication::processEvents();
+        check_metric_geometry(framed, 2);
+        const QSize minimum_canvas = framed.size();
+        const QSize needed = framed.layout()->totalMinimumSize();
+        check(needed.width() <= minimum_canvas.width() && needed.height() <= minimum_canvas.height(),
+              "the production minimum includes both styled rows, frame padding and the workflow footer");
+        framed.resize(minimum_canvas * 2);
+        QApplication::processEvents();
+        check_metric_geometry(framed, 2);
+        check(framed.minimumWidth() <= minimum_canvas.width() && framed.minimumHeight() <= minimum_canvas.height(),
+              "enlarging the font does not lock the card at the enlarged content minimum");
+        framed.resize(minimum_canvas);
+        QApplication::processEvents();
+        check(framed.size() == minimum_canvas,
+              "an enlarged styled mini-card can return to its original compact size");
+        check_metric_geometry(framed, 2);
+        framed.set_workflow_status({});
+        framed.resize(framed.minimumSize());
+        QApplication::processEvents();
+        check_metric_geometry(framed, 2);
+        check(framed.height() < minimum_canvas.height(),
+              "hiding the workflow footer releases only its reserved vertical space");
+        framed.hide();
     }
     std::cout << "Native four-metric solution geometry passed\n" << std::flush;
 }
