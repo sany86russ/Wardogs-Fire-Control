@@ -32,13 +32,17 @@ VehicleSolutionWidget::VehicleSolutionWidget(wardogs::Arc arc, bool compact,
     trajectory_->setMinimumWidth(compact_ ? 62 : 88);
     layout->addWidget(trajectory_);
     if (!compact_) layout->addStretch();
-    distance_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("Дальность до цели")),
-                           QStringLiteral("solutionDistance"), compact_ ? 88 : 128,
+    distance_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("До цели")),
+                           QStringLiteral("solutionDistance"), compact_ ? 82 : 105,
                            &distance_caption_);
     bearing_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("Азимут")),
-                          QStringLiteral("solutionBearing"), compact_ ? 112 : 158);
-    mil_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("Наводка · MIL")),
-                      QStringLiteral("solutionMil"), compact_ ? 105 : 150);
+                          QStringLiteral("solutionBearing"), compact_ ? 106 : 140);
+    mil_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("Установить")),
+                      QStringLiteral("solutionMil"), compact_ ? 100 : 130);
+    table_distance_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("По таблице ≈")),
+                                QStringLiteral("solutionTableDistance"), compact_ ? 88 : 112);
+    table_distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Оценка табличной дальности SPH-2")));
+    if (!compact_) table_distance_->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:20px;"));
     distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Дальность до цели SPH-2")));
     distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Горизонтальное расстояние до цели по карте.")));
     mil_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Наводка SPH-2 по игровой шкале MIL")));
@@ -63,10 +67,14 @@ QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
     auto* column = new QVBoxLayout(block);
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
-    if (!compact_) {
+    {
         auto* label = new QLabel(caption);
         label->setObjectName(QStringLiteral("solutionMetricCaption"));
         label->setWordWrap(true);
+        if (compact_) {
+            label->setAlignment(Qt::AlignCenter);
+            label->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:9px;"));
+        }
         column->addWidget(label);
         if (caption_label) *caption_label = label;
     }
@@ -82,12 +90,14 @@ void VehicleSolutionWidget::set_waiting() {
     solution_ready_ = false;
     selected_ = false;
     distance_is_target_ = true;
-    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("Дальность до цели")));
+    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("До цели")));
     distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Дальность до цели SPH-2: ожидается цель")));
     distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Выберите цель, чтобы получить расстояние по карте и наводку.")));
     distance_->setText(QStringLiteral("—"));
     bearing_->setText(compact_ ? QStringLiteral("—") : wardogs::i18n::text(QStringLiteral("Ждём цель")));
     mil_->setText(QStringLiteral("—"));
+    table_distance_->setText(QStringLiteral("—"));
+    table_distance_->setToolTip({});
     set_unavailable_state(false);
 }
 
@@ -95,11 +105,19 @@ void VehicleSolutionWidget::set_solution(
     const wardogs::CorrectedSolution& solution, std::optional<double> target_distance_m) {
     if (target_distance_m && (!std::isfinite(*target_distance_m) || *target_distance_m < 0.0))
         throw std::invalid_argument("Дальность до цели должна быть конечной и неотрицательной");
+    if (solution.arc != arc_ || !std::isfinite(solution.bearing_deg))
+        throw std::invalid_argument("Некорректная траектория или азимут наводки");
+    const double equivalent_distance = wardogs::sph2_distance_for_mil(solution.mil, arc_);
     solution_ready_ = true;
     distance_is_target_ = target_distance_m.has_value();
-    const auto table_distance = QString::number(std::round(solution.reticle_distance_m));
+    const auto table_distance = QString::number(std::round(equivalent_distance));
+    table_distance_->setText(wardogs::i18n::text(QStringLiteral("≈ %1 м")).arg(table_distance));
+    table_distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Табличная дальность для наводки ≈ %1 м — оценка модели. "
+                                           "Она может отличаться от расстояния до цели и игровой шкалы. "
+                                           "Выставляйте MIL выбранной траектории."))
+            .arg(table_distance));
+    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("До цели")));
     if (target_distance_m) {
-        if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("Дальность до цели")));
         distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Горизонтальная дальность до цели SPH-2")));
         const auto target_distance = QString::number(std::round(*target_distance_m));
         distance_->setText(target_distance + wardogs::i18n::text(QStringLiteral(" м")));
@@ -108,13 +126,9 @@ void VehicleSolutionWidget::set_solution(
                                            "Выставляйте MIL выбранной траектории."))
             .arg(target_distance, table_distance));
     } else {
-        if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("По таблице")));
-        distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Оценка табличной дальности SPH-2")));
-        distance_->setText(wardogs::i18n::text(QStringLiteral("≈ %1 м")).arg(table_distance));
-        distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Табличная дальность для наводки ≈ %1 м — оценка модели. "
-                                           "Она может отличаться от расстояния до цели и игровой шкалы. "
-                                           "Выставляйте MIL выбранной траектории."))
-            .arg(table_distance));
+        distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Дальность до цели SPH-2: ожидается цель")));
+        distance_->setText(QStringLiteral("—"));
+        distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Горизонтальная дальность до цели не передана. Табличная оценка показана отдельно.")));
     }
     bearing_->setText(QString::fromStdWString(wardogs::format_bearing(solution.bearing_deg)));
     mil_->setText(QStringLiteral("%1 MIL").arg(std::round(solution.mil)));
@@ -126,25 +140,29 @@ void VehicleSolutionWidget::set_unavailable(const QString& distance,
                                              const QString& bearing) {
     solution_ready_ = false;
     distance_is_target_ = true;
-    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("Дальность до цели")));
+    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("До цели")));
     distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Горизонтальная дальность до цели SPH-2")));
     distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Расстояние до цели по карте. Наводка для этой траектории недоступна.")));
     distance_->setText(wardogs::i18n::text(distance));
     bearing_->setText(wardogs::i18n::text(bearing));
     mil_->setText(compact_ ? QStringLiteral("—") : wardogs::i18n::text(QStringLiteral("Нет решения")));
     mil_->setToolTip(wardogs::i18n::text(QStringLiteral("Дальность или угол выходят за пределы таблицы орудия")));
+    table_distance_->setText(QStringLiteral("—"));
+    table_distance_->setToolTip({});
     set_unavailable_state(true);
 }
 
 void VehicleSolutionWidget::set_height_unavailable() {
     solution_ready_ = false;
     distance_is_target_ = true;
-    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("Дальность до цели")));
+    if (distance_caption_) distance_caption_->setText(wardogs::i18n::text(QStringLiteral("До цели")));
     distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Дальность до цели SPH-2: нет данных высоты")));
     distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Не удалось получить данные высоты. Наводка недоступна.")));
     distance_->setText(QStringLiteral("—"));
     bearing_->setText(compact_ ? QStringLiteral("—") : wardogs::i18n::text(QStringLiteral("Нет высот")));
     mil_->setText(QStringLiteral("—"));
+    table_distance_->setText(QStringLiteral("—"));
+    table_distance_->setToolTip({});
     set_unavailable_state(true);
 }
 
@@ -156,8 +174,10 @@ void VehicleSolutionWidget::copy_from(const VehicleSolutionWidget& source) {
     distance_->setToolTip(source.distance_->toolTip());
     distance_->setAccessibleName(source.distance_->accessibleName());
     if (distance_caption_)
-        distance_caption_->setText(distance_is_target_ ? wardogs::i18n::text(QStringLiteral("Дальность до цели"))
-                                                     : wardogs::i18n::text(QStringLiteral("По таблице")));
+        distance_caption_->setText(wardogs::i18n::text(QStringLiteral("До цели")));
+    table_distance_->setText(source.table_distance_text());
+    table_distance_->setToolTip(source.table_distance_->toolTip());
+    table_distance_->setAccessibleName(source.table_distance_->accessibleName());
     const auto source_bearing = source.bearing_text();
     bearing_->setText(source_bearing == wardogs::i18n::text(QStringLiteral("Нет высот")) ||
                               source_bearing == wardogs::i18n::text(QStringLiteral("Ждём цель"))
@@ -184,6 +204,9 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
     const int size = std::max(16, qRound(20 * scale));
     const int distance_size = distance_is_target_ ? size : std::max(16, size - 1);
     distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(distance_size));
+    table_distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(std::max(14, size - 2)));
+    for (auto* caption : findChildren<QLabel*>(QStringLiteral("solutionMetricCaption")))
+        caption->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:%1px;").arg(std::clamp(qRound(9 * scale), 8, 10)));
     bearing_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(size));
     const auto color = unavailable() ? QStringLiteral("#ff9d9d")
                                      : QStringLiteral("#e8eef7");
@@ -192,6 +215,7 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
 }
 
 QString VehicleSolutionWidget::distance_text() const { return distance_->text(); }
+QString VehicleSolutionWidget::table_distance_text() const { return table_distance_->text(); }
 QString VehicleSolutionWidget::bearing_text() const { return bearing_->text(); }
 QString VehicleSolutionWidget::mil_text() const { return mil_->text(); }
 bool VehicleSolutionWidget::unavailable() const {

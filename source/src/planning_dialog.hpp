@@ -19,6 +19,10 @@ struct PlanningContext {
     bool solution_held{};
     std::optional<wardogs::Point> base;
     std::optional<wardogs::Point> target;
+    // Supplied by the main workflow only while its guidance is ready. These
+    // are the command and arc actually shown to the player, including Alt+I.
+    std::optional<wardogs::CorrectedSolution> active_solution;
+    std::optional<wardogs::Arc> active_arc;
     wardogs::HeightLookup terrain;
 };
 

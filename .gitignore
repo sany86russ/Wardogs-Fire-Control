@@ -15,3 +15,4 @@ __pycache__/
 /analysis/verification/**/*.exe
 /analysis/verification/**/*.dll
 /analysis/verification/ocr-resilience-2.10.0/private-evidence/
+/analysis/verification/unified-fire-control-2.11.0/private-evidence/

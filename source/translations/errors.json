@@ -1198,5 +1198,7 @@
   {
     "ru": "Подписи X/Y не образуют одну пару координат рядом с отметкой.",
     "en": "The X/Y labels do not form a single coordinate pair near the marker."
-  }
+  },
+  {"ru": "Автоматическая история требует отдельного файла recent-fire-missions.json", "en": "Automatic history requires a separate recent-fire-missions.json file"},
+  {"ru": "Некорректные данные пристрелки", "en": "Invalid ranging data"}
 ]

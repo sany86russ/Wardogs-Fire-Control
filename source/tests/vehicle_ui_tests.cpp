@@ -4,6 +4,7 @@
 #include "settings_dialog.hpp"
 #include "selection_overlay.hpp"
 #include "vehicle_solution_widget.hpp"
+#include "localization.hpp"
 #include "window_title_bar.hpp"
 
 #include <Windows.h>
@@ -42,6 +43,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -143,10 +145,75 @@ void check_coordinate_pattern_settings() {
           "arbitrary unsafe custom patterns remain rejected with a bounded template warning");
 }
 
+void check_metric_geometry(QWidget& card, int row_count) {
+    QApplication::processEvents();
+    for (const auto* name : {"solutionDistance", "solutionBearing", "solutionMil", "solutionTableDistance"}) {
+        const auto values = card.findChildren<QLabel*>(QString::fromLatin1(name));
+        check(values.size() == row_count, "each displayed trajectory has all four metric values");
+        for (const auto* value : values) {
+            const auto text_width = QFontMetrics(value->font()).horizontalAdvance(value->text());
+            if (text_width > value->width())
+                std::cerr << "metric=" << name << " text=" << value->text().toStdString()
+                          << " width=" << value->width() << " needs=" << text_width << '\n';
+            check(value->isVisible() && text_width <= value->width() &&
+                      QFontMetrics(value->font()).height() <= value->height(),
+                  "native target metres, bearing degrees, set MIL and table estimate fit without truncation");
+            check(card.rect().contains(QRect(value->mapTo(&card, QPoint{}), value->size())),
+                  "each native metric is fully inside the shown solution card");
+        }
+    }
+    const auto captions = card.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
+    check(captions.size() == 4 * row_count, "all four captions are visible for every native row");
+    for (const auto* caption : captions)
+        check(caption->isVisible() && caption->height() >= caption->heightForWidth(caption->width()) &&
+                  card.rect().contains(QRect(caption->mapTo(&card, QPoint{}), caption->size())),
+              "native metric captions fit at the tested card/font scale");
+}
+
+void native_solution_geometry_tests() {
+    check(QApplication::platformName() == QStringLiteral("windows"),
+          "solution geometry acceptance uses real native Qt Windows rendering");
+    for (const auto language : {wardogs::UiLanguage::russian, wardogs::UiLanguage::english}) {
+        wardogs::i18n::set_language(language);
+        VehicleSolutionWidget low(wardogs::Arc::low), high(wardogs::Arc::high);
+        low.set_solution({wardogs::Arc::low, 188.4, 1391, 90}, 2221);
+        high.set_solution({wardogs::Arc::high, 188.4, 2616, 673}, 2221);
+        PinnedResultWindow mini([] {});
+        mini.set_mode(true);
+        mini.set_vehicle_values(low, high);
+        mini.set_selected_arc(wardogs::Arc::high);
+        mini.show();
+        const QSize minimum = mini.minimumSize();
+        for (double scale : {1.0, 1.5, 2.0}) {
+            mini.resize(qRound(minimum.width() * scale), qRound(minimum.height() * scale));
+            QApplication::processEvents();
+            check_metric_geometry(mini, 2);
+            for (auto* full : {&low, &high}) {
+                full->setStyleSheet(QStringLiteral(
+                    "QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil { font-family:'Segoe UI';font-size:%1px; }"
+                    "QLabel#solutionMetricCaption { font-family:'Segoe UI';font-size:%2px; }")
+                    .arg(qRound(25 * scale)).arg(qRound(11 * scale)));
+                full->ensurePolished();
+                full->resize(full->minimumSizeHint());
+                full->show();
+                QApplication::processEvents();
+                check_metric_geometry(*full, 1);
+                full->hide();
+            }
+            std::cout << "Native solution geometry "
+                      << (language == wardogs::UiLanguage::russian ? "RU" : "EN")
+                      << " card/font scale=" << scale << " passed\n";
+        }
+        mini.hide();
+    }
+    std::cout << "Native four-metric solution geometry passed\n" << std::flush;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    qputenv("QT_QPA_PLATFORM", "offscreen");
+    const bool native_geometry = argc == 2 && std::string_view(argv[1]) == "--solution-geometry-native";
+    qputenv("QT_QPA_PLATFORM", native_geometry ? "windows" : "offscreen");
     // The offscreen backend otherwise uses its fixed-width fallback glyphs,
     // unlike the Windows backend used by the application. Measure the same
     // installed fonts so minimum-width assertions reflect the actual UI.
@@ -157,6 +224,10 @@ int main(int argc, char* argv[]) {
     qputenv("QT_QPA_FONTDIR", (QString::fromWCharArray(windows_directory) +
                               QStringLiteral("\\Fonts")).toUtf8());
     QApplication app(argc, argv);
+    if (native_geometry) {
+        native_solution_geometry_tests();
+        return 0;
+    }
     check(!wardogs_application_icon().isNull(),
           "the application icon is available to windows and title bars");
     check_coordinate_pattern_settings();
@@ -438,23 +509,27 @@ int main(int argc, char* argv[]) {
 
     full.set_solution({wardogs::Arc::low, 188.4, 1248.0, 33.0});
     check(!full.unavailable(), "valid result clears warning state");
-    check(full.distance_text() == QStringLiteral("≈ 1248 м"),
-          "a table-only distance is explicitly formatted as an estimate");
+    check(full.distance_text() == QStringLiteral("—") &&
+              full.table_distance_text() == QStringLiteral("≈ 1247 м"),
+          "missing target distance stays unknown while inverse final MIL is visibly estimated separately");
     check(full.bearing_text().contains(QStringLiteral("188.4°")),
           "bearing keeps degrees and compass direction");
     check(full.mil_text() == QStringLiteral("33 MIL"),
           "reticle is prominent and includes its unit");
     const auto* full_arc = full.findChild<QLabel*>(QStringLiteral("solutionArc"));
     const auto* sight_distance = full.findChild<QLabel*>(QStringLiteral("solutionDistance"));
+    const auto* table_distance = full.findChild<QLabel*>(QStringLiteral("solutionTableDistance"));
     const auto* sight_mil = full.findChild<QLabel*>(QStringLiteral("solutionMil"));
-    check(sight_distance && sight_distance->accessibleName().contains(QStringLiteral("Оценка табличной дальности")) &&
-              sight_distance->toolTip().contains(QStringLiteral("оценка модели")) &&
-              sight_distance->toolTip().contains(QStringLiteral("игровой шкалы")) && sight_mil &&
+    check(table_distance && table_distance->accessibleName().contains(QStringLiteral("Оценка табличной дальности")) &&
+              table_distance->toolTip().contains(QStringLiteral("оценка модели")) &&
+              table_distance->toolTip().contains(QStringLiteral("игровой шкалы")) && sight_mil &&
               sight_mil->toolTip().contains(QStringLiteral("Игровая наводка")),
           "SPH-2 distinguishes the estimated table distance from the game HUD and MIL setting");
     const auto full_captions = full.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
-    check(!full_captions.isEmpty() && full_captions[0]->text() == QStringLiteral("По таблице"),
-          "table-only guidance never claims an exact game sight distance");
+    check(full_captions.size() == 4 && full_captions[0]->text() == QStringLiteral("До цели") &&
+              full_captions[2]->text() == QStringLiteral("Установить") &&
+              full_captions[3]->text() == QStringLiteral("По таблице ≈"),
+          "target metres, set MIL and estimated table metres have separate visible captions");
     full.set_selected(true);
     check(full.selected() && full.property("selected").toBool() && full_arc &&
               full_arc->text() == QStringLiteral("✓ Настильная") &&
@@ -464,15 +539,22 @@ int main(int argc, char* argv[]) {
     check(full.distance_text() == QStringLiteral("2221 м") && sight_distance &&
               sight_distance->accessibleName().contains(QStringLiteral("Горизонтальная дальность до цели")) &&
               sight_distance->toolTip().contains(QStringLiteral("До цели 2221 м")) &&
-              sight_distance->toolTip().contains(QStringLiteral("≈ 1391 м")) &&
-              full_captions[0]->text() == QStringLiteral("Дальность до цели") &&
+              sight_distance->toolTip().contains(QStringLiteral("≈ 1529 м")) &&
+              full.table_distance_text() == QStringLiteral("≈ 1529 м") &&
+              full_captions[0]->text() == QStringLiteral("До цели") &&
               full.toolTip().contains(QStringLiteral("Дальность до цели")),
-          "provided target distance stays distinct from the corrected low-arc table equivalent");
+          "a stale supplied reticle distance cannot replace the inverse corrected low-arc MIL");
     bool invalid_target_distance_rejected = false;
     try { full.set_solution({wardogs::Arc::low, 188.4, 1391.0, 90.0}, std::numeric_limits<double>::quiet_NaN()); }
     catch (const std::invalid_argument&) { invalid_target_distance_rejected = true; }
     check(invalid_target_distance_rejected && full.distance_text() == QStringLiteral("2221 м"),
           "invalid supplied target distance cannot replace a valid displayed result");
+    bool invalid_mil_rejected = false;
+    try { full.set_solution({wardogs::Arc::low, 188.4, 1391.0, 9999.0}, 2000.0); }
+    catch (const std::invalid_argument&) { invalid_mil_rejected = true; }
+    check(invalid_mil_rejected && full.distance_text() == QStringLiteral("2221 м") &&
+              full.mil_text() == QStringLiteral("90 MIL") && full.table_distance_text() == QStringLiteral("≈ 1529 м"),
+          "unsupported final MIL cannot publish a plausible table estimate or replace a valid command");
 
     VehicleSolutionWidget compact(wardogs::Arc::high, true);
     full.set_unavailable(QStringLiteral("3100 m"), QStringLiteral("203.0° SW"));
@@ -489,14 +571,16 @@ int main(int argc, char* argv[]) {
     check(compact_arc && compact_arc->text() == QStringLiteral("Навесная") &&
               compact.accessibleName().contains(QStringLiteral("недоступна")),
           "the floating SPH-2 rows explicitly name their trajectories and expose unavailable status");
-    compact.set_solution({wardogs::Arc::high, 203.0, 1248.0, 114.0});
-    check(compact.distance_text() == QStringLiteral("≈ 1248 м") &&
+    compact.set_solution({wardogs::Arc::high, 203.0, 1248.0, 1280.0});
+    check(compact.distance_text() == QStringLiteral("—") &&
+              compact.table_distance_text() == QStringLiteral("≈ 1245 м") &&
               compact.toolTip().contains(QStringLiteral("Оценка табличной дальности")),
           "compact table-only guidance exposes the same estimated-distance meaning");
     compact.set_solution({wardogs::Arc::high, 203.0, 2616.0, 673.0}, 2221.0);
     check(compact.distance_text() == QStringLiteral("2221 м") &&
+              compact.table_distance_text() == QStringLiteral("≈ 2616 м") &&
               compact.findChild<QLabel*>(QStringLiteral("solutionDistance"))->toolTip().contains(QStringLiteral("≈ 2616 м")),
-          "compact guidance shows target distance while retaining the high-arc table equivalent in its tooltip");
+          "compact guidance visibly separates target distance and final high-arc table equivalent");
     compact.set_selected(true);
     check(compact.selected() && compact_arc->text() == QStringLiteral("✓\nНавесная"),
           "the floating row marks the effective selected trajectory");
@@ -504,11 +588,12 @@ int main(int argc, char* argv[]) {
     check(!compact.selected() && compact_arc->text() == QStringLiteral("Навесная") &&
               compact.accessibleName().contains(QStringLiteral("ожидает цель")) &&
               compact.distance_text() == QStringLiteral("—") &&
+              compact.table_distance_text() == QStringLiteral("—") &&
               !compact.findChild<QLabel*>(QStringLiteral("solutionDistance"))->toolTip().contains(QStringLiteral("2616")),
           "clearing guidance removes the selected trajectory and stale estimated distance metadata");
     compact.set_solution({wardogs::Arc::high, 203.0, 2616.0, 673.0});
     compact.set_height_unavailable();
-    check(compact.distance_text() == QStringLiteral("—") && compact.unavailable() &&
+    check(compact.distance_text() == QStringLiteral("—") && compact.table_distance_text() == QStringLiteral("—") && compact.unavailable() &&
               compact.findChild<QLabel*>(QStringLiteral("solutionDistance"))->accessibleName().contains(QStringLiteral("нет данных высоты")) &&
               !compact.findChild<QLabel*>(QStringLiteral("solutionDistance"))->toolTip().contains(QStringLiteral("2616")),
           "height failure clears the stale table distance and its metadata");
@@ -527,11 +612,16 @@ int main(int argc, char* argv[]) {
     check(trajectory_distances.size() == 2 &&
               trajectory_distances[0]->text() == QStringLiteral("2221 м") &&
               trajectory_distances[1]->text() == QStringLiteral("2221 м") &&
-              trajectory_distances[0]->toolTip().contains(QStringLiteral("≈ 1391 м")) &&
+              trajectory_distances[0]->toolTip().contains(QStringLiteral("≈ 1529 м")) &&
               trajectory_distances[1]->toolTip().contains(QStringLiteral("≈ 2616 м")) &&
               trajectory_distances[0]->accessibleName().contains(QStringLiteral("до цели")) &&
               trajectory_distances[1]->accessibleName().contains(QStringLiteral("до цели")),
           "both floating trajectories retain the same target distance and their separate model estimates");
+    const auto trajectory_tables = trajectory_card.findChildren<QLabel*>(QStringLiteral("solutionTableDistance"));
+    const auto compact_captions = trajectory_card.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
+    check(trajectory_tables.size() == 2 && trajectory_tables[0]->text() == QStringLiteral("≈ 1529 м") &&
+              trajectory_tables[1]->text() == QStringLiteral("≈ 2616 м") && compact_captions.size() == 8,
+          "both mini-card rows expose all four captions and inverse corrected-MIL estimates");
     const auto trajectory_labels = trajectory_card.findChildren<QLabel*>(QStringLiteral("solutionArc"));
     check(trajectory_labels.size() == 2 &&
               trajectory_labels[0]->text() == QStringLiteral("Настильная") &&
@@ -561,7 +651,7 @@ int main(int argc, char* argv[]) {
         check(font_metrics.height() * lines.size() <= label->height(),
               "the full trajectory name and selection marker fit at the minimum floating height");
     }
-    for (const auto* label : trajectory_distances) {
+    for (const auto* label : trajectory_distances + trajectory_tables) {
         if (QFontMetrics(label->font()).horizontalAdvance(label->text()) > label->width())
             std::cerr << "distance label text=" << label->text().toStdString()
                       << " text_width=" << QFontMetrics(label->font()).horizontalAdvance(label->text())
@@ -575,12 +665,14 @@ int main(int argc, char* argv[]) {
     high_full.set_solution({wardogs::Arc::high, 188.4, 2616.0, 673.0});
     trajectory_card.set_vehicle_values(full, high_full);
     QApplication::processEvents();
-    check(trajectory_distances[0]->text() == QStringLiteral("≈ 1391 м") &&
-              trajectory_distances[1]->text() == QStringLiteral("≈ 2616 м") &&
-              trajectory_distances[0]->accessibleName().contains(QStringLiteral("Оценка табличной дальности")) &&
-              trajectory_distances[1]->toolTip().contains(QStringLiteral("оценка модели")),
+    check(trajectory_distances[0]->text() == QStringLiteral("—") &&
+              trajectory_distances[1]->text() == QStringLiteral("—") &&
+              trajectory_tables[0]->text() == QStringLiteral("≈ 1529 м") &&
+              trajectory_tables[1]->text() == QStringLiteral("≈ 2616 м") &&
+              trajectory_tables[0]->accessibleName().contains(QStringLiteral("Оценка табличной дальности")) &&
+              trajectory_tables[1]->toolTip().contains(QStringLiteral("оценка модели")),
           "copying table-only rows to the floating card retains their estimate labels and metadata");
-    for (const auto* label : trajectory_distances) {
+    for (const auto* label : trajectory_tables) {
         if (QFontMetrics(label->font()).horizontalAdvance(label->text()) > label->width())
             std::cerr << "estimated distance text=" << label->text().toStdString()
                       << " text_width=" << QFontMetrics(label->font()).horizontalAdvance(label->text())

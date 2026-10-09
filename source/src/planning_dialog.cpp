@@ -243,8 +243,10 @@ struct PlanningDialog::State {
     Apply apply;
     PlanningContext context;
     wardogs::FireMissionRepository missions;
+    wardogs::FireMissionRepository recent_missions;
     QString directory, observations_path;
-    std::vector<wardogs::SavedFireMission> shown_missions;
+    struct ListedMission { wardogs::SavedFireMission mission; bool recent{}; };
+    std::vector<ListedMission> shown_missions;
     std::vector<Observation> observations;
     std::optional<wardogs::FiringAnalysis> analysis;
     QLabel *coordinates{}, *status{}, *result{}, *clearance{}, *profile_info{};
@@ -255,13 +257,14 @@ struct PlanningDialog::State {
     QLineEdit *name{}, *version{}, *source{};
     QListWidget* saved{};
     QTableWidget* times{};
-    QPushButton *restore{}, *save_gun{}, *save_target{}, *record{};
+    QPushButton *restore{}, *save_gun{}, *save_target{}, *record{}, *rename{}, *erase{};
     std::vector<QPushButton*> shifts;
     bool loading{true};
 
     State(PlanningDialog* owner, Provider get, Apply set, std::filesystem::path storage)
         : dialog(owner), provider(std::move(get)), apply(std::move(set)),
-          missions(storage.empty() ? wardogs::fire_missions_path() : storage / L"fire-missions.json") {
+          missions(storage.empty() ? wardogs::fire_missions_path() : storage / L"fire-missions.json"),
+          recent_missions(storage.empty() ? wardogs::recent_fire_missions_path() : storage / L"recent-fire-missions.json") {
         directory = path_text(missions.path().parent_path());
         observations_path = directory + QStringLiteral("/flight-profiles.json");
     }
@@ -283,28 +286,43 @@ struct PlanningDialog::State {
     }
     void load_missions() {
         const auto selected = saved->currentItem() ? saved->currentItem()->data(Qt::UserRole).toString() : QString{};
+        const bool selected_history = selection_recent();
         const auto values = missions.load();
+        const auto recent_values = recent_missions.load();
         saved->clear();
         shown_missions.clear();
-        for (const auto& value : values) {
-            if (value.map != context.map || value.weapon != mission_weapon(context.weapon)) continue;
-            shown_missions.push_back(value);
+        const auto append = [&](const wardogs::SavedFireMission& value, bool recent) {
+            if (value.map != context.map || value.weapon != mission_weapon(context.weapon)) return;
+            shown_missions.push_back({value, recent});
             auto* item = new QListWidgetItem(
+                (recent ? ui_text("История") + QStringLiteral(" · ") : QString{}) +
                 (value.kind == wardogs::FireMissionKind::firing_position ? ui_text("Орудие") : ui_text("Цель")) +
                 QStringLiteral(" · ") + QString::fromStdWString(value.name) +
                 QStringLiteral("\n") + point_text(value.point), saved);
             const auto id = QString::fromStdString(value.id);
             item->setData(Qt::UserRole, id);
-            if (id == selected) saved->setCurrentItem(item);
-        }
+            item->setData(Qt::UserRole + 1, recent);
+            if (id == selected && recent == selected_history) saved->setCurrentItem(item);
+        };
+        for (const auto& value : recent_values) append(value, true);
+        for (const auto& value : values) append(value, false);
+        update_mission_actions();
+    }
+    bool selection_recent() const {
+        return saved->currentItem() && saved->currentItem()->data(Qt::UserRole + 1).toBool();
+    }
+    void update_mission_actions() {
+        const bool named = saved->currentItem() && !selection_recent();
+        if (rename) rename->setEnabled(named);
+        if (erase) erase->setEnabled(named);
     }
     std::optional<wardogs::SavedFireMission> selection() const {
         if (!saved->currentItem()) return std::nullopt;
         const auto id = saved->currentItem()->data(Qt::UserRole).toString().toStdString();
         const auto found = std::find_if(shown_missions.begin(), shown_missions.end(),
-            [&](const auto& value) { return value.id == id; });
+            [&](const auto& value) { return value.mission.id == id && value.recent == selection_recent(); });
         if (found == shown_missions.end()) return std::nullopt;
-        return *found;
+        return found->mission;
     }
     void mission_action(wardogs::FireMissionKind kind) {
         context = provider();
@@ -451,7 +469,7 @@ QHeaderView::section,QTableCornerButton::section {
 }
 )"));
     configure_frameless_window(this);
-    setWindowTitle(ui_text("Планирование · WARDOGS"));
+    setWindowTitle(ui_text("Дополнительные инструменты · WARDOGS"));
     setModal(true);
     setMinimumSize(440, 380);
     const auto available = screen()->availableGeometry().size();
@@ -465,17 +483,18 @@ QHeaderView::section,QTableCornerButton::section {
     s.coordinates = note({});
     s.coordinates->setObjectName(QStringLiteral("planningCoordinates"));
     root->addWidget(s.coordinates);
+    root->addWidget(note(ui_text("Для обычной стрельбы достаточно выбрать цель и отметить попадание Alt+I. Здесь — перенос цели, история позиций и необязательные измерения.")));
     auto* tabs = new QTabWidget;
     tabs->setObjectName(QStringLiteral("planningTabs"));
     root->addWidget(tabs, 1);
 
     auto* analysis_page = page(tabs, ui_text("Полёт и рельеф"));
-    auto* shifts = new QGroupBox(ui_text("Быстрые поправки"));
+    auto* shifts = new QGroupBox(ui_text("Перенести цель"));
     auto* shift_layout = new QHBoxLayout(shifts);
     s.step = new QComboBox;
     s.step->setObjectName(QStringLiteral("correctionStep"));
     for (int value : {10, 25, 50, 100}) s.step->addItem(ui_text("%1 м").arg(value), value);
-    s.step->setAccessibleName(ui_text("Шаг поправки"));
+    s.step->setAccessibleName(ui_text("Шаг переноса цели"));
     shift_layout->addWidget(s.step);
     struct Shift { const char* text; const char* name; double lateral; double longitudinal; };
     for (const auto shift : {Shift{"Левее", "correctLeft", -1, 0}, Shift{"Правее", "correctRight", 1, 0},
@@ -494,7 +513,7 @@ QHeaderView::section,QTableCornerButton::section {
                     shift.lateral * distance, shift.longitudinal * distance);
                 value.apply(wardogs::FireMissionKind::target, point, value.context.map, value.context.weapon);
                 refresh();
-                value.message(ui_text("Цель скорректирована"));
+                value.message(ui_text("Цель перенесена · наводка пересчитана"));
             });
         });
     }
@@ -504,7 +523,7 @@ QHeaderView::section,QTableCornerButton::section {
     s.arc = new QComboBox;
     s.arc->setObjectName(QStringLiteral("planningArc"));
     s.arc->addItems({ui_text("Настильная"), ui_text("Навесная")});
-    s.arc->setCurrentIndex(s.context.preferred_arc == wardogs::Arc::high ? 1 : 0);
+    s.arc->setCurrentIndex(s.context.active_arc.value_or(s.context.preferred_arc) == wardogs::Arc::high ? 1 : 0);
     choices->addWidget(new QLabel(ui_text("Траектория")));
     choices->addWidget(s.arc);
     choices->addStretch();
@@ -516,6 +535,7 @@ QHeaderView::section,QTableCornerButton::section {
     s.plot->setObjectName(QStringLiteral("terrainProfile"));
     s.plot->setMinimumHeight(230);
     analysis_page->addWidget(s.plot);
+    analysis_page->addWidget(note(ui_text("График — геометрическая оценка по цели; фактический путь после поправки Alt+I не измерен.")));
     analysis_page->addWidget(note(ui_text("Зелёный — поверхность земли, оранжевый — оценочная дуга. Пробелы означают отсутствие данных. Дома, крыши, мосты, деревья и высота ствола в файле рельефа не представлены.")));
     s.clearance = note({});
     s.clearance->setObjectName(QStringLiteral("terrainClearance"));
@@ -536,7 +556,7 @@ QHeaderView::section,QTableCornerButton::section {
     analysis_page->addStretch();
 
     auto* missions_page = page(tabs, ui_text("Позиции и цели"));
-    missions_page->addWidget(note(ui_text("Записи привязаны к подтверждённой карте и орудию. После перезапуска ничего не восстанавливается автоматически. Восстановление орудия сбрасывает прежнюю цель и калибровку.")));
+    missions_page->addWidget(note(ui_text("Последние позиции и цели сохраняются автоматически в истории. Именованные записи создаются вручную. Для восстановления подтвердите карту и орудие; прежние поправки не восстанавливаются.")));
     s.name = new QLineEdit;
     s.name->setObjectName(QStringLiteral("missionName"));
     s.name->setMaxLength(static_cast<int>(wardogs::maximum_fire_mission_name_length));
@@ -558,18 +578,19 @@ QHeaderView::section,QTableCornerButton::section {
     auto* actions = new QHBoxLayout;
     s.restore = new QPushButton(ui_text("Восстановить выбранное"));
     s.restore->setObjectName(QStringLiteral("restoreFireMission"));
-    auto* rename = new QPushButton(ui_text("Переименовать"));
-    rename->setObjectName(QStringLiteral("renameFireMission"));
-    auto* erase = new QPushButton(ui_text("Удалить"));
-    erase->setObjectName(QStringLiteral("deleteFireMission"));
+    s.rename = new QPushButton(ui_text("Переименовать"));
+    s.rename->setObjectName(QStringLiteral("renameFireMission"));
+    s.erase = new QPushButton(ui_text("Удалить"));
+    s.erase->setObjectName(QStringLiteral("deleteFireMission"));
     actions->addWidget(s.restore);
-    actions->addWidget(rename);
-    actions->addWidget(erase);
+    actions->addWidget(s.rename);
+    actions->addWidget(s.erase);
     missions_page->addLayout(actions);
     connect(s.save_gun, &QPushButton::clicked, this, [&s] { s.attempt([&] { s.mission_action(wardogs::FireMissionKind::firing_position); }); });
     connect(s.save_target, &QPushButton::clicked, this, [&s] { s.attempt([&] { s.mission_action(wardogs::FireMissionKind::target); }); });
     connect(s.saved, &QListWidget::currentRowChanged, this, [&s] {
         if (const auto value = s.selection()) s.name->setText(QString::fromStdWString(value->name));
+        s.update_mission_actions();
     });
     connect(s.restore, &QPushButton::clicked, this, [this] {
         auto& value = *state_;
@@ -587,19 +608,22 @@ QHeaderView::section,QTableCornerButton::section {
             value.message(ui_text("Позиция восстановлена"));
         });
     });
-    connect(rename, &QPushButton::clicked, this, [&s] { s.attempt([&] {
+    connect(s.rename, &QPushButton::clicked, this, [&s] { s.attempt([&] {
+        if (s.selection_recent()) return;
         if (const auto selected = s.selection()) {
             (void)s.missions.update(selected->id, s.name->text().toStdWString(), selected->point);
             s.load_missions(); s.message(ui_text("Название сохранено"));
         }
     }); });
-    connect(erase, &QPushButton::clicked, this, [&s] { s.attempt([&] {
+    connect(s.erase, &QPushButton::clicked, this, [&s] { s.attempt([&] {
+        if (s.selection_recent()) return;
         if (const auto selected = s.selection()) {
             (void)s.missions.erase(selected->id); s.load_missions(); s.message(ui_text("Запись удалена"));
         }
     }); });
 
     auto* time_page = page(tabs, ui_text("Измерения времени"));
+    time_page->addWidget(note(ui_text("Alt+I отмечает координаты попадания и не измеряет время полёта: момент выстрела неизвестен. Время ниже — только ваш отдельный замер.")));
     time_page->addWidget(note(ui_text("Измерьте время от выстрела до попадания. Запись относится к текущей цели, орудию, траектории, перепаду высот и версии игры. Между измеренными дальностями используется интерполяция, за пределами — время неизвестно. При смене боеприпаса используйте отдельную метку версии/профиля.")));
     auto* timing_form = new QFormLayout;
     timing_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
@@ -684,9 +708,15 @@ QHeaderView::section,QTableCornerButton::section {
     connect(timer, &QTimer::timeout, this, [this] {
         const auto next = state_->provider();
         const auto& old = state_->context;
+        const bool command_changed = next.active_solution.has_value() != old.active_solution.has_value() ||
+            (next.active_solution && old.active_solution &&
+             (next.active_solution->arc != old.active_solution->arc ||
+              next.active_solution->bearing_deg != old.active_solution->bearing_deg ||
+              next.active_solution->mil != old.active_solution->mil));
         if (next.map != old.map || next.weapon != old.weapon || next.base != old.base ||
             next.target != old.target || next.map_confirmed != old.map_confirmed ||
-            next.capture_pending != old.capture_pending || next.solution_held != old.solution_held)
+            next.capture_pending != old.capture_pending || next.solution_held != old.solution_held ||
+            next.active_arc != old.active_arc || command_changed)
             refresh();
     });
     timer->start(500);
@@ -706,7 +736,12 @@ PlanningDialog::~PlanningDialog() {
 void PlanningDialog::refresh() {
     auto& s = *state_;
     if (s.loading) return;
+    const auto previous_active_arc = s.context.active_arc;
     s.context = s.provider();
+    if (s.context.active_arc && s.context.active_arc != previous_active_arc) {
+        const QSignalBlocker block(s.arc);
+        s.arc->setCurrentIndex(*s.context.active_arc == wardogs::Arc::high ? 1 : 0);
+    }
     s.message({});
     const bool l81 = s.context.weapon == wardogs::AnalysisWeapon::l81;
     s.arc->setEnabled(!l81);
@@ -762,9 +797,24 @@ void PlanningDialog::refresh() {
         if (first.height_delta_m) request.flight_profile = s.time_profile(*first.height_delta_m, first.distance_m);
         s.analysis = wardogs::analyze_firing(request);
         const auto& result = *s.analysis;
-        QString summary = ui_text("Дальность %1 м · азимут %2°").arg(result.distance_m, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2);
-        summary += result.nominal_mil ? ui_text("\nMIL без поправки Alt+I: %1").arg(*result.nominal_mil, 0, 'f', 2)
-                                      : ui_text("\nТабличная наводка недоступна");
+        QString summary = ui_text("До цели %1 м").arg(result.distance_m, 0, 'f', 2);
+        if (!l81 && s.context.active_solution && s.context.active_arc &&
+            s.context.active_solution->arc == *s.context.active_arc &&
+            s.selected_arc() == *s.context.active_arc) {
+            const auto& command = *s.context.active_solution;
+            if (!std::isfinite(command.bearing_deg))
+                throw std::invalid_argument("Некорректная траектория или азимут наводки");
+            const auto equivalent = wardogs::sph2_distance_for_mil(command.mil, command.arc);
+            summary += ui_text("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°")
+                .arg(command.mil, 0, 'f', 2).arg(command.bearing_deg, 0, 'f', 2);
+            summary += ui_text("\nПо таблице ≈ %1 м").arg(equivalent, 0, 'f', 0);
+        } else if (result.nominal_mil) {
+            summary += l81
+                ? ui_text("\nУстановить %1 MIL · азимут %2°")
+                    .arg(*result.nominal_mil, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2)
+                : ui_text("\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.")
+                    .arg(*result.nominal_mil, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2);
+        } else summary += ui_text("\nТабличная наводка недоступна");
         if (result.flight_time) {
             const auto& time = *result.flight_time;
             const bool measured = time.source.basis == wardogs::EstimateBasis::user_measurement ||

@@ -2,9 +2,24 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.11.0 — unified workflow and ranging (candidate, unpublished)
+
+The stable release remains **2.8.0**. This section describes current source; a new CI result and publication are established separately.
+
+- **Map → gun → target → fire → impact:** Alt+X sets the gun, middle-click sets the target, and Alt+I refines the selected command for the original target.
+- **Map confirmation and entry:** **Confirm map and enter game**, then **To game** once confirmed. An unselected map requires a selection; missing required heights block entry.
+- **RANGING beside the result:** latest accepted miss, already applied bearing/MIL changes, observation count and reset. Do not add the change to final values again.
+- **One selected final command** for the main window, mini card, sight and Alt+I; the other arc is explicitly baseline.
+- **Three values:** horizontal target metres, final MIL and approximate community-table metres. The latter do not guarantee the current game's RNG value.
+- **Automatic SPH-2 ground assessment:** selected baseline model arc, unknown heights and incomplete coverage. Suggesting another arc does not switch it automatically; buildings, bridges, trees and actual corrected flight are not modeled.
+- **Automatic history:** up to 64 accepted recent positions/targets in separate recent-fire-missions.json. Naming is optional; the 500 named records in fire-missions.json are not evicted. Restore points explicitly after map confirmation.
+- **Additional tools:** manually moving the target itself, saved points, personal timing observations, ground profiles and sources. Manual impact entry remains under Manual input and diagnostics in the main window.
+- **Alt+I does not supply flight time:** the speed/gravity model is disabled by default; personal observations are separate from estimates. L81/SPH-2 tables are retained. A roughly 2200 m example is not a new measured shot; first-shot accuracy is not promised.
+
+[Workflow guide](USAGE-EN.md) · [Mathematics and boundaries](CALCULATIONS-EN.md)
 ## 2.10.0 — map reading and diagnostic history (candidate)
 
-The published stable release remains 2.8.0. The changes below describe the current source and candidate build under validation.
+Changes in this historical section were introduced in the 2.10.0 candidate and retained in the current 2.11.0 candidate. This section does not claim a published stable 2.10.0 release.
 
 - Complete labeled X/Y are searched in a bounded cursor neighborhood within the game client. Original rectangles remain hints; an unlabeled number is not accepted by position.
 - The first middle-button screenshot waits for the marker to appear, 250 ms by default. Client geometry is pinned at the click; a geometry change during that delay cancels capture. Automatic acceptance needs two matching trustworthy pairs from separate screenshots, with at most four frames per request. Changes to point, window, geometry or epoch invalidate the old request.

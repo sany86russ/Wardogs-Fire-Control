@@ -27,6 +27,7 @@ struct SavedFireMission {
 
 inline constexpr int fire_missions_schema_version = 1;
 inline constexpr std::size_t maximum_saved_fire_missions = 500;
+inline constexpr std::size_t maximum_recent_fire_missions = 64;
 // UTF-16 code units, matching the Windows/Qt name editor.
 inline constexpr std::size_t maximum_fire_mission_name_length = 120;
 inline constexpr std::size_t maximum_fire_missions_file_bytes = 1024 * 1024;
@@ -34,6 +35,7 @@ inline constexpr std::size_t maximum_fire_missions_file_bytes = 1024 * 1024;
 // The persistent file is outside the portable application and updater's manifest:
 // %LOCALAPPDATA%/WardogsFireControl/fire-missions.json.
 [[nodiscard]] std::filesystem::path fire_missions_path();
+[[nodiscard]] std::filesystem::path recent_fire_missions_path();
 void validate_fire_mission(const SavedFireMission& mission);
 
 // Requires an explicit already-confirmed map and matching weapon. This only
@@ -64,6 +66,11 @@ public:
                                           Point point) const;
     // false means that a valid identifier is absent; malformed data still fails.
     [[nodiscard]] bool erase(std::string_view id) const;
+
+    // For the separate recent-fire-missions.json store only. Exact-point MRU,
+    // bounded to 64 entries; never prune the user's named mission collection.
+    [[nodiscard]] SavedFireMission remember(GameMap map, FireMissionWeapon weapon,
+                                           FireMissionKind kind, Point point) const;
 
 private:
     std::filesystem::path path_;

@@ -630,6 +630,107 @@ void terrain_render_tests(PlanningDialog& dialog, Harness& harness, const QStrin
     dialog.refresh();
 }
 
+void shared_command_and_history_tests(const QString& language) {
+    QTemporaryDir storage(QDir::tempPath() + QStringLiteral("/wardogs-planning-shared-XXXXXX"));
+    require(storage.isValid(), "shared-guidance tests use an isolated persistent directory");
+    storage.setAutoRemove(false);
+    fixtures.append(storage.path());
+    Harness harness;
+    harness.context.weapon = wardogs::AnalysisWeapon::sph2;
+    harness.context.preferred_arc = wardogs::Arc::high;
+    harness.context.target = wardogs::Point{0, 20};
+    harness.context.active_arc = wardogs::Arc::high;
+    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::high, 7.75, 1.0, 1000.0};
+    wardogs::FireMissionRepository named(native_path(storage.path()) / L"fire-missions.json");
+    wardogs::FireMissionRepository recent(native_path(storage.path()) / L"recent-fire-missions.json");
+    const auto named_point = named.create(wardogs::GameMap::training, wardogs::FireMissionWeapon::sph2,
+        wardogs::FireMissionKind::target, L"Named retained target", {0, 19});
+    const auto recent_point = recent.remember(wardogs::GameMap::training, wardogs::FireMissionWeapon::sph2,
+        wardogs::FireMissionKind::target, {0, 20});
+    (void)recent.remember(wardogs::GameMap::bakurani, wardogs::FireMissionWeapon::sph2,
+        wardogs::FireMissionKind::target, {0, 18});
+    (void)recent.remember(wardogs::GameMap::training, wardogs::FireMissionWeapon::l81,
+        wardogs::FireMissionKind::target, {0, 3});
+    const QString named_path = storage.path() + QStringLiteral("/fire-missions.json");
+    const QString recent_path = storage.path() + QStringLiteral("/recent-fire-missions.json");
+    const auto named_before = read_bytes(named_path), recent_before = read_bytes(recent_path);
+    PlanningDialog dialog(harness.provider(), harness.apply(), nullptr, native_path(storage.path()));
+    dialog.show();
+    settle();
+    auto* result = child<QLabel>(dialog, "flightTimeResult");
+    auto* arc = child<QComboBox>(dialog, "planningArc");
+    const auto active_marker = translated("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°")
+        .section(QStringLiteral("%1"), 0, 0);
+    const auto preview_marker = translated("\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.")
+        .section(QStringLiteral("%1"), 0, 0);
+    check(arc->currentIndex() == 1 && result->text().contains(active_marker) &&
+              result->text().contains(QStringLiteral("1000.00")) && result->text().contains(QStringLiteral("7.75")) &&
+              result->text().contains(QStringLiteral("2147")) && !result->text().contains(preview_marker),
+          "planning shows the active corrected high-arc command and inverse MIL, never a competing nominal MIL");
+    arc->setCurrentIndex(0);
+    settle();
+    check(result->text().contains(preview_marker) && !result->text().contains(active_marker) &&
+              !result->text().contains(QStringLiteral("1000.00")) && harness.applied.empty(),
+          "another arc is an explicitly inactive preview and cannot change the player's active command");
+    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::low, 9.25, 9999.0, 280.0};
+    harness.context.active_arc = wardogs::Arc::low;
+    dialog.refresh();
+    check(result->text().contains(active_marker) && result->text().contains(QStringLiteral("280.00")) &&
+              result->text().contains(QStringLiteral("9.25")) && result->text().contains(QStringLiteral("2223")),
+          "a refreshed Alt+I command replaces stale values and recomputes the visible table equivalent");
+    harness.context.solution_held = true;
+    dialog.refresh();
+    check(!result->text().contains(active_marker) && !result->text().contains(QStringLiteral("280.00")),
+          "an unresolved coordinate capture hides prior active guidance in the supplemental dialog");
+    harness.context.solution_held = false;
+    harness.context.active_solution->arc = wardogs::Arc::high;
+    dialog.refresh();
+    check(result->text().contains(preview_marker) && !result->text().contains(active_marker),
+          "an inconsistent active command/arc identity cannot be presented as usable guidance");
+    harness.context.active_solution->arc = wardogs::Arc::low;
+    dialog.refresh();
+    choose_tab(dialog, 1);
+    auto* saved = child<QListWidget>(dialog, "savedFireMissions");
+    require(saved->count() == 2, "history merges with named missions and filters both by current map and weapon");
+    for (int row = 0; row < saved->count(); ++row) {
+        if (saved->item(row)->data(Qt::UserRole).toString() == QString::fromStdString(recent_point.id))
+            saved->setCurrentRow(row);
+    }
+    require(saved->currentItem() && saved->currentItem()->data(Qt::UserRole + 1).toBool(),
+            "the automatic history entry is distinctly marked in the real list");
+    check(saved->currentItem()->text().contains(translated("История")) &&
+              !child<QPushButton>(dialog, "renameFireMission")->isEnabled() &&
+              !child<QPushButton>(dialog, "deleteFireMission")->isEnabled(),
+          "automatic history entries are visibly identified and cannot rename or delete named records");
+    click(dialog, "restoreFireMission");
+    check(harness.applied.size() == 1 && same_point(harness.applied.back().point, {0, 20}) &&
+              read_bytes(named_path) == named_before && read_bytes(recent_path) == recent_before,
+          "explicit history restoration uses the exact point without mutating either persistent collection");
+    const auto restore_count = harness.applied.size();
+    harness.context.map_confirmed = false;
+    click(dialog, "restoreFireMission");
+    check(harness.applied.size() == restore_count,
+          "history restore rechecks the map even if the displayed selection is stale");
+    harness.context.map_confirmed = true;
+    harness.context.weapon = wardogs::AnalysisWeapon::l81;
+    click(dialog, "restoreFireMission");
+    check(harness.applied.size() == restore_count,
+          "history restore rejects a changed weapon instead of applying stale SPH-2 coordinates");
+    harness.context.weapon = wardogs::AnalysisWeapon::sph2;
+    dialog.refresh();
+    for (int row = 0; row < saved->count(); ++row) {
+        if (saved->item(row)->data(Qt::UserRole).toString() == QString::fromStdString(named_point.id))
+            saved->setCurrentRow(row);
+    }
+    check(child<QPushButton>(dialog, "renameFireMission")->isEnabled() &&
+              child<QPushButton>(dialog, "deleteFireMission")->isEnabled() &&
+              named.load().size() == 1 && named.load()[0] == named_point,
+          "named mission editing remains available and its retained data is unaffected by automatic history");
+    if (wardogs::i18n::language() == wardogs::UiLanguage::english) inspect_english(dialog);
+    screenshot(dialog, language + QStringLiteral("-shared-history"), saved);
+    dialog.close();
+}
+
 void corruption_tests(Harness& harness, const QString& language) {
     QTemporaryDir storage(QDir::tempPath() + QStringLiteral("/wardogs-planning-corrupt-XXXXXX"));
     require(storage.isValid(), "corruption tests have an isolated persistent directory");
@@ -736,6 +837,7 @@ void timing_byte_limit_tests(const QString& language) {
 
 void language_suite(wardogs::UiLanguage language, const QString& code) {
     wardogs::i18n::set_language(language);
+    shared_command_and_history_tests(code);
     QTemporaryDir storage(QDir::tempPath() + QStringLiteral("/wardogs-planning-ui-XXXXXX"));
     require(storage.isValid(), "each language suite gets independent temporary persistent files");
     storage.setAutoRemove(false);

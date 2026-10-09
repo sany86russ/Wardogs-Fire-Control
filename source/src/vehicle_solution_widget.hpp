@@ -24,6 +24,7 @@ public:
     void set_selected(bool selected);
 
     [[nodiscard]] QString distance_text() const;
+    [[nodiscard]] QString table_distance_text() const;
     [[nodiscard]] QString bearing_text() const;
     [[nodiscard]] QString mil_text() const;
     [[nodiscard]] bool unavailable() const;
@@ -45,5 +46,5 @@ private:
     bool distance_is_target_{true};
     bool selected_{};
     double compact_scale_{1.0};
-    QLabel *trajectory_{}, *distance_caption_{}, *distance_{}, *bearing_{}, *mil_{};
+    QLabel *trajectory_{}, *distance_caption_{}, *distance_{}, *bearing_{}, *mil_{}, *table_distance_{};
 };

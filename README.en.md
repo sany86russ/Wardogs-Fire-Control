@@ -15,17 +15,17 @@ The app transfers map points into an aiming calculation: **Alt+X** reads the gun
 
 **Version 2.8.0:** GitHub release updates inside the app. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
-**2.10.0 source — next release candidate:** improved map-label reading and diagnostic retention, including the **Planning** window prepared in 2.9. The stable download above still points to 2.8.0. Building the current source provides:
+**2.11.0 source — next release candidate:** one cycle, **map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined command**. The stable download above still points to **2.8.0**; candidate features are available when building the current source.
 
-- **Profiles and sources:** L81/SPH-2 operating limits, table provenance and conflicting external calculator data.
-- **Spotter corrections:** left, right, closer and farther by 10/25/50/100 m in the gun → target frame, followed by a new aiming calculation.
-- **Named positions and targets:** exact coordinates saved by map and weapon, restored explicitly after confirming the map.
-- **Flight time:** personal observations with game version, source and uncertainty; interpolation within measured coverage only. A separate assumed physical model requires explicitly selected parameters.
-- **Terrain profile:** ground along the path and an estimated arc. Missing heights remain gaps; ground-intersection checks do not establish clearance of buildings, bridges or trees.
-- **Map reading:** bounded search for complete X/Y labels near the cursor and agreement between two separate screenshots, with at most four frames per request. The first middle-button screenshot waits for the marker to appear.
-- **Diagnostic history:** up to 32 archived logs plus current and previous, each up to 4 MiB.
+- **Ranging beside the result:** latest accepted miss in metres, already applied bearing/MIL changes, observation count and reset. Do not add the correction to final values a second time.
+- **One selected command:** main window, mini card, sight and Alt+I share the same final bearing/MIL. Analysis of another arc in additional tools is explicitly shown as baseline.
+- **Three distinct values:** target metres, final MIL and approximate community-table metres; the latter are not promised to match the current game's RNG.
+- **Automatic SPH-2 ground assessment:** the selected baseline model arc, explicit unknown heights/incomplete coverage and another-arc suggestions without automatic switching. Buildings, bridges and trees are not modeled.
+- **Accepted points are retained:** up to 64 recent positions and targets, separate from 500 named records. Naming is optional; restore explicitly after confirming the map.
+- **Additional tools:** manual target shifting, saved points, personal timing observations, ground profile and sources. Manual impact entry is in the main window under Manual input and diagnostics. Moving a target is separate from ranging.
+- **2.10 OCR and diagnostics retained:** labeled X/Y search, agreement between separate screenshots, up to four frames per request and bounded log archives.
 
-Game projectile speed and gravity are unverified, so time is unknown by default. Assumed-model seconds are distinguished from observations and do not change table MIL. See the [calculation reference](source/docs/CALCULATIONS-EN.md) and [guide](source/docs/QUICKSTART-EN.md).
+Game speed and gravity are unverified; the timing model is disabled by default. Alt+I does not measure flight seconds. Tables are retained; agreement with the current game requires separate verification. [2.11 workflow](source/docs/USAGE-EN.md) · [Detailed calculations](source/docs/CALCULATIONS-EN.md).
 
 ![WARDOGS Fire Control main window in English](docs/screenshots/en-main.png)
 
@@ -72,9 +72,9 @@ The app calculates aiming commands. Setting the in-game bearing and MIL, decidin
 | **Uncertain-reading review** | Inspect candidate pairs, edit coordinates, explicitly apply or reject |
 | **Manual mode** | Coordinate entry and paste; game features can be disabled |
 | **Mini card and sight** | Results above other windows, with opacity, size and locking controls |
-| **SPH-2 impact corrections** | Optional refinement near the current target on the selected arc |
-| **SPH-2 terrain** | Verified local import of compatible elevations; an explicit no-height mode |
-| **History and clipboard** | Up to 12 targets per session and copying the calculation |
+| **SPH-2 ranging** | Miss distance in metres, bearing/MIL changes, observation count and reset; correction applies to the selected command |
+| **SPH-2 terrain** | Local elevations and automatic ground checks for the selected baseline model arc; unknown data is explicit |
+| **History and clipboard** | Up to 12 session targets, persisted accepted positions/targets with optional names, and copying the calculation |
 | **RU / EN** | Instant translation of windows, buttons, errors, hints and copied results |
 | **Portable package** | Run from an extracted folder; no SDK or Python required for use |
 
@@ -124,14 +124,17 @@ OCR and calculations run locally. Internet access is used only to check/download
 3. Open the in-game map with **M**, then **right-click the gun position → Mark Coordinates**. The coordinates appear in the chat input; you do not need to send the message.
 4. Press **Alt+X**. If the only complete pair is read confidently, the app accepts the gun position and displays the mini card.
 5. Point at a target on the map and press the **middle mouse button**. The app reads the separate X/Y labels beside the cursor and displays the solution.
-6. Set the in-game **bearing and MIL**. For SPH-2, **F4** switches the selected available arc.
-7. Middle-click again for the next target. **Alt+C** reopens the main window.
+6. Set the in-game **bearing and final MIL of the selected command**, then fire. For SPH-2, **F4** switches the selected available arc.
+7. To refine SPH-2, point at the **actual impact** on the map and press **Alt+I** while the original target and arc remain selected. The final command is updated for the same target.
+8. Set the updated bearing/MIL. Middle-click for the next target. **Alt+C** reopens the main window.
 
 This workflow is enabled by default. You do not need to select an OCR region, press a separate start button or confirm every confident reading. Alt+X always searches the active chat draft, even when you have saved a custom region.
 
 Middle-click still places the in-game marker. Once the gun position has been accepted, target acquisition is available with either the main window or the mini card; Alt+C does not disable it. To disable acquisition completely, select standalone mode, turn off the middle mouse button in settings or exit the app.
 
 **Set the gun position again after moving it.** Changing the map clears coordinates, history and corrections. The app does not detect the map name automatically.
+
+The **2.11 source** workflow is **confirm map → Alt+X: gun → middle click: target → fire → Alt+I: impact → refined guidance**. Recording an impact is optional; the first solution is available immediately. The detailed [English guide](source/docs/USAGE-EN.md) and [Russian guide](source/docs/USAGE-RU.md) cover ranging, saved points and additional tools.
 
 ### Manual workflow
 
@@ -156,7 +159,7 @@ Select **Settings → Advanced → Standalone calculator · manual input only** 
 
 SPH-2 ranges refer to the original flat-ground tables. With an elevation difference, arc availability depends on the model and final sight value. Unavailable solutions are shown explicitly.
 
-**MIL is the game's aiming scale, not miles or a range in metres.** Use the MIL of the selected arc when aiming. The primary range on screen is the horizontal distance to the target, identical for both SPH-2 arcs.
+**MIL is the game's aiming scale, not miles or a range in metres.** Use the selected arc's final MIL when aiming. The main window and mini card distinguish **target range**, **final MIL** and **approximate equivalent range from the community table**. Target range is identical for both arcs; table metres describe the current MIL and may differ after elevation or impact corrections. They are not a promise to match the current game's RNG readout.
 
 ### Optional SPH-2 impact refinement
 
@@ -165,10 +168,14 @@ SPH-2 provides a solution immediately. Two initial trial shots in different dire
 1. Calculate the target and select an arc.
 2. Fire normally using the displayed settings.
 3. **Before changing the target or arc**, open the map, point at the actual impact and press **Alt+I**.
-4. The app refines the original target solution. You can also enter an impact manually under **Impact corrections**.
+4. The app refines the original target solution. The compact **RANGING** block shows the latest accepted miss in metres, the already **applied bearing/MIL change** and observation count. It is included in the final values; do not add it again. Manual impact entry is in the main window: **Manual input and diagnostics → Impact corrections**.
 5. **Reset corrections** removes refinements and immediately restores the direct solution.
 
 Middle-clicking the impact would replace the target: use Alt+I for corrections. The app does not observe the shot itself or the actual in-game sight settings; the record refers to the command displayed when capture begins.
+
+The main window, mini card, sight and Alt+I recording use **one selected final command**. When another arc is viewed in additional tools, its analysis is explicitly labeled as baseline and does not replace the command to fire with. An accepted impact updates guidance for the original target; manual target-shift controls in additional tools move the point itself and recalculate the task.
+
+Ranging hints express **left/right** as bearing degrees and **closer/farther** as a MIL change. To move farther, the **low arc increases MIL** and the **high arc decreases MIL**. Ranging estimates these changes from an accepted impact; it does not determine the vehicle's physical tilt.
 
 Corrections apply to the **same arc** near the recorded target and fade to zero at **50 m**. Repeated corrections do not accumulate endlessly. An impact that is too far away or incompatible is rejected without replacing the current solution. Set the gun again after moving the vehicle; reset corrections manually if its body orientation changes at the same position.
 
@@ -271,6 +278,18 @@ Bearing and MIL corrections are estimated independently from observations, consi
 
 One impact does not determine the vehicle's three-dimensional tilt. The consistency score is not a hit probability.
 
+### Automatic ground assessment and additional tools
+
+After an SPH-2 target is accepted, the app automatically checks available ground along the **selected arc's baseline model trajectory**. Results distinguish an estimated ground intersection, no detected intersection at sampled points, unknown elevations and incomplete coverage. If the other available arc appears preferable under this estimate, the app can suggest it; the arc **does not change automatically**.
+
+This is not a check of the corrected projectile's actual path. Alt+I corrections change the aiming command rather than produce a measured trajectory. Buildings, trees, bridges, roofs and barrel height are absent from the elevation data.
+
+**Additional tools** brings together manual target shifts, saved points, personal flight-time measurements, ground profiles and table sources. Moving **left/right/closer/farther by 10/25/50/100 m** explicitly changes the target coordinates; it is separate from recording an impact.
+
+Accepted positions and targets are saved with exact coordinates under their map and weapon; names are optional. Restore them explicitly after confirming the map. Map, gun and earlier corrections are not automatically restored on launch.
+
+Elapsed time from firing to Alt+I **is not flight time**: it includes player reaction and map interaction. Time comes from matching personal measurements or a separately enabled physical model. The speed/gravity model is disabled by default and its seconds are labeled as estimates.
+
 ## Maps and elevations
 
 A map is **required** and must be confirmed each session. This prevents silently applying another map's elevations. A map change clears the gun, target, history and corrections.
@@ -323,7 +342,7 @@ Search remains within the active game client and a bounded cursor neighborhood. 
 
 ## Local data and privacy
 
-In the 2.10.0 source, **fire-missions.json**, **flight-profiles.json** and **planning.ini** retain named points, timing observations and planning parameters beside settings in the Windows user profile. They remain local, survive updates and are excluded from the application archive.
+In the 2.11 source, **recent-fire-missions.json** (up to 64 recently accepted points), **fire-missions.json** (up to 500 named records), **flight-profiles.json** and **planning.ini** keep points, personal observations and parameters in the Windows profile beside settings. They remain local, survive updates and are not included in the app archive.
 
 - Calculations, OCR and terrain reading run **on your computer**.
 - Calculating requires no account, API key or cloud subscription.
@@ -368,6 +387,7 @@ These are saved **2.7.0** interface screenshots in Russian and English. They sho
 | Document | Contents |
 |---|---|
 | [Quick start EN](source/docs/QUICKSTART-EN.md) / [RU](source/docs/QUICKSTART-RU.md) | Launch, coordinates, game workflow, controls, OCR and profiles |
+| [Workflow 2.11 EN](source/docs/USAGE-EN.md) / [RU](source/docs/USAGE-RU.md) | Ranging, the final command, saved points and additional tools |
 | [Mathematics EN](source/docs/CALCULATIONS-EN.md) / [RU](source/docs/CALCULATIONS-RU.md) | Tables, formulas, elevations, corrections and numerical limits |
 | [Architecture EN](source/docs/ARCHITECTURE-EN.md) / [RU](source/docs/ARCHITECTURE-RU.md) | Modules, threads, state management and technologies |
 | [Game interaction EN](source/docs/ANTICHEAT-EN.md) / [RU](source/docs/ANTICHEAT-RU.md) | Screen capture, hooks, limits and WARDOGS rules |
@@ -394,7 +414,7 @@ The repository contains app source, tests, the OCR model, used components and li
 
 ## Limitations and feedback
 
-The app does not model wind, dispersion or target motion. In the 2.10.0 candidate, flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. OCR resilience and log retention do not change ballistic tables or the physical model. New in-game firing trials have not been performed. First-shot accuracy and any hit percentage are not guaranteed.
+The app does not model wind, dispersion or target motion. Flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. The new workflow does not change the tables or establish hit accuracy. First-shot accuracy and any hit percentage are not guaranteed.
 
 Automated checks cover calculations, extreme values, OCR on fixtures, rejection without state corruption, terrain, settings and localization. The 2.7.0 interface review included RU/EN at Windows scales of 100/150/200%. These results establish software behavior; they do not replace measured in-game firing trials, every HUD test or a developer decision on utility approval.
 

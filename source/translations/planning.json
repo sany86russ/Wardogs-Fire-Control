@@ -674,5 +674,81 @@
   {
     "ru": "\nИсточник замера: %1",
     "en": "\nMeasurement source: %1"
+  },
+  {
+    "ru": "До цели",
+    "en": "To target"
+  },
+  {
+    "ru": "Установить",
+    "en": "Set"
+  },
+  {
+    "ru": "По таблице ≈",
+    "en": "Table estimate ≈"
+  },
+  {
+    "ru": "Горизонтальная дальность до цели не передана. Табличная оценка показана отдельно.",
+    "en": "Horizontal target range was not supplied. The table estimate is shown separately."
+  },
+  {
+    "ru": "Некорректная траектория или азимут наводки",
+    "en": "Invalid aiming arc or bearing"
+  },
+  {
+    "ru": "История",
+    "en": "History"
+  },
+  {
+    "ru": "Дополнительные инструменты · WARDOGS",
+    "en": "Additional tools · WARDOGS"
+  },
+  {
+    "ru": "Для обычной стрельбы достаточно выбрать цель и отметить попадание Alt+I. Здесь — перенос цели, история позиций и необязательные измерения.",
+    "en": "For ordinary firing, select a target and mark the impact with Alt+I. These tools provide target shifts, position history and optional measurements."
+  },
+  {
+    "ru": "Перенести цель",
+    "en": "Move target"
+  },
+  {
+    "ru": "Шаг переноса цели",
+    "en": "Target shift step"
+  },
+  {
+    "ru": "Цель перенесена · наводка пересчитана",
+    "en": "Target moved · aiming recalculated"
+  },
+  {
+    "ru": "Последние позиции и цели сохраняются автоматически в истории. Именованные записи создаются вручную. Для восстановления подтвердите карту и орудие; прежние поправки не восстанавливаются.",
+    "en": "Recent positions and targets are saved automatically in history. Named records are created manually. Confirm the map and weapon before restoring; previous corrections are not restored."
+  },
+  {
+    "ru": "Alt+I отмечает координаты попадания и не измеряет время полёта: момент выстрела неизвестен. Время ниже — только ваш отдельный замер.",
+    "en": "Alt+I records impact coordinates and does not measure flight time: the firing instant is unknown. The time below is your separate measurement."
+  },
+  {
+    "ru": "График — геометрическая оценка по цели; фактический путь после поправки Alt+I не измерен.",
+    "en": "The chart is a geometric target estimate; the actual path after an Alt+I correction has not been measured."
+  },
+  {
+    "ru": "До цели %1 м",
+    "en": "To target %1 m"
+  },
+  {
+    "ru": "\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°",
+    "en": "\nActive aiming including Alt+I: set %1 MIL · bearing %2°"
+  },
+  {
+    "ru": "\nПо таблице ≈ %1 м",
+    "en": "\nTable estimate ≈ %1 m"
+  },
+  {
+    "ru": "\nУстановить %1 MIL · азимут %2°",
+    "en": "\nSet %1 MIL · bearing %2°"
+  },
+  {
+    "ru": "\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.",
+    "en": "\nPreview: %1 MIL · bearing %2°; without Alt+I correction. This is not active aiming."
   }
 ]

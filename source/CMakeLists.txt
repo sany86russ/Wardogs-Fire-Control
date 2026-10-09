@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.10.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.11.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -166,6 +166,8 @@ install(FILES
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/QUICKSTART-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/QUICKSTART-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/USAGE-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/USAGE-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/LOCALIZATION.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/CALCULATIONS-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASE-NOTES-EN.md"
@@ -208,6 +210,11 @@ install(FILES
 )
 
 enable_testing()
+
+add_executable(wardogs_impact_feedback_tests tests/impact_feedback_tests.cpp)
+target_link_libraries(wardogs_impact_feedback_tests PRIVATE wardogs_core)
+target_compile_options(wardogs_impact_feedback_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_impact_feedback_tests COMMAND wardogs_impact_feedback_tests)
 
 add_executable(wardogs_firing_analysis_tests tests/firing_analysis_tests.cpp)
 target_link_libraries(wardogs_firing_analysis_tests PRIVATE wardogs_core)
@@ -349,6 +356,9 @@ if(MSVC)
     target_compile_options(wardogs_vehicle_ui_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
 add_test(NAME wardogs_vehicle_ui_tests COMMAND wardogs_vehicle_ui_tests)
+add_test(NAME wardogs_solution_geometry_native_tests COMMAND wardogs_vehicle_ui_tests --solution-geometry-native)
+set_tests_properties(wardogs_solution_geometry_native_tests PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=windows" SKIP_RETURN_CODE 77 TIMEOUT 120)
 add_custom_command(TARGET wardogs_vehicle_ui_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:Qt6::Core>"

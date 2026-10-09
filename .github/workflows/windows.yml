@@ -61,6 +61,8 @@ jobs:
         run: python source/tools/check_localization.py
       - name: Capture planning with the application theme on the isolated runner
         run: python source/tests/planning_snapshots.py
+      - name: Verify unified ranging and four sight metrics on the isolated runner
+        run: python source/tests/fire_control_snapshots.py
       - name: Package binaries, public source and corresponding Qt source
         run: ./tools/ci-package.ps1 -IncludeSource -IncludeQtSources
       - name: Verify packaged HTTPS updater and real release download
