@@ -1,8 +1,8 @@
-# WARDOGS Fire Control 2.11.0 — candidate quick start
+# WARDOGS Fire Control 2.11.0 — quick start
 
 A portable assistant for L81 and SPH-2: range, bearing and table aiming from two points. The main cycle is map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined SPH-2 guidance. Additional tools provide manual target shifting, saved points, timing observations, ground profiles and sources. Recognition and calculations run locally.
 
-This guide covers the **2.11.0 candidate**: one cycle for map, gun, target and ranging; a shared final command, automatic ground assessment and retained accepted points. The 2.10 OCR and log archives remain. The published stable ZIP remains **2.8.0**; downloading that release does not provide the candidate features.
+This guide covers **2.11.0**: one cycle for map, gun, target and ranging; a shared final command, automatic ground assessment and retained accepted points. OCR and log-archive changes developed in 2.10 are included in 2.11. Use the complete portable package for the intended version.
 
 ## Launch and first calculation
 
@@ -69,7 +69,7 @@ Windows reserves registered shortcuts. If a combination is occupied, the applica
 
 **Settings → General** contains the workflow and the delay after placing a map marker. **Advanced** contains the standalone calculator, middle mouse button, shortcuts, OCR and custom region. Selecting **Standalone calculator · manual input only** disables game features and is saved between launches.
 
-The default middle-button delay is **250 ms**. In the candidate, the first frame waits at least **80 ms**, even if the setting is zero; later frames are captured separately after a bounded wait. This waits for the label to appear rather than promising a total OCR duration.
+The default middle-button delay is **250 ms**. The first frame waits at least **80 ms**, even if the setting is zero; later frames are captured separately after a bounded wait. This waits for the label to appear rather than promising a total OCR duration.
 
 Profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. If it does not exist yet, the previous `%LOCALAPPDATA%\WarDogsDistanceCalculatorCpp\settings.ini` is read without modifying the old file. Profiles without the new-workflow marker are migrated to quick mode: game features, middle mouse capture and automatic detection are enabled; gun capture uses Alt+X and return uses Alt+C, accounting for internal conflicts. After the new profile is saved, any subsequent choice of standalone mode is retained.
 
@@ -153,6 +153,6 @@ Vehicle tilt, elevation differences, game dispersion and weapon changes can affe
 
 OCR is checked against control and supplied screenshots; native capture is checked with a dedicated Windows test window. These results are not a test of the live marker during a match. Borderless mode is available for windows above the game; visibility in exclusive fullscreen and impact accuracy require separate verification.
 
-Five real X/Y pairs and scale/position transformations are retained for the 2.10 candidate. New in-game firing trials have not been performed. OCR changes do not change the tables or physical model; first-shot accuracy and any hit percentage are not guaranteed.
+Coordinate-reading regressions include five real X/Y pairs and scale/position transformations. These checks do not establish recognition of every live HUD or firing quality in the current match. OCR changes do not change the tables or physical model; first-shot accuracy and any hit percentage are not guaranteed.
 
 The application reads visible pixels and does not modify the game installation. At SoNiX's request, available game logs and public alternatives were examined separately: no ready-made stream of selected X/Y coordinates was found. The application does not watch game files; details are in the [source investigation, in Russian](COORDINATE-SOURCES-INVESTIGATION-RU.md). BULKHEAD approval for OCR/overlays has not been confirmed; invisibility to anti-cheat and freedom from sanctions are not guaranteed. See [technical limits and official rules](ANTICHEAT-EN.md), and [coordinate workflow sources, in Russian](COORDINATE-WORKFLOW-RESEARCH-RU.md).
