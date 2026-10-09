@@ -164,10 +164,24 @@ void check_metric_geometry(QWidget& card, int row_count) {
     }
     const auto captions = card.findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"));
     check(captions.size() == 4 * row_count, "all four captions are visible for every native row");
-    for (const auto* caption : captions)
+    for (const auto* caption : captions) {
+        const auto text_width = QFontMetrics(caption->font()).horizontalAdvance(caption->text());
+        const int required_height = caption->heightForWidth(caption->width());
+        const bool inside = card.rect().contains(QRect(caption->mapTo(&card, QPoint{}), caption->size()));
+        if (!caption->isVisible() || caption->height() < required_height || !inside)
+            std::cerr << "caption=" << caption->text().toStdString()
+                      << " size=" << caption->width() << 'x' << caption->height()
+                      << " text_width=" << text_width << " required_height=" << required_height
+                      << " minimum=" << caption->minimumWidth() << 'x' << caption->minimumHeight()
+                      << " card=" << card.width() << 'x' << card.height()
+                      << " inside=" << inside << '\n';
         check(caption->isVisible() && caption->height() >= caption->heightForWidth(caption->width()) &&
                   card.rect().contains(QRect(caption->mapTo(&card, QPoint{}), caption->size())),
               "native metric captions fit at the tested card/font scale");
+        check(caption->minimumWidth() >= text_width &&
+                  caption->minimumHeight() >= caption->heightForWidth(caption->minimumWidth()),
+              "production short captions reserve their complete translated text and rendered height");
+    }
 }
 
 void native_solution_geometry_tests() {
@@ -212,6 +226,22 @@ void native_solution_geometry_tests() {
             std::cout << "Native solution geometry "
                       << (language == wardogs::UiLanguage::russian ? "RU" : "EN")
                       << " card/font scale=" << scale << " passed\n";
+        }
+        for (auto* full : {&low, &high}) {
+            const auto* caption = full->findChild<QLabel*>(QStringLiteral("solutionMetricCaption"));
+            check(caption != nullptr, "font scaling retains the production metric caption");
+            const QSize enlarged = caption->minimumSize();
+            full->setStyleSheet(QStringLiteral(
+                "QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil { font-family:'Segoe UI';font-size:25px; }"
+                "QLabel#solutionMetricCaption { font-family:'Segoe UI';font-size:11px; }"));
+            full->ensurePolished();
+            full->resize(full->minimumSizeHint());
+            full->show();
+            QApplication::processEvents();
+            check_metric_geometry(*full, 1);
+            check(caption->minimumWidth() < enlarged.width() && caption->minimumHeight() < enlarged.height(),
+                  "reducing the rendered font shrinks both caption dimensions without stale minimums");
+            full->hide();
         }
         mini.hide();
     }

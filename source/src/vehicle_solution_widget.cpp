@@ -16,19 +16,23 @@
 
 namespace {
 
-// Reserve the complete rendered value, including its unit. Fixed column
-// proportions alone can leave less room than the current font needs, especially
-// after polishing a hidden card or changing its language/font scale.
-class MetricValueLabel final : public QLabel {
+// Reserve the complete rendered text for both the short caption and its value.
+// Fixed column proportions and QLabel's word-wrap minimum hint can leave less
+// room than the current font needs after polishing or changing its scale.
+class MetricTextLabel final : public QLabel {
 public:
     using QLabel::QLabel;
 
     void refresh_minimum() {
         const QFontMetrics metrics(font());
         const auto padding = contentsMargins();
-        setMinimumWidth(std::max(metrics.horizontalAdvance(text()), metrics.boundingRect(text()).width()) +
-                        padding.left() + padding.right() + 2 * margin() + 4);
-        setMinimumHeight(metrics.height() + padding.top() + padding.bottom() + 2 * margin() + 2);
+        const int text_width = std::max(metrics.horizontalAdvance(text()), metrics.boundingRect(text()).width());
+        const int width = text_width + padding.left() + padding.right() + 2 * margin() + 4;
+        // Clear the previous height before asking Qt for its wrapped text
+        // height, so switching to a smaller font can shrink the card again.
+        setMinimumSize(width, 0);
+        setMinimumHeight(std::max(metrics.height() + padding.top() + padding.bottom() + 2 * margin() + 2,
+                                  wordWrap() ? heightForWidth(width) : 0));
     }
 
 protected:
@@ -99,17 +103,19 @@ QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
     column->setContentsMargins(0, 0, 0, 0);
     column->setSpacing(0);
     {
-        auto* label = new QLabel(caption);
+        auto* label = new MetricTextLabel(caption);
         label->setObjectName(QStringLiteral("solutionMetricCaption"));
+        label->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
         label->setWordWrap(true);
         if (compact_) {
             label->setAlignment(Qt::AlignCenter);
             label->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:9px;"));
         }
+        label->refresh_minimum();
         column->addWidget(label);
         if (caption_label) *caption_label = label;
     }
-    auto* value = new MetricValueLabel(QStringLiteral("—"));
+    auto* value = new MetricTextLabel(QStringLiteral("—"));
     value->setObjectName(object_name);
     value->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
     value->refresh_minimum();
@@ -252,7 +258,11 @@ void VehicleSolutionWidget::refresh_metric_minimums() {
     for (auto* value : {distance_, bearing_, mil_, table_distance_}) {
         if (!value) continue;
         value->ensurePolished();
-        static_cast<MetricValueLabel*>(value)->refresh_minimum();
+        static_cast<MetricTextLabel*>(value)->refresh_minimum();
+    }
+    for (auto* caption : findChildren<QLabel*>(QStringLiteral("solutionMetricCaption"))) {
+        caption->ensurePolished();
+        static_cast<MetricTextLabel*>(caption)->refresh_minimum();
     }
     updateGeometry();
 }
