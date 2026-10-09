@@ -14,6 +14,35 @@
 #include <cmath>
 #include <stdexcept>
 
+namespace {
+
+// Reserve the complete rendered value, including its unit. Fixed column
+// proportions alone can leave less room than the current font needs, especially
+// after polishing a hidden card or changing its language/font scale.
+class MetricValueLabel final : public QLabel {
+public:
+    using QLabel::QLabel;
+
+    void refresh_minimum() {
+        const QFontMetrics metrics(font());
+        const auto padding = contentsMargins();
+        setMinimumWidth(std::max(metrics.horizontalAdvance(text()), metrics.boundingRect(text()).width()) +
+                        padding.left() + padding.right() + 2 * margin() + 4);
+        setMinimumHeight(metrics.height() + padding.top() + padding.bottom() + 2 * margin() + 2);
+    }
+
+protected:
+    bool event(QEvent* event) override {
+        const bool handled = QLabel::event(event);
+        if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange ||
+            event->type() == QEvent::Polish || event->type() == QEvent::LanguageChange)
+            refresh_minimum();
+        return handled;
+    }
+};
+
+} // namespace
+
 VehicleSolutionWidget::VehicleSolutionWidget(wardogs::Arc arc, bool compact,
                                              QWidget* parent)
     : QFrame(parent), arc_(arc), compact_(compact) {
@@ -53,8 +82,10 @@ VehicleSolutionWidget::VehicleSolutionWidget(wardogs::Arc arc, bool compact,
 
 void VehicleSolutionWidget::changeEvent(QEvent* event) {
     QFrame::changeEvent(event);
-    if (event->type() == QEvent::LanguageChange)
+    if (event->type() == QEvent::LanguageChange) {
         update_trajectory_label();
+        refresh_metric_minimums();
+    }
 }
 
 QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
@@ -78,8 +109,10 @@ QLabel* VehicleSolutionWidget::add_metric(QHBoxLayout* layout,
         column->addWidget(label);
         if (caption_label) *caption_label = label;
     }
-    auto* value = new QLabel(QStringLiteral("—"));
+    auto* value = new MetricValueLabel(QStringLiteral("—"));
     value->setObjectName(object_name);
+    value->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+    value->refresh_minimum();
     if (compact_) value->setAlignment(Qt::AlignCenter);
     column->addWidget(value);
     layout->addWidget(block, width);
@@ -212,6 +245,16 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
                                      : QStringLiteral("#e8eef7");
     mil_->setStyleSheet(
         QStringLiteral("color:%1;font-family:'Segoe UI';font-size:%2px;").arg(color).arg(size));
+    refresh_metric_minimums();
+}
+
+void VehicleSolutionWidget::refresh_metric_minimums() {
+    for (auto* value : {distance_, bearing_, mil_, table_distance_}) {
+        if (!value) continue;
+        value->ensurePolished();
+        static_cast<MetricValueLabel*>(value)->refresh_minimum();
+    }
+    updateGeometry();
 }
 
 QString VehicleSolutionWidget::distance_text() const { return distance_->text(); }
@@ -266,5 +309,6 @@ void VehicleSolutionWidget::set_unavailable_state(bool unavailable) {
             : QStringLiteral("color:#e8eef7;font-size:25px;font-weight:700;"));
     }
     update_trajectory_label();
+    refresh_metric_minimums();
     update();
 }

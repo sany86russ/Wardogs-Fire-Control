@@ -185,20 +185,29 @@ void native_solution_geometry_tests() {
         mini.show();
         const QSize minimum = mini.minimumSize();
         for (double scale : {1.0, 1.5, 2.0}) {
-            mini.resize(qRound(minimum.width() * scale), qRound(minimum.height() * scale));
-            QApplication::processEvents();
-            check_metric_geometry(mini, 2);
-            for (auto* full : {&low, &high}) {
-                full->setStyleSheet(QStringLiteral(
-                    "QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil { font-family:'Segoe UI';font-size:%1px; }"
-                    "QLabel#solutionMetricCaption { font-family:'Segoe UI';font-size:%2px; }")
-                    .arg(qRound(25 * scale)).arg(qRound(11 * scale)));
-                full->ensurePolished();
-                full->resize(full->minimumSizeHint());
-                full->show();
+            for (const double high_mil : {673.0, 1400.0}) {
+                high.set_solution({wardogs::Arc::high, 203.0, 0,
+                    high_mil}, high_mil == 1400.0 ? 735.0 : 2221.0);
+                mini.set_vehicle_values(low, high);
+                mini.set_selected_arc(wardogs::Arc::high);
+                mini.resize(qRound(minimum.width() * scale), qRound(minimum.height() * scale));
                 QApplication::processEvents();
-                check_metric_geometry(*full, 1);
-                full->hide();
+                check_metric_geometry(mini, 2);
+                for (auto* full : {&low, &high}) {
+                    full->setStyleSheet(QStringLiteral(
+                        "QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil { font-family:'Segoe UI';font-size:%1px; }"
+                        "QLabel#solutionMetricCaption { font-family:'Segoe UI';font-size:%2px; }")
+                        .arg(qRound(25 * scale)).arg(qRound(11 * scale)));
+                    full->ensurePolished();
+                    full->resize(full->minimumSizeHint());
+                    full->show();
+                    QApplication::processEvents();
+                    check_metric_geometry(*full, 1);
+                    const auto* mil = full->findChild<QLabel*>(QStringLiteral("solutionMil"));
+                    check(mil && mil->minimumWidth() >= QFontMetrics(mil->font()).horizontalAdvance(mil->text()),
+                          "the production metric reserves its complete number and unit at every rendered font");
+                    full->hide();
+                }
             }
             std::cout << "Native solution geometry "
                       << (language == wardogs::UiLanguage::russian ? "RU" : "EN")

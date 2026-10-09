@@ -39,6 +39,7 @@ private:
                        QLabel** caption_label = nullptr);
     void set_unavailable_state(bool unavailable);
     void update_trajectory_label();
+    void refresh_metric_minimums();
 
     wardogs::Arc arc_;
     bool compact_{};
