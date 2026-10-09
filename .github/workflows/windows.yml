@@ -51,6 +51,9 @@ jobs:
           python -m pip install --disable-pip-version-check aqtinstall==3.3.0
           if ($LASTEXITCODE -ne 0) { throw 'The Qt installer could not be installed.' }
           $sdkDirectory = Join-Path $env:RUNNER_TEMP 'qt-sdk'
+          # aqt extracts archives in parallel; pre-create their shared target
+          # to prevent external 7z racing to create it (aqtinstall issue #1002).
+          [IO.Directory]::CreateDirectory((Join-Path $sdkDirectory '6.8.3/msvc2022_64')) | Out-Null
           $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
           python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 --outputdir $sdkDirectory --external $sevenZip
           if ($LASTEXITCODE -ne 0) { throw 'The Qt SDK could not be installed.' }
