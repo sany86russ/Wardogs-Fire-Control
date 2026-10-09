@@ -293,6 +293,13 @@ void native_solution_geometry_tests() {
               "enlarging the font does not lock the card at the enlarged content minimum");
         framed.resize(minimum_canvas);
         QApplication::processEvents();
+        if (framed.size() != minimum_canvas) {
+            const auto* footer = framed.findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus"));
+            std::cerr << "styled mini-card requested=" << minimum_canvas.width() << 'x' << minimum_canvas.height()
+                      << " actual=" << framed.width() << 'x' << framed.height()
+                      << " minimum=" << framed.minimumWidth() << 'x' << framed.minimumHeight()
+                      << " footer=" << (footer ? footer->height() : -1) << '\n';
+        }
         check(framed.size() == minimum_canvas,
               "an enlarged styled mini-card can return to its original compact size");
         check_metric_geometry(framed, 2);

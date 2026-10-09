@@ -707,7 +707,8 @@ void PinnedResultWindow::set_workflow_status(const QString& text) {
     update_workflow_status_layout(previous_extra);
 }
 
-void PinnedResultWindow::update_workflow_status_layout(int previous_extra) {
+void PinnedResultWindow::update_workflow_status_layout(int previous_extra,
+                                                       bool preserve_result_height) {
     if (!workflow_status_ || updating_workflow_status_layout_) return;
     updating_workflow_status_layout_ = true;
     const QSize previous_size = size();
@@ -724,13 +725,16 @@ void PinnedResultWindow::update_workflow_status_layout(int previous_extra) {
     workflow_status_->setFixedHeight(std::max(32, text_height));
     const int extra = workflow_status_extra();
     const int difference = extra - previous_extra;
-    if (difference != 0)
+    if (preserve_result_height && difference != 0)
         for (auto& [mode, saved_size] : mode_sizes_) {
             (void)mode;
             saved_size.rheight() += difference;
         }
     setMinimumSize(minimum_size(vehicle_mode_) + QSize(0, extra));
-    if (difference != 0)
+    // A changed message adds/removes its own space. During user resizing the
+    // requested canvas already includes the footer, so wrapping only changes
+    // its share of that canvas; the content minimum enforces the remaining room.
+    if (preserve_result_height && difference != 0)
         resize(QSize(previous_size.width(), previous_size.height() + difference)
                    .expandedTo(minimumSize()));
     updating_workflow_status_layout_ = false;
@@ -852,7 +856,7 @@ void PinnedResultWindow::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     mode_sizes_[vehicle_mode_] = event->size();
     if (applying_font_scale_) return;
-    update_workflow_status_layout(workflow_status_extra());
+    update_workflow_status_layout(workflow_status_extra(), false);
     if (low_ && !applying_font_scale_) apply_font_scale();
 }
 
