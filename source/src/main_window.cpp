@@ -13,6 +13,7 @@
 
 #include "wardogs/capture.hpp"
 #include "wardogs/continuous_calibration.hpp"
+#include "wardogs/impact_feedback.hpp"
 #include "wardogs/core.hpp"
 #include "wardogs/hotkeys.hpp"
 #include "wardogs/logger.hpp"
@@ -63,6 +64,7 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QFontDatabase>
+#include <QFontMetrics>
 #include <QGroupBox>
 #include <QGridLayout>
 #include <QHeaderView>
@@ -683,6 +685,14 @@ public:
                 findChild<QScrollArea*>(QStringLiteral("mainContentScroll"))->ensureWidgetVisible(calibration_group_);
             }
         }
+        else if (mode == QStringLiteral("fire-control")) {
+            if (!vehicle_mode_) toggle_mode();
+            accept_manual_target({80,102});
+            if (effective_vehicle_arc() != wardogs::Arc::high) toggle_ghost_arc();
+            OcrMessage context;
+            capture_impact_context(context);
+            if (!record_continuous_impact({80.2,101.7}, QStringLiteral("fixture"), *context.impact_firing)) return false;
+        }
         else if (mode == QStringLiteral("review") || mode == QStringLiteral("review-bottom")) {
             OcrMessage message;
             message.action = OcrAction::target; message.success = true;
@@ -717,8 +727,23 @@ public:
         } else if (mode == QStringLiteral("tutorial-bottom")) {
             if (auto* browser = dialog->findChild<QTextBrowser*>(QStringLiteral("helpText")))
                 browser->verticalScrollBar()->setValue(browser->verticalScrollBar()->maximum());
+        } else if (mode == QStringLiteral("planning-times")) {
+            // This page can scroll after its guidance text wraps. Capture the
+            // actual measurement table, which is the surface this mode verifies;
+            // the accepted coordinates above the tabs stay in view.
+            auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("planningTabs"));
+            auto* scroll = tabs ? qobject_cast<QScrollArea*>(tabs->currentWidget()) : nullptr;
+            auto* table = dialog->findChild<QWidget*>(QStringLiteral("flightMeasurements"));
+            if (!scroll || !table) return false;
+            scroll->ensureWidgetVisible(table, 0, 10);
+        } else if (mode == QStringLiteral("fire-control")) {
+            // Fix only the diagnostic canvas after startup layout settles.
+            // Native maximum tracking size on a small desktop can constrain a
+            // plain resize, hiding the ranging report below the scroll viewport.
+            setFixedSize(1120,1040);
         }
         QApplication::processEvents();
+        if (mode == QStringLiteral("fire-control")) QApplication::processEvents();
         const QFileInfo file(path);
         if (!QDir().mkpath(file.absolutePath())) return false;
         QJsonArray widgets;
@@ -747,8 +772,12 @@ public:
                 const auto value = widget->property(property).toString();
                 if (!value.isEmpty()) item.insert(QString::fromLatin1(property), value);
             }
-            if (auto* label = qobject_cast<QLabel*>(widget))
+            if (auto* label = qobject_cast<QLabel*>(widget)) {
                 item.insert(QStringLiteral("wordWrap"), label->wordWrap());
+                item.insert(QStringLiteral("text_width"), QFontMetrics(label->font()).horizontalAdvance(label->text()));
+                item.insert(QStringLiteral("content_width"), label->contentsRect().width());
+                item.insert(QStringLiteral("required_height"), label->heightForWidth(label->width()));
+            }
             if (auto* browser = qobject_cast<QTextBrowser*>(widget))
                 item.insert(QStringLiteral("content"), browser->toPlainText());
             if (auto* combo = qobject_cast<QComboBox*>(widget)) {
@@ -767,6 +796,7 @@ public:
         const auto bytes = QJsonDocument(QJsonObject{
             {QStringLiteral("language"), settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru")},
             {QStringLiteral("mode"), mode}, {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
+            {QStringLiteral("snapshot_width"), view->width()}, {QStringLiteral("snapshot_height"), view->height()},
             {QStringLiteral("widgets"), widgets}}).toJson();
         const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
         return written && view->grab().save(file.absoluteFilePath(), "PNG");
@@ -821,6 +851,18 @@ public:
               settings_.middle_mouse_enabled && settings_.automatic_chat_region &&
               settings_.base_hotkey == L"Alt+X" && settings_.exit_game_mode_hotkey == L"Alt+C" &&
               !hotkey_listener_.active() && !mouse_listener_.active());
+        map_confirmed_ = false;
+        update_readiness();
+        check("game_button_explains_explicit_confirmation", game_button_->text() ==
+              wardogs::i18n::text(QStringLiteral("Подтвердить карту и в игру")));
+        enter_game_mode();
+        check("automatic_game_entry_cannot_confirm_a_saved_map", !map_confirmed_ && !game_mode_);
+        click("gameButton");
+        check("explicit_confirm_and_game_click_confirms_selected_map_and_hides_main",
+              map_confirmed_ && game_mode_ && pinned_mode_ && !isVisible() && pinned_window_->isVisible());
+        exit_game_mode();
+        check("return_restores_main_and_simple_game_label", isVisible() && !game_mode_ &&
+              game_button_->text() == wardogs::i18n::text(QStringLiteral("В игру")));
         check("manual_controls_are_optional", manual_toggle_ && !manual_toggle_->isChecked() &&
               !findChild<QGroupBox*>(QStringLiteral("coordinatesGroup"))->isVisible());
         const auto requested_settings = settings_;
@@ -1064,6 +1106,11 @@ public:
               continuous_aim_->isReadOnly() && continuous_impact_->isEnabled() &&
               !calibration_summary_->text().contains(QStringLiteral("30°")) &&
               !quick_state_->text().contains(QStringLiteral("1/2")));
+        check("unified_ranging_is_visible_without_opening_advanced_editor",
+              findChild<QGroupBox*>(QStringLiteral("fireControlGroup"))->isVisible() &&
+              !calibration_group_->isVisible() && !fire_control_reset_->isEnabled());
+        check("ranging_hint_preserves_angular_and_arc_direction_units", fire_control_summary_->text().contains(
+              wardogs::i18n::text(QStringLiteral("\nПравее / левее — градусы азимута. Дальше / ближе — MIL: настильная + / −, навесная − / +."))));
         settings_.ghost_reticle.preferred_arc = wardogs::Arc::low;
         toggle_ghost_arc();
         OcrMessage initial_high_context;
@@ -1093,6 +1140,16 @@ public:
               target_ == initial_high_context.impact_firing->target && history_ == first_history &&
               low_result_ && low_result_->bearing_deg == first_raw_low.bearing_deg &&
               low_result_->mil == first_raw_low.mil && !ocr_hold_);
+        const auto unified_context = planning_context();
+        check("planning_and_ranging_share_the_exact_corrected_active_command",
+              unified_context.active_arc == wardogs::Arc::high && unified_context.active_solution &&
+              unified_context.active_solution->bearing_deg == high_result_->bearing_deg &&
+              unified_context.active_solution->mil == high_result_->mil && last_impact_feedback_ &&
+              last_impact_feedback_->target == *target_ && fire_control_reset_->isEnabled());
+        check("automatic_analysis_keeps_altI_out_of_flight_timing_and_does_not_switch_arc",
+              automatic_analysis_ && automatic_analysis_->target == *target_ &&
+              automatic_analysis_->arcs[1] && !automatic_analysis_->arcs[1]->flight_time &&
+              effective_vehicle_arc() == wardogs::Arc::high);
         check("SPH2_optional_impact_never_claims_a_global_platform_calibration",
               continuous_calibration_->global_calibration().rotation == wardogs::identity_rotation() &&
               continuous_calibration_->global_rotation_adjustment_deg() == 0.0 &&
@@ -1867,6 +1924,19 @@ private:
     wardogs::GameMap current_game_map_{wardogs::GameMap::unselected};
     bool map_confirmed_{};
     std::optional<wardogs::ContinuousCalibration> continuous_calibration_;
+    std::optional<wardogs::ImpactFeedback> last_impact_feedback_;
+    double last_impact_consistency_{};
+    std::array<std::pair<double,double>, 2> active_aim_offsets_{};
+    QLabel *fire_control_summary_{}, *terrain_assistance_{};
+    QPushButton *fire_control_reset_{};
+    struct AnalysisCache {
+        wardogs::Point base, target;
+        wardogs::GameMap map;
+        const wardogs::TerrainPackage* terrain;
+        std::array<std::optional<wardogs::FiringAnalysis>, 2> arcs;
+    };
+    std::optional<AnalysisCache> automatic_analysis_;
+    QString recent_history_error_;
     std::uint64_t calibration_epoch_{};
     std::optional<wardogs::CaptureRegion> region_;
     std::wstring last_capture_monitor_;
@@ -1981,7 +2051,119 @@ private:
         set_status(wardogs::i18n::text(QStringLiteral("Захват отклонён. Восстановлен предыдущий расчёт.")));
     }
 
+    void update_game_button() {
+        if (!game_button_) return;
+        if (game_mode_) game_button_->setText(wardogs::i18n::text(QStringLiteral("Вернуться · ")) + qtext(settings_.exit_game_mode_hotkey));
+        else game_button_->setText(!settings_.game_integration_enabled
+            ? wardogs::i18n::text(QStringLiteral("Игровые функции"))
+            : map_confirmed_ ? wardogs::i18n::text(QStringLiteral("В игру"))
+                             : wardogs::i18n::text(QStringLiteral("Подтвердить карту и в игру")));
+    }
+
+    void remember_accepted_point(wardogs::FireMissionKind kind, wardogs::Point point) {
+        if (diagnostic_ || !map_confirmed_) return;
+        try {
+            wardogs::FireMissionRepository repository(wardogs::recent_fire_missions_path());
+            (void)repository.remember(current_game_map_, vehicle_mode_ ? wardogs::FireMissionWeapon::sph2
+                                                                      : wardogs::FireMissionWeapon::l81,
+                                      kind, point);
+            recent_history_error_.clear();
+        } catch (const std::exception& error) {
+            recent_history_error_ = QString::fromUtf8(error.what());
+            wardogs::log_warning("history.accepted_point_save_failed error=" + std::string(error.what()));
+        }
+    }
+
+    void cache_automatic_analysis(const wardogs::Shot& shot) {
+        if (automatic_analysis_ && automatic_analysis_->base == shot.base &&
+            automatic_analysis_->target == shot.target && automatic_analysis_->map == current_game_map_ &&
+            automatic_analysis_->terrain == terrain_.get()) return;
+        AnalysisCache cache{shot.base, shot.target, current_game_map_, terrain_.get(), {}};
+        for (std::size_t index = 0; index < 2; ++index) {
+            try {
+                wardogs::FiringAnalysisRequest request;
+                request.weapon = wardogs::AnalysisWeapon::sph2;
+                request.arc = index == 0 ? wardogs::Arc::low : wardogs::Arc::high;
+                request.base = shot.base; request.target = shot.target;
+                if (terrain_) request.terrain = [this](wardogs::Point point) { return terrain_->height_at(point); };
+                // No assumed gravity, speed, flight time, or Alt+I timestamp.
+                cache.arcs[index] = wardogs::analyze_firing(request);
+            } catch (const std::exception& error) {
+                wardogs::log_warning("analysis.automatic_failed error=" + std::string(error.what()));
+            }
+        }
+        automatic_analysis_ = std::move(cache);
+    }
+
+    void update_fire_control() {
+        if (!fire_control_summary_) return;
+        const auto arc = effective_vehicle_arc();
+        const bool ready = map_confirmed_ && base_set_ && target_ && arc &&
+                           !base_capture_pending_ && !ocr_hold_;
+        fire_control_reset_->setEnabled(has_calibration_data());
+        QString text;
+        if (!ready) text = wardogs::i18n::text(QStringLiteral("Подтвердите карту, задайте орудие и цель. Пристрелка появится после первого наблюдения попадания."));
+        else {
+            text = wardogs::i18n::text(QStringLiteral("Наблюдений: %1 · %2 у попадания — автоматическая поправка, цель остаётся на месте."))
+                .arg(continuous_calibration_ ? continuous_calibration_->sample_count() : 0U)
+                .arg(qtext(settings_.impact_hotkey));
+            if (last_impact_feedback_ && last_impact_feedback_->target == *target_ && last_impact_feedback_->arc == *arc) {
+                const auto& feedback = *last_impact_feedback_;
+                const auto signed_value = [](double value, int precision = 1) {
+                    if (std::abs(value) < 0.05) value = 0.0;
+                    return (value > 0.0 ? QStringLiteral("+") : QString{}) + QString::number(value, 'f', precision);
+                };
+                text += wardogs::i18n::text(QStringLiteral("\nПоследний промах: %1 м · вправо + / влево −: %2 м · перелёт + / недолёт −: %3 м."))
+                    .arg(QString::number(feedback.miss_m, 'f', 0), signed_value(feedback.right_m), signed_value(feedback.far_m));
+                text += wardogs::i18n::text(QStringLiteral("\nУчтённое изменение: азимут %1° · MIL %2 · по таблице %3 м."))
+                    .arg(signed_value(feedback.bearing_change_deg), signed_value(feedback.mil_change), signed_value(feedback.table_range_change_m));
+                if (last_impact_consistency_ < 0.35)
+                    text += wardogs::i18n::text(QStringLiteral("\nНаблюдения расходятся: точность поправки ограничена."));
+            }
+            text += wardogs::i18n::text(QStringLiteral("\nПравее / левее — градусы азимута. Дальше / ближе — MIL: настильная + / −, навесная − / +."));
+            if (has_calibration_data()) {
+                const auto [bearing_offset,mil_offset] = active_aim_offsets_[*arc == wardogs::Arc::low ? 0U : 1U];
+                text += wardogs::i18n::text(QStringLiteral("\nВ текущей команде учтено: азимут %1° · MIL %2. При смене цели или дуги влияние поправки может уменьшиться."))
+                    .arg(bearing_offset,0,'f',1).arg(mil_offset,0,'f',1);
+            }
+        }
+        fire_control_summary_->setText(text);
+        terrain_assistance_->clear();
+        if (!ready) return;
+        if (!terrain_) {
+            terrain_assistance_->setText(wardogs::i18n::text(QStringLiteral("Профиль земли не проверен: нет высот. Здания и препятствия не определяются.")));
+            return;
+        }
+        const auto index = *arc == wardogs::Arc::low ? 0U : 1U;
+        if (!automatic_analysis_ || !automatic_analysis_->arcs[index]) {
+            terrain_assistance_->setText(wardogs::i18n::text(QStringLiteral("Оценка профиля земли недоступна.")));
+            return;
+        }
+        const auto& analysis = *automatic_analysis_->arcs[index];
+        QString ground;
+        switch (analysis.clearance.status) {
+        case wardogs::TerrainClearanceStatus::clear_at_samples:
+            ground = wardogs::i18n::text(QStringLiteral("По приближённой модели пересечений земли в проверенных точках нет.")); break;
+        case wardogs::TerrainClearanceStatus::blocked:
+            ground = wardogs::i18n::text(QStringLiteral("Приближённая дуга пересекает землю на ≈%1 м от орудия."))
+                .arg(analysis.clearance.first_blocked_distance_m.value_or(0.0), 0, 'f', 0);
+            if (const auto& other = automatic_analysis_->arcs[1U - index];
+                other && other->clearance.status == wardogs::TerrainClearanceStatus::clear_at_samples &&
+                (*arc == wardogs::Arc::low ? high_result_.has_value() : low_result_.has_value()))
+                ground += wardogs::i18n::text(QStringLiteral(" Проверьте другую траекторию через %1; она не переключается автоматически."))
+                    .arg(qtext(settings_.ghost_arc_hotkey));
+            break;
+        case wardogs::TerrainClearanceStatus::incomplete:
+            ground = wardogs::i18n::text(QStringLiteral("Профиль земли неполный: часть высот недоступна.")); break;
+        default:
+            ground = wardogs::i18n::text(QStringLiteral("Оценка профиля земли недоступна.")); break;
+        }
+        terrain_assistance_->setText(ground + wardogs::i18n::text(QStringLiteral("\nЭто номинальная модель без поправки попадания; здания и высота ствола не учтены.")));
+    }
+
     void update_readiness() {
+        update_game_button();
+        update_fire_control();
         if (quick_state_)
             quick_state_->setText(base_set_
                 ? wardogs::i18n::text(QStringLiteral("Орудие задано: ")) + qtext(wardogs::format_point(base_)) +
@@ -1991,7 +2173,7 @@ private:
                                : settings_.game_integration_enabled && settings_.middle_mouse_enabled
                                    ? wardogs::i18n::text(QStringLiteral("\nГотово. Ставьте отметки средней кнопкой на карте."))
                                    : settings_.game_integration_enabled
-                                       ? wardogs::i18n::text(QStringLiteral("\nУкажите цель или нажмите «Скрыть окно · в игру»."))
+                                       ? wardogs::i18n::text(QStringLiteral("\nУкажите цель или нажмите «В игру»."))
                                        : wardogs::i18n::text(QStringLiteral("\nВведите координаты цели.")))
                 : settings_.game_integration_enabled
                     ? wardogs::i18n::text(QStringLiteral("Орудие ещё не задано · M → ПКМ → Отметить координаты → ")) + qtext(settings_.base_hotkey)
@@ -2000,12 +2182,15 @@ private:
             quick_state_->setText(wardogs::i18n::text(QStringLiteral("Сначала выберите и подтвердите текущую карту выше.")));
         else if (quick_state_ && vehicle_mode_ && target_ && !ocr_hold_ && !base_capture_pending_)
             quick_state_->setText(quick_state_->text() + QStringLiteral("\n") + sph2_workflow_hint());
+        if (quick_state_ && !recent_history_error_.isEmpty()) quick_state_->setText(quick_state_->text() + QStringLiteral("\n") +
+            wardogs::i18n::text(QStringLiteral("История не сохранена: ")) + wardogs::i18n::text(recent_history_error_));
         if (!readiness_) return;
         const auto capture = !settings_.game_integration_enabled ? wardogs::i18n::text(QStringLiteral("○ Захват выключен"))
             : settings_.middle_mouse_enabled ? wardogs::i18n::text(QStringLiteral("✓ %1: чат · средняя кнопка: карта")).arg(qtext(settings_.base_hotkey))
                                              : wardogs::i18n::text(QStringLiteral("✓ Орудие: автопоиск в чате"));
         const bool guidance_ready = map_confirmed_ && base_set_ && !base_capture_pending_ && !ocr_hold_ &&
             (vehicle_mode_ ? low_result_.has_value() || high_result_.has_value() : mortar_mil_result_.has_value());
+        if (quick_guide_) quick_guide_->setVisible(!guidance_ready);
         readiness_->setText(wardogs::i18n::text(QStringLiteral("%1 Карта подтверждена\n%2 Орудие задано\n%3\n%4 Цель рассчитана"))
             .arg(map_confirmed_ ? QStringLiteral("✓") : QStringLiteral("○"))
             .arg(base_set_ && !base_capture_pending_ ? QStringLiteral("✓") : QStringLiteral("○"))
@@ -2014,6 +2199,7 @@ private:
     }
 
     void remember_target(wardogs::Point target) {
+        remember_accepted_point(wardogs::FireMissionKind::target, target);
         const auto existing = std::find(history_.begin(), history_.end(), target);
         if (existing != history_.end()) history_.erase(existing);
         history_.push_front(target);
@@ -2138,10 +2324,19 @@ private:
         });
     }
 
-    void enter_game_mode() {
+    void enter_game_mode(bool explicit_confirmation = false) {
         if (!require_game_integration()) return;
-        if (!map_confirmed_) { set_status(wardogs::i18n::text(QStringLiteral("Перед игрой выберите и подтвердите текущую карту.")), true); return; }
         if (busy_ || selecting_) { set_status(wardogs::i18n::text(QStringLiteral("Дождитесь окончания текущего действия"))); return; }
+        // Clicking the clearly labelled button explicitly confirms the selected
+        // map. A stored last-map preference alone still never confirms a match.
+        if (!map_confirmed_) {
+            if (!explicit_confirmation) {
+                set_status(wardogs::i18n::text(QStringLiteral("Перед игрой выберите и подтвердите текущую карту.")), true);
+                return;
+            }
+            on_terrain_changed();
+            if (!map_confirmed_) { terrain_selector_->setFocus(); return; }
+        }
         game_mode_ = true;
         try { if (!mouse_listener_.active()) register_mouse_trigger(); }
         catch (const std::exception& error) {
@@ -2166,8 +2361,7 @@ private:
         advance_input_epoch(true);
         if (mouse_timer_) mouse_timer_->stop();
         if (selecting_) selector_.cancel();
-        game_button_->setText(settings_.game_integration_enabled
-            ? wardogs::i18n::text(QStringLiteral("Скрыть окно · в игру")) : wardogs::i18n::text(QStringLiteral("Игровые функции")));
+        update_game_button();
         if (tray_) tray_->setToolTip(QStringLiteral("WARDOGS Fire Control"));
         if (pinned_mode_) exit_pinned_mode();
         else { showNormal(); raise(); activateWindow(); }
@@ -2358,9 +2552,9 @@ private:
         quick_layout->addWidget(quick_state_);
         work_layout->addWidget(quick);
 
-        auto* planning_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Планирование · поправки, позиции, полёт")));
+        auto* planning_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Дополнительные инструменты · позиции и полёт")));
         planning_button->setObjectName(QStringLiteral("planningButton"));
-        planning_button->setToolTip(wardogs::i18n::text(QStringLiteral("Поправки 10/25/50/100 м, сохранённые точки, измерения времени и профиль рельефа")));
+        planning_button->setToolTip(wardogs::i18n::text(QStringLiteral("История и именованные точки, перенос цели, измерения времени и профиль рельефа")));
         work_layout->addWidget(planning_button);
         connect(planning_button, &QPushButton::clicked, this, [this] {
             PlanningDialog dialog([this] { return planning_context(); },
@@ -2590,6 +2784,25 @@ private:
         calibration_group_->hide();
         work_layout->addWidget(calibration_toggle_);
         work_layout->addWidget(calibration_group_);
+        auto* fire_control = new QGroupBox(wardogs::i18n::text(QStringLiteral("ПРИСТРЕЛКА")));
+        fire_control->setObjectName(QStringLiteral("fireControlGroup"));
+        auto* fire_layout = new QVBoxLayout(fire_control);
+        fire_control_summary_ = new QLabel;
+        fire_control_summary_->setObjectName(QStringLiteral("fireControlSummary"));
+        fire_control_summary_->setWordWrap(true);
+        fire_layout->addWidget(fire_control_summary_);
+        terrain_assistance_ = new QLabel;
+        terrain_assistance_->setObjectName(QStringLiteral("terrainAssistance"));
+        terrain_assistance_->setWordWrap(true);
+        fire_layout->addWidget(terrain_assistance_);
+        fire_control_reset_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Сбросить поправки")));
+        fire_control_reset_->setObjectName(QStringLiteral("resetFireControl"));
+        fire_control_reset_->setProperty("quiet", true);
+        connect(fire_control_reset_, &QPushButton::clicked, this, &MainWindow::clear_continuous_calibration);
+        fire_layout->addWidget(fire_control_reset_);
+        work_layout->insertWidget(work_layout->indexOf(planning_button), fire_control);
+        work_layout->insertWidget(work_layout->indexOf(fire_control), vehicle_result_group_);
+        fire_control->hide();
         work_layout->addStretch();
 
         side_panel_ = new QWidget;
@@ -2669,7 +2882,7 @@ private:
         connect(game_button_, &QPushButton::clicked, this, [this] {
             if (game_mode_) exit_game_mode();
             else if (!diagnostic_ && !settings_.game_integration_enabled) edit_settings();
-            else enter_game_mode();
+            else enter_game_mode(true);
         });
         connect(terrain_selector_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) { on_terrain_changed(); });
         connect(confirm_map_, &QPushButton::clicked, this, [this] { on_terrain_changed(); });
@@ -2801,6 +3014,7 @@ private:
         terrain_group_->show();
         calibration_toggle_->setVisible(vehicle_mode_);
         calibration_group_->setVisible(vehicle_mode_ && calibration_toggle_->isChecked());
+        findChild<QGroupBox*>(QStringLiteral("fireControlGroup"))->setVisible(vehicle_mode_);
         vehicle_result_group_->setVisible(vehicle_mode_);
         mortar_result_group_->setVisible(!vehicle_mode_);
         if (target_) {
@@ -2923,6 +3137,7 @@ private:
     }
 
     void on_terrain_changed() {
+        automatic_analysis_.reset();
         const bool incomplete_base = base_capture_pending_;
         const bool incomplete_target = ocr_hold_ || pending_ocr_.has_value();
         advance_input_epoch();
@@ -3131,6 +3346,7 @@ private:
     void reset_continuous_calibration() {
         ++calibration_epoch_;
         continuous_calibration_.reset();
+        last_impact_feedback_.reset();
         continuous_impact_->clear();
         update_continuous_controls();
         update_calibration_summary();
@@ -3171,10 +3387,13 @@ private:
             const auto assessment = candidate->add_landing(firing, impact, impact_height_delta);
             const auto corrected = candidate->solution(firing.target, firing.arc,
                                                        firing.target_height_delta_m);
+            const auto feedback = wardogs::impact_feedback(base_, firing, impact, corrected);
             const double observed_miss_m = wardogs::calculate_shot(firing.target, impact).distance * 100.0;
             const double bearing_change = std::remainder(corrected.bearing_deg - firing.bearing_deg, 360.0);
             const double mil_change = corrected.mil - firing.mil;
             continuous_calibration_ = std::move(candidate);
+            last_impact_feedback_ = feedback;
+            last_impact_consistency_ = assessment.confidence;
             ++calibration_epoch_;
             continuous_aim_->setText(qtext(wardogs::format_point(firing.target)));
             continuous_impact_->clear();
@@ -3397,7 +3616,7 @@ private:
                 : wardogs::i18n::text(QStringLiteral("ЗАХВАТ КЛАВИШЕЙ\nЦель — ")) + qtext(settings_.target_hotkey) + wardogs::i18n::text(QStringLiteral(".\nВозврат — ")))
                 + qtext(settings_.exit_game_mode_hotkey));
         if (game_mode_) game_button_->setText(wardogs::i18n::text(QStringLiteral("Вернуться · ")) + qtext(settings_.exit_game_mode_hotkey));
-        else game_button_->setText(settings_.game_integration_enabled ? wardogs::i18n::text(QStringLiteral("Скрыть окно · в игру")) : wardogs::i18n::text(QStringLiteral("Игровые функции")));
+        else update_game_button();
         region_button_->setText(qtext(settings_.region_hotkey) +
                                 wardogs::i18n::text(QStringLiteral(" · Область")));
         region_button_->setToolTip(wardogs::i18n::text(QStringLiteral("Выделить одну строку и перейти с автопоиска на свою область")));
@@ -3507,6 +3726,8 @@ private:
     }
 
     bool show_vehicle_result(const wardogs::Shot& result) {
+        cache_automatic_analysis(result);
+        active_aim_offsets_ = {};
         double height_delta{};
         try {
             height_delta = target_height_delta(result.target);
@@ -3546,6 +3767,8 @@ private:
                 if (continuous_calibration_) {
                     const auto baseline = wardogs::corrected_solution(
                         result.base, result.target, calibration, arc, height_delta);
+                    active_aim_offsets_[arc == wardogs::Arc::low ? 0U : 1U] = {
+                        std::remainder(solution.bearing_deg - baseline.bearing_deg,360.0), solution.mil-baseline.mil};
                     if (std::abs(std::remainder(solution.bearing_deg - baseline.bearing_deg, 360.0)) > 1e-9 ||
                         std::abs(solution.mil - baseline.mil) > 1e-9)
                         corrected_arcs.push_back(name.toLower());
@@ -3745,6 +3968,7 @@ private:
         base_capture_pending_ = false;
         base_ = point;
         base_set_ = true;
+        remember_accepted_point(wardogs::FireMissionKind::firing_position, point);
         target_.reset();
         invalidate_corrections();
         base_input_->clear();
@@ -3758,6 +3982,11 @@ private:
         context.map = current_game_map_;
         context.weapon = vehicle_mode_ ? wardogs::AnalysisWeapon::sph2 : wardogs::AnalysisWeapon::l81;
         context.preferred_arc = settings_.ghost_reticle.preferred_arc;
+        context.active_arc = effective_vehicle_arc();
+        if (context.active_arc && !ocr_hold_ && !base_capture_pending_ && map_confirmed_) {
+            context.preferred_arc = *context.active_arc;
+            context.active_solution = *context.active_arc == wardogs::Arc::low ? low_result_ : high_result_;
+        }
         context.map_confirmed = map_confirmed_;
         context.capture_pending = base_capture_pending_;
         context.solution_held = ocr_hold_;
@@ -4396,6 +4625,7 @@ private:
             base_capture_pending_ = false;
             base_ = message.point;
             base_set_ = true;
+            remember_accepted_point(wardogs::FireMissionKind::firing_position, message.point);
             target_.reset();
             invalidate_corrections();
             clear_result(wardogs::i18n::text(QStringLiteral("Орудие задано · укажите цель")));
@@ -4654,7 +4884,7 @@ QFrame#resultCard { background:#0d1521; border:0; border-radius:10px; }
 QFrame#vehicleSolutionCard { background:#0d1521; border:0; border-radius:10px; }
 QFrame#vehicleSolutionCard[unavailable="true"] { background:#171b25; }
 QLabel#solutionArc { color:#8291a5; font-size:12px; font-weight:600; }
-QLabel#solutionMetricCaption { color:#66768a; font-size:11px; }
+QLabel#solutionMetricCaption { color:#b5c5dc; font-size:11px; font-weight:600; }
 QLabel#solutionDistance,QLabel#solutionBearing,QLabel#solutionMil {
     font-family:"Bahnschrift"; font-size:25px; font-weight:700; }
 QLabel#solutionDistance { color:#fbbf24; }
@@ -4773,7 +5003,8 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),
                             QStringLiteral("folder-ui"), QStringLiteral("error-ui"),
                             QStringLiteral("planning-ui"), QStringLiteral("planning-positions-ui"),
-                            QStringLiteral("planning-times-ui"), QStringLiteral("planning-profiles-ui")}) {
+                            QStringLiteral("planning-times-ui"), QStringLiteral("planning-profiles-ui"),
+                            QStringLiteral("fire-control-ui")}) {
         const auto flag = QStringLiteral("--") + mode + QStringLiteral("-snapshot");
         QString path = argument_value(flag);
         if (path.isEmpty()) {

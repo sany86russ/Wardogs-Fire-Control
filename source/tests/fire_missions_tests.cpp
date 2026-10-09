@@ -248,6 +248,31 @@ int main(int argc, char** argv) {
         }
 
         const auto concurrent_path = root / L"concurrent.json";
+        const FireMissionRepository recent(root / L"recent-fire-missions.json");
+        const auto named_before_history = bytes(path);
+        const Point recent_precise{100.00000000000003, -0.0};
+        const auto remembered = recent.remember(GameMap::other, FireMissionWeapon::sph2,
+            FireMissionKind::firing_position, recent_precise);
+        (void)recent.remember(GameMap::training, FireMissionWeapon::sph2, FireMissionKind::target, {1,2});
+        const auto recalled = recent.remember(GameMap::other, FireMissionWeapon::sph2,
+            FireMissionKind::firing_position, recent_precise);
+        check(recalled.id == remembered.id && recent.load().size() == 2 && recent.load().front().id == remembered.id,
+              "automatic history deduplicates exact map/weapon/kind/point and moves it to the front");
+        check(exact(recent.load().front().point.x,recent_precise.x) && exact(recent.load().front().point.y,recent_precise.y),
+              "automatic history preserves exact double coordinates including signed zero");
+        for (int index=0; index<70; ++index)
+            (void)recent.remember(GameMap::other, FireMissionWeapon::l81, FireMissionKind::target, {double(index),42});
+        check(recent.load().size() == maximum_recent_fire_missions && recent.load().front().point.x == 69 &&
+              recent.load().back().point.x == 6, "automatic history evicts only oldest entries at its 64 point bound");
+        rejects([&] { (void)repository.remember(GameMap::other,FireMissionWeapon::l81,FireMissionKind::target,{1,2}); },
+                "automatic eviction cannot target the named mission store");
+        check(bytes(path)==named_before_history,"named positions remain byte-identical during automatic history writes");
+        const auto history_original=bytes(recent.path());
+        write_bytes(recent.path(),QByteArray{"{broken"});
+        rejects([&] { (void)recent.remember(GameMap::other,FireMissionWeapon::l81,FireMissionKind::target,{1,2}); },
+                "corrupt automatic history is reported and cannot be replaced by a fresh collection");
+        check(bytes(recent.path())==QByteArray{"{broken"},"failed automatic history save preserves corrupted evidence");
+        write_bytes(recent.path(),history_original);
         const FireMissionRepository first_writer(concurrent_path), second_writer(concurrent_path);
         std::atomic<int> concurrency_failures{};
         auto write_points = [&](const FireMissionRepository& writer, const wchar_t* prefix) {

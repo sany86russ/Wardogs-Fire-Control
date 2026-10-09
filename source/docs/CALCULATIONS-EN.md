@@ -56,13 +56,21 @@ To interpret an observed impact, the model permits a mathematical continuation d
 
 Terrain packages contain a 2 m grid with 0.1 m height resolution; bilinear interpolation is used between four vertices. Connection checks SHA-256, mapId and geometry; reading checks decompressed block sizes and CRC. A negative Y scale preserves coordinate alignment. A point outside coverage is not assigned zero elevation. Selecting a map is mandatory and confirmation is required at launch; changing the map clears coordinates and corrections. The selected map's heights apply to both SPH-2 trajectories and the impact location. For the training ground and an unknown map, the user explicitly selects a mode without heights; L81 keeps its existing table without an elevation model. Local import atomically writes verified bytes to the persistent user data directory.
 
-In 2.9.0, a separate planning window displays an estimated arc, sampled ground checks and time from user measurements or an explicitly enabled model. This does not change the retained sight table. Dispersion, wind, target movement and above-ground objects are not modeled. The experimental fitted-drag model from upstream 1.4.1 was not imported: limited in-game observations do not justify a promise of greater accuracy.
+In the 2.11 workflow, the selected command and ranging appear together with automatic ground assessment; the detailed profile and personal measurements remain in additional tools. This does not change the retained sight table. Dispersion, wind, target movement and above-ground objects are not modeled. The experimental fitted-drag model from upstream 1.4.1 was not imported: limited in-game observations do not justify a promise of greater accuracy.
 
-## Planning in 2.9.0
+## Workflow and additional tools in 2.11
 
-Five additions use the accepted gun position and target: spotter commands, named points, measured flight times, a flight/terrain profile and source information. Analysis and target changes are blocked until the map is confirmed and coordinate review is complete. Aiming in this window is the **nominal calculation without local Alt+I corrections**. Selecting an analysis arc does not switch the in-game aiming arc through F4.
+The main cycle uses a confirmed map and accepted gun/target positions: **Alt+X sets the gun → middle-click sets the target → fire → Alt+I records the actual impact → refined guidance for the original target**. Analysis and target changes are blocked until the map is confirmed and coordinate review is complete. Impact recording is optional; baseline guidance is available immediately.
 
-### Spotter commands
+The main window, mini card, sight and Alt+I snapshot use **one selected final command**: that arc's bearing and MIL with applicable corrections. Analysis of another arc in additional tools is explicitly labeled as baseline. The model arc and ground check concern the **baseline geometric calculation**, not measured flight after ranging. F4 explicitly changes the game arc; a ground recommendation does not switch it automatically.
+
+Results distinguish **horizontal target metres**, **final MIL** and **approximate equivalent metres from the retained community table**. The latter is the inverse conversion of final MIL, not a measurement of the current game's RNG. Primary range does not change through ranging unless the target point itself changes.
+
+Compact **RANGING** shows the latest accepted miss in metres, the **applied change** in bearing degrees and MIL, observation count and reset. This change is already included in the final command, rather than an extra offset to add again. Manual impact entry is under **Manual input and diagnostics → Impact corrections** in the main window. Target shifting, saved points, time, ground profiles and sources are in **Additional tools**. [Step-by-step guide](USAGE-EN.md).
+
+Hints express left/right as bearing changes in **degrees**, and closer/farther as **MIL** changes. In the retained tables, increasing low-arc MIL moves farther; decreasing high-arc MIL moves farther. These directions refer to the selected arc's scale and do not make game MIL a physical angle.
+
+### Manual target shifting
 
 Left, Right, Closer and Farther buttons move the accepted target by **10/25/50/100 m**. The forward axis points from the gun to the current target. For its unit vector `u = (uₓ, uᵧ)`, the right axis is `(uᵧ, −uₓ)` and the new point is:
 
@@ -70,13 +78,15 @@ Left, Right, Closer and Farther buttons move the accepted target by **10/25/50/1
 
 Positive `L` means right, positive `A` means farther; dividing by 100 converts meters to map units. Each click rebuilds the frame from the current target. Coincident gun and target points cannot define this frame and are rejected. The change follows the ordinary manual-input path and invalidates outdated OCR. It moves a point; it neither records an actual impact nor adjusts MIL directly.
 
-### Named positions and targets
+### Recent and named positions and targets
 
-A record stores exact coordinates, name, map, weapon and point kind. The list shows only the current map and weapon; restoring requires a confirmed map. Restoring a gun position clears the previous target and calibration; a target follows the ordinary manual-input path. Map, weapon and corrections are not restored automatically on launch.
+Accepted positions and targets are saved automatically in a separate up-to-**64**-record list, <code>recent-fire-missions.json</code>, with exact coordinates, map, weapon and point kind; a user-supplied name is optional. The bounded recent list does not evict records from the named collection, <code>fire-missions.json</code>. Unaccepted OCR review and an empty or invalid pair do not count as successful points. The list shows only the current map and weapon; restoration is explicit and requires a confirmed map. Restoring a gun clears the previous target and calibration; a target follows the ordinary manual-input path. Map, weapon and corrections are not restored automatically on launch.
 
 `%LOCALAPPDATA%\WardogsFireControl\fire-missions.json` is outside the application directory. Limits are **500** records, **120** UTF-16 code units per name and **1 MiB** per file. Names within the same map, weapon and point kind must be unique without regard to case. Writes are atomic after locking, rereading and validation; unknown formats, damage or inaccessible files produce an error instead of replacement with an empty list. This collection is separate from the last 12 targets of the current session.
 
 ### Flight time and user measurements
+
+The interval before pressing Alt+I is not a flight-time measurement: the app does not detect the firing moment, and the delay includes player reaction, opening the map and selecting the impact. It does not create a seconds observation automatically.
 
 Without a matching observation or an enabled physical assumption, flight time is **unknown**. Each observation stores range, time, uncertainty, weapon, arc, elevation difference, a Version / profile label and source. In the UI, ammunition and charge are identified through that user label: enter a different label after changing the game version, ammunition or charge. The application does not detect them in the game.
 
@@ -87,6 +97,8 @@ Observations are stored in `%LOCALAPPDATA%\WardogsFireControl\flight-profiles.js
 Enable assumed speed and gravity is initially unchecked; later choices are saved in `planning.ini`. When enabled, SPH-2 uses the entered `g` and `v = √(2629·g)`, followed by `t = x / (v·cosθ)`. **9.80665 m/s²** is an Earth-gravity assumption, not measured game gravity. L81 additionally requires a positive user-entered speed: its initial value is missing, and an independent high vacuum arc is used. Neither model treats the displayed MIL as a physical barrel angle or changes the sight table. Model time is explicitly labeled an estimate, including when measured coverage does not include the current range.
 
 ### Ground profile and estimated arc
+
+For an accepted SPH-2 target, known ground is checked automatically using the selected **baseline** arc. An intersection, no intersection at sampled points, unknown elevations and incomplete coverage are explicit separate states. The app can suggest another available arc when the assessment supports it; the player decides whether to change. Alt+I corrections change the command rather than produce a measured trajectory, so the check does not establish safe corrected flight.
 
 SPH-2 displays the retained geometric parabola even without assuming `g`; that assumption is still needed for seconds. L81 displays ground without an arc until the user supplies a speed and `g` model. A measured total time alone does not determine the arc shape or timing at intermediate points.
 
@@ -116,7 +128,7 @@ One impact does not determine the gun's three-dimensional tilt. Local mode leave
 
 History is limited to 256 observations. The consistency score from 0 to 1 is not a hit probability. Software regressions check correction signs, a repeated shot with an already corrected command, isolation of trajectories and distant targets, rejection without state changes, and memory bounds.
 
-SPH-2's main distance in meters is the horizontal distance to the accepted target, identical for both trajectories. The equivalent table range is marked as approximate. In the supplied game sight, 660/670/680 MIL corresponded to 2612/2609/2605 m, while the retained table gives 2621/2617/2613 m. According to SoNiX's check, rotating the turret by about 90° did not change 670 MIL → 2609 m. These data do not determine a complete new ballistic model; the table is not replaced with arbitrary interpolation of six points.
+SPH-2's main distance in metres is the horizontal distance to the accepted target, identical for both arcs. The main window and mini card separately show final MIL and inverse table range, marked as approximate. Elevation and local corrections can make table metres differ from target range. In the supplied game sight, 660/670/680 MIL corresponded to 2612/2609/2605 m, while the retained table gives 2621/2617/2613 m. According to SoNiX's check, rotating the turret by about 90° did not change 670 MIL → 2609 m. These data do not determine a complete new ballistic model; the table is not replaced with arbitrary interpolation of six points. A task around 2200 m illustrates the workflow rather than a measured new shot.
 
 SoNiX's checks take place on the training ground. A suitable training-ground height map is unavailable; local packages for other maps are not substituted. Game dispersion, hull position, actual sight settings and unknown elevations limit achievable first-shot accuracy. A 90–99% hit-rate claim requires a defined target size, conditions and a series of measured shots; no such series is available yet.
 

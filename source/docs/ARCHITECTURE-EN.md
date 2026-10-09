@@ -1,14 +1,21 @@
 # WARDOGS Fire Control — architecture and development
 
-The 2.10.0 candidate adds bounded map-label search, confirmation across separate frames and diagnostic archives, including local planning prepared in 2.9. The published stable release is currently 2.8.0.
+The **2.11.0 candidate** unifies map confirmation, accepted gun/target coordinates, the selected final command and ranging. Automatic ground assessment and a separate accepted-point history are added; 2.10 OCR and diagnostic archives remain. The published stable release is **2.8.0**. This describes source rather than establishing publication or a new successful CI run.
 
-**firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores named points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides spotter corrections, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
+**firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores up to 500 named points and separately up to 64 recently accepted points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides additional tools: manual target shifting, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
 
 A native assistant for L81 and SPH-2 in **the game WARDOGS**. It works with manual coordinates, an active chat draft and two coordinate fields near the map cursor. It displays distance, bearing, MIL, both SPH-2 arcs and corrections from recorded impacts. Recognition and user map packages work locally. BULKHEAD approval has not been obtained; see the [game interaction audit](ANTICHEAT-EN.md).
 
 The interface supports Russian and English. Russian is the default; the header selector beside the version switches immediately and saves the preference. Language changes preserve input and calculation state. See the [language guide](LOCALIZATION.md).
 
 ## Main workflow
+
+**Confirm map and enter game** explicitly confirms the selected map through the usual checks and enters game mode; once confirmed, the button is **To game**. Without a selection, the interface directs the player to the map selector; missing required heights block calculation and entry. Alt+X accepts the gun; middle-click accepts a target; optional Alt+I records an actual impact before the target/arc changes. Refinement keeps the original target.
+
+The main window, mini card, sight and Alt+I context use one selected final command; analysis of the other arc in additional tools is explicitly labeled as baseline. Results distinguish horizontal target range, final MIL and approximate inverse community-table range. Table metres are not represented as current game RNG.
+
+**RANGING** shows the latest miss, already **applied bearing/MIL change**, observation count and reset. This change is included in final values. Manual impact entry is under **Manual input and diagnostics → Impact corrections**. Shifting the target itself is in additional tools and does not create an observation.
+
 
 Game features and middle-button capture are enabled by default. **M → right-click → Mark Coordinates → Alt+X** always sets the gun through automatic detection of the active chat draft, independently of a saved manual region. A complete confident pair with a confirmed visual source is applied immediately; the application shows the mini card. A physical middle-button press sets the target from two fields near the map cursor when integration and mouse capture are enabled and the gun is accepted. This state does not depend on the visible window, `game_mode_` or returning with **Alt+C**. A new unaccepted gun capture blocks new targets using the old position. Conflicts display the combinations actually registered. Selecting a region, pressing Start game and confirming an ordinary successful reading are unnecessary.
 
@@ -26,7 +33,7 @@ A physical middle-button press pins client geometry at the click and first sched
 
 Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_Distance_Calculator), tag `v1.4.0`, commit `e1e14b2df5e59b6452a7aba105c36711b355d954`. Attribution and the license are preserved. Further workflow, reliability and interface development by SoNiX. This is a standalone build from published source; bit-for-bit equivalence to earlier third-party EXEs is not claimed. See the [coordinate workflow sources, in Russian](COORDINATE-WORKFLOW-RESEARCH-RU.md).
 
-| Feature | 2.10.0 candidate implementation |
+| Feature | 2.11.0 candidate implementation |
 | --- | --- |
 | Manual gun and target coordinates | Original author's parser; explicit gun-not-set state; a real `(0,0)` point is allowed |
 | Range, bearing and compass directions | One game unit equals 100 m; NaN/Inf/overflow protection |
@@ -38,11 +45,11 @@ Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_
 | Hotkeys | RegisterHotKey with MOD_NOREPEAT; occupied shortcuts receive a limited replacement, incomplete sets roll back |
 | Compact card | Above other windows; size/opacity/lock; shortcut and taskbar unlock; return to calculation |
 | SPH-2 | Original author's tables, low and high arcs, corrected aiming calculation |
-| SPH-2 corrections | Direct calculation without test shots; optional local Alt+I, same arc and nearby area; reset after moving/changing map |
+| SPH-2 ranging | Direct calculation, optional Alt+I for the same target/arc, compact miss and applied changes, shared final result and reset |
 | Terrain | Required map selection; SHA-256/mapId, local atomic import, persistent user directory; heights for both SPH-2 arcs and impact; explicit training-ground mode without heights |
 | Sight | L81/SPH-2 scales, arc selection, bearing correction, size, opacity, DPI and 4:3 |
 | Diagnostics | Main-window snapshots and the full path through an own test window; diagnostic modes do not write settings |
-| Convenience | RU/EN interface, status, direction plot, 12 recent targets, copy calculation, help, tray and reopening the window on another launch |
+| Convenience | RU/EN, direction plot, 12 session targets, up to 64 recent accepted points separate from 500 named records, explicit restoration, clipboard and tray |
 
 ## Technologies
 
@@ -120,6 +127,15 @@ The mouse hook forwards events. Movement does not start OCR; injected clicks are
 
 Closing requests OCR cancellation and releases hooks. Windows OCR has a three-second wait limit; after cancellation a new call receives a new engine while the old resources remain with its completion. At most two active/cancelled unfinished providers are held simultaneously, including during settings changes; stop-aware waiting is limited to 100 ms, followed by an explicit error. ONNX receives a terminate signal. Aiming and firing are not automated; the gun is not considered set before coordinates are obtained.
 
+## Automatic analysis and saved points
+
+For a ready SPH-2 target, <code>cache_automatic_analysis</code> obtains baseline arc analysis without assumed speed/gravity or Alt+I timing. The cache is keyed by accepted gun, target, map and loaded terrain. The UI reports selected baseline-arc ground assessment: intersection, no crossings at sampled points, unknown heights or incomplete coverage. Another arc may be suggested, but F4 selection is not changed automatically. Buildings and actual corrected flight are not analyzed.
+
+<code>PlanningContext</code> supplies additional tools with current <code>active_solution</code>/<code>active_arc</code> only while guidance is ready: the command actually shown, including Alt+I. The baseline model arc and time remain separate analysis rather than measured flight of the corrected shot.
+
+<code>remember_accepted_point</code> records accepted points only with a confirmed map; diagnostic mode does not change the profile. Separate <code>recent-fire-missions.json</code> stores up to 64 recent points. Repeating the exact pair in the same context moves it to the front; the cap removes only the oldest records from this history, never the up-to-500-record named collection <code>fire-missions.json</code>. Both stores validate format, lock and write atomically. Saving failures are reported explicitly.
+
+User names are optional for automatic history. Restoration remains explicit after map/weapon checks; launch does not automatically restore the map, gun or ranging corrections. The exact saved Point is not recovered from a rounded label. [User workflow](USAGE-EN.md).
 ## Resources and storage
 
 - The ONNX engine and model are not created for each capture; the input buffer and `MemoryInfo` are reused. CTC is decoded from the tensor. Images are limited to 16 megapixels; normalized row width is 4096. Component, row and variant counts are bounded; no whole-image flood-fill queue is used.

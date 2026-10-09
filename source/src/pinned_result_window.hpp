@@ -48,6 +48,7 @@ public:
     void set_selected_arc(std::optional<wardogs::Arc> arc);
     void set_error(bool error);
     void set_workflow_status(const QString& text);
+    [[nodiscard]] bool hasHeightForWidth() const override;
     void set_locked(bool locked);
     [[nodiscard]] bool is_locked() const { return preferences_.locked; }
     void set_opacity_percent(int opacity_percent);
@@ -85,7 +86,8 @@ private:
     void resize_from_pointer(QPoint pointer);
     void apply_font_scale();
     [[nodiscard]] int workflow_status_extra() const;
-    void update_workflow_status_layout(int previous_extra);
+    void update_workflow_status_layout(int previous_extra,
+                                       bool preserve_result_height = true);
     void build_context_menu();
     void update_lock_control();
     void update_unlock_hotkey_control();

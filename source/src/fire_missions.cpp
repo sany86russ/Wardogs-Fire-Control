@@ -289,6 +289,10 @@ std::filesystem::path fire_missions_path() {
     return directory / L"WardogsFireControl" / L"fire-missions.json";
 }
 
+std::filesystem::path recent_fire_missions_path() {
+    return fire_missions_path().parent_path() / L"recent-fire-missions.json";
+}
+
 void validate_fire_mission(const SavedFireMission& mission) {
     validate_id(mission.id);
     if (mission.map == GameMap::unselected || game_map_key(mission.map).empty())
@@ -355,6 +359,27 @@ bool FireMissionRepository::erase(std::string_view id) const {
     missions.erase(found);
     write_collection(path_, missions);
     return true;
+}
+
+SavedFireMission FireMissionRepository::remember(GameMap map, FireMissionWeapon weapon,
+                                                 FireMissionKind kind, Point point) const {
+    if (path_.filename() != L"recent-fire-missions.json")
+        throw std::invalid_argument("Автоматическая история требует отдельного файла recent-fire-missions.json");
+    // max_digits10 labels distinguish close points without re-parsing display text.
+    SavedFireMission mission{QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString(),
+        (point_component(point.x) + QStringLiteral(", ") + point_component(point.y)).toStdWString(),
+        map, weapon, kind, point};
+    validate_fire_mission(mission);
+    StoreLock lock(path_);
+    auto missions = read_collection(path_);
+    const auto found = std::find_if(missions.begin(), missions.end(), [&](const auto& entry) {
+        return entry.map == map && entry.weapon == weapon && entry.kind == kind && entry.point == point;
+    });
+    if (found != missions.end()) { mission = *found; missions.erase(found); }
+    missions.insert(missions.begin(), mission);
+    if (missions.size() > maximum_recent_fire_missions) missions.resize(maximum_recent_fire_missions);
+    write_collection(path_, missions);
+    return mission;
 }
 
 }  // namespace wardogs

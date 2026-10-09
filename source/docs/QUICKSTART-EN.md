@@ -1,8 +1,8 @@
-# WARDOGS Fire Control 2.10.0 — candidate quick start
+# WARDOGS Fire Control 2.11.0 — candidate quick start
 
-A portable assistant for L81 and SPH-2: distance, bearing and table-based aiming from two points. Version 2.9.0 adds quick spotter commands, named positions and targets, measured flight times, a flight/terrain profile and source information. The main in-game workflow is enabled by default; recognition and calculations run locally.
+A portable assistant for L81 and SPH-2: range, bearing and table aiming from two points. The main cycle is map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined SPH-2 guidance. Additional tools provide manual target shifting, saved points, timing observations, ground profiles and sources. Recognition and calculations run locally.
 
-This guide covers the **2.10.0 candidate** in the current source: bounded map-label search, confirmation across separate frames and log archives. The published stable ZIP remains **2.8.0**; downloading that release does not provide the candidate features.
+This guide covers the **2.11.0 candidate**: one cycle for map, gun, target and ranging; a shared final command, automatic ground assessment and retained accepted points. The 2.10 OCR and log archives remain. The published stable ZIP remains **2.8.0**; downloading that release does not provide the candidate features.
 
 ## Launch and first calculation
 
@@ -10,10 +10,11 @@ Extract the entire portable ZIP into a separate folder and double-click **Зап
 
 Russian is the default interface language. Select **EN** in the header beside the version to switch to English. You can switch back to **RU** at any time; the preference is saved. See the [language guide](LOCALIZATION.md).
 
-1. In **Game map · required**, select the current map. After restarting, confirm the previous selection with **Confirm map**. Aiming and entry into game mode remain unavailable until the map is confirmed.
+1. In **Game map · required**, select and explicitly confirm the current map. **Confirm map and enter game** confirms the selected map and enters game mode; once confirmed, the button reads **To game**. Select a map first when none is chosen; missing required elevations block entry. After restarting, the saved selection must be confirmed again.
 2. Open the full WARDOGS map with **M**. Right-click the gun position and select **Mark Coordinates**. The pair appears in the chat input; you do not need to send a message.
 3. Press **Alt+X**. The application finds the active draft in the upper-left part of the window, independently of any saved custom region. If it reads a complete pair with sufficient confidence, it sets the gun position, hides the main window and shows the mini card.
 4. Point at the target on the map and press the **middle mouse button**. The application reads the separate X and Y labels near the cursor and displays the calculation. The button still places a marker in the game; this target does not need new text in chat.
+5. For SPH-2, set the selected bearing and **final MIL**, then fire. Optionally point at the actual impact on the map and press **Alt+I** before changing the target or arc. The command is refined for the original target; middle-clicking the impact instead sets a new target.
 
 Use **Tab** to switch chat channels: team, local, vehicle or all. The reading region adjusts automatically to the current channel label width. Channel text comes from the game and follows the game's language.
 
@@ -74,35 +75,39 @@ Profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. If it does not exist 
 
 Settings are written in Unicode, preserving additional sections and keys. A damaged ANSI version of the standard pattern is repaired automatically. For a rejected custom pattern, use **Restore standard WARDOGS pattern**; complex expressions are not accepted. Windows OCR remains an optional source; automatic reading of the two map fields uses the main bundled model.
 
-## Planning: five additions to the calculation
+## Additional tools
 
-Return to the main window with **Alt+C** and click **Planning · corrections, positions, flight** below the quick-workflow hint. First confirm the map, accept the gun and target, and finish reviewing uncertain coordinates. Calculation actions are unavailable while a new gun capture or target review is unresolved.
+Return to the main window with **Alt+C** and click **Additional tools** below the quick-workflow hint. First confirm the map, accept the gun and target, and finish reviewing uncertain coordinates. Calculation actions are unavailable while a new gun capture or target review is unresolved.
 
-### 1. Quick spotter commands
+### 1. Manual target shifting
 
 In **Flight and terrain**, select a **10, 25, 50 or 100 m** step and click **Left / Right / Closer / Farther**. Directions are relative to gun-to-target: right does not mean east on the map. A click immediately moves the target and recalculates aiming; repeated clicks apply to the new point. This is a spotter command that changes the target, rather than an Alt+I impact record. Outdated OCR results are invalidated.
 
 ### 2. Named positions and targets
 
-Open **Positions and targets**, enter a name and click **Save gun** or **Save target**. A selected record can be renamed, deleted or applied with **Restore selected**. Only the current map and weapon are shown. Set a gun before restoring a target; restoring a gun clears the previous target and corrections. Points are not automatically applied after restarting: first confirm the map and select the weapon.
+Accepted positions and targets are automatically retained in a separate recent list of up to **64** records. Names are optional. In **Positions and targets**, name a point and save it in the named collection, rename it, delete it or explicitly apply a selected record. Restoration requires a confirmed matching map and weapon; restoring the gun clears the previous target and corrections. Map and gun are not restored automatically on launch.
 
-The collection holds up to **500** points, with names up to **120** UTF-16 code units. These persistent records are separate from the last 12 targets of the current session. Names within the same map, weapon and point kind must not duplicate each other, even with different capitalization.
+The separate named collection holds up to **500** points, with names up to **120** UTF-16 code units. These persistent records are separate from the last 12 targets of the current session. Names within the same map, weapon and point kind must not duplicate each other, even with different capitalization.
 
 ### 3. Measured flight times
+
+Alt+I does not measure flight time: the delay includes player reaction and map interaction. Seconds require a separate personal measurement; the assumed model is disabled by default.
 
 In **Time measurements**, enter **Version / profile**, **Source**, time from firing to impact and **Measurement uncertainty ±s**, then click **Record time for current target**. An example label is `0.1.2 / 155 HE / normal charge`; it must describe your own conditions. Enter a different label after changing the patch, ammunition or charge. The application does not detect them or start a shot stopwatch.
 
 Recording requires available nominal MIL and a known elevation difference. Up to **256** observations with time up to **600 s** can be stored. Recording the same range and profile again replaces the previous observation. You can delete a selected observation. Uncertainty must not exceed time.
 
-**Flight and terrain** shows a user observation or interpolation between observations of the same weapon, arc, elevation difference and label. The profile supplies no time outside measured coverage. With no observations and the model assumption disabled, the result is **Flight time unknown**. L81 uses the high arc; for SPH-2 select the desired arc in the planning window. This choice is for analysis; F4 switches aiming in the main window.
+**Flight and terrain** shows a user observation or interpolation between observations of the same weapon, arc, elevation difference and label. The profile supplies no time outside measured coverage. With no observations and the model assumption disabled, the result is **Flight time unknown**. L81 uses the high arc; for SPH-2, additional tools distinguish the selected final command from baseline analysis of another arc. F4 explicitly changes game guidance.
 
 ### 4. Flight and terrain profile
+
+After an SPH-2 target is accepted, ground is assessed automatically on the selected baseline arc. Intersection, no detected crossing at sampled points, unknown elevations and incomplete coverage are separate states. Suggesting another arc does not switch it; the plot does not check actual corrected flight after Alt+I.
 
 In **Flight and terrain**, green is ground and orange is the estimated arc. SPH-2 uses the retained geometric model; L81 displays available ground without an arc unless an additional model is supplied. Missing heights remain gaps. A crossing warning gives the approximate range of the first sampled model/ground intersection. Even a complete graph without crossings does not guarantee clear flight: checks sample points about every 2 m.
 
 For estimated time, explicitly select **Enable assumed speed and gravity**. It is initially unchecked; your later choice is saved. **Assumed g, m/s²** initially reads **9.80665**, an Earth-gravity assumption rather than measured WARDOGS physics. SPH-2 derives speed as `v = √(2629·g)`; L81 additionally requires **L81 speed, m/s**, initially missing. Matching user measurements take priority; other seconds are explicitly labeled model estimates. Neither speed nor `g` changes the sight table's MIL.
 
-Install a height package for the selected map to check ground. On the training ground or an unknown map, explicitly selecting no-height mode assumes equal endpoint elevations and does not check ground. Buildings, roofs, bridges, trees and actual barrel height are absent from the graph. Displayed MIL is nominal aiming without local Alt+I refinement; measuring time does not validate the arc shape.
+Install a height package for the selected map to check ground. On the training ground or an unknown map, explicitly selecting no-height mode assumes equal endpoint elevations and does not check ground. Buildings, roofs, bridges, trees and actual barrel height are absent from the graph. Selected final MIL includes local Alt+I refinement; the model plot remains baseline analysis. Measuring time does not validate the arc shape.
 
 ### 5. Profiles and sources
 
@@ -112,13 +117,16 @@ Planning data is outside the portable application and survives updates:
 
 | File in `%LOCALAPPDATA%\WardogsFireControl` | Contents |
 | --- | --- |
+| <code>recent-fire-missions.json</code> | Up to 64 recently accepted positions and targets |
 | `fire-missions.json` | Named gun positions and targets |
 | `flight-profiles.json` | Measured flight times |
 | `planning.ini` | Assumed-model parameters and the latest profile fields |
 
-To move data to another PC, copy these files with the application closed; connect the appropriate terrain package separately. For the two JSON stores, damaged or unknown formats produce an error instead of automatic replacement with empty data.
+To move data to another PC, copy these files with the application closed; connect the appropriate terrain package separately. For the JSON stores, damaged or unknown formats produce an error instead of automatic replacement with empty data.
 
 ## SPH-2: aim immediately, refine optionally
+
+The main window, mini card, sight and Alt+I share one selected final command. Target metres, final MIL and approximate community-table metres are distinct; the latter are not promised to match the current game RNG. The change shown in ranging is already applied. Left/right refers to bearing degrees; farther means more MIL for the low arc and less MIL for the high arc. See the [2.11 workflow](USAGE-EN.md).
 
 Select **SPH-2 · Artillery**. Mandatory ranging shots are no longer required: after you set the gun and target, the application immediately shows both available trajectories. You do not need to fire in another direction or collect a pair of shots with different bearings.
 

@@ -439,7 +439,7 @@ try {
     $profileTerrainMarker = Join-Path $profileRoot ('terrain-packs\smoke-preserved-' + $sentinel + '.wdt')
     Write-SmokeFile $profileTerrainMarker ('persistent-user-height-data-' + $sentinel)
     $profileTerrainHash = Get-WardogsFileHash $profileTerrainMarker
-    foreach ($name in @('fire-missions.json', 'flight-profiles.json', 'planning.ini')) {
+    foreach ($name in @('fire-missions.json', 'recent-fire-missions.json', 'flight-profiles.json', 'planning.ini')) {
         $path = Join-Path $profileRoot $name
         [void](Assert-WardogsPathWithoutReparse $path)
         $backup = Join-Path $EvidenceDirectory ('prior-' + $name)
