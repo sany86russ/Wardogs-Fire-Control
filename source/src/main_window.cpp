@@ -692,7 +692,6 @@ public:
             OcrMessage context;
             capture_impact_context(context);
             if (!record_continuous_impact({80.2,101.7}, QStringLiteral("fixture"), *context.impact_firing)) return false;
-            resize(1120,1040);
         }
         else if (mode == QStringLiteral("review") || mode == QStringLiteral("review-bottom")) {
             OcrMessage message;
@@ -737,6 +736,11 @@ public:
             auto* table = dialog->findChild<QWidget*>(QStringLiteral("flightMeasurements"));
             if (!scroll || !table) return false;
             scroll->ensureWidgetVisible(table, 0, 10);
+        } else if (mode == QStringLiteral("fire-control")) {
+            // Mode changes post a fit-to-screen callback. Set the diagnostic
+            // canvas after it settles so every result and the ranging report
+            // are rendered, including on the runner's small desktop.
+            resize(1120,1040);
         }
         QApplication::processEvents();
         const QFileInfo file(path);
