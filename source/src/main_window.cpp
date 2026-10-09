@@ -728,6 +728,15 @@ public:
         } else if (mode == QStringLiteral("tutorial-bottom")) {
             if (auto* browser = dialog->findChild<QTextBrowser*>(QStringLiteral("helpText")))
                 browser->verticalScrollBar()->setValue(browser->verticalScrollBar()->maximum());
+        } else if (mode == QStringLiteral("planning-times")) {
+            // This page can scroll after its guidance text wraps. Capture the
+            // actual measurement table, which is the surface this mode verifies;
+            // the accepted coordinates above the tabs stay in view.
+            auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("planningTabs"));
+            auto* scroll = tabs ? qobject_cast<QScrollArea*>(tabs->currentWidget()) : nullptr;
+            auto* table = dialog->findChild<QWidget*>(QStringLiteral("flightMeasurements"));
+            if (!scroll || !table) return false;
+            scroll->ensureWidgetVisible(table, 0, 10);
         }
         QApplication::processEvents();
         const QFileInfo file(path);
