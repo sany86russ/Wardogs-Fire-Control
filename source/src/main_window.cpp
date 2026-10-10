@@ -1854,9 +1854,38 @@ public:
             catch (const std::invalid_argument&) { wrong_map_rejected = true; }
             check("planning_owner_rechecks_confirmed_map", wrong_map_rejected && target_->x > 7.6);
         }
+        OcrMessage automatic_base;
+        automatic_base.success = true;
+        automatic_base.action = OcrAction::base;
+        automatic_base.point = {80, 80};
+        automatic_base.text = L"x80.00 y80.00";
+        automatic_base.assessment = wardogs::assess_ocr_result({automatic_base.text, 0.99F, 0.99F});
+        automatic_base.input_epoch = input_epoch_;
+        automatic_base.calibration_epoch = calibration_epoch_;
+        finish_ocr(automatic_base);
+        check("automatic_base_acceptance_is_exercised_before_log_audit",
+              base_set_ && base_ == automatic_base.point && !target_ && !pending_ocr_ && !ocr_hold_);
         resize(previous_size);
         QApplication::processEvents();
         QApplication::clipboard()->setMimeData(previous_clipboard.release());
+        check("battle_diagnostics_flush_while_application_is_open", wardogs::flush_session_log());
+        QFile diagnostic_log(QString::fromStdWString(wardogs::active_log_path().wstring()));
+        const bool log_readable = diagnostic_log.open(QIODevice::ReadOnly);
+        const auto log_bytes = log_readable ? diagnostic_log.readAll() : QByteArray{};
+        check("battle_diagnostics_use_separate_diagnostic_file", log_readable &&
+              wardogs::active_log_path().filename() == L"diagnostic.log");
+        for (const auto* event : {"coordinates.accepted action=base source=manual",
+                                 "coordinates.accepted action=target source=history",
+                                 "coordinates.accepted action=base source=planning",
+                                 "coordinates.accepted action=base source=ocr_auto",
+                                 "coordinates.accepted action=target source=ocr_confirmed",
+                                 "ocr.review_required", "ocr.review_confirmed", "ocr.review_cancelled",
+                                 "weapon.selected", "guidance.arc_selected", "continuous.impact_recorded",
+                                 "continuous.cleared", "solution.l81", "terrain.solution",
+                                 "low_available=0 high_available=1", "selected_arc=unavailable"}) {
+            const auto name = std::string("battle_log_contains_") + event;
+            check(name.c_str(), log_bytes.contains(event));
+        }
         return {{QStringLiteral("passed"), passed}, {QStringLiteral("checks"), checks},
                 {QStringLiteral("version"), QStringLiteral(WARDOGS_VERSION)},
                 {QStringLiteral("boundary"), QStringLiteral("Diagnostic user paths; live game focus/fullscreen/hits not simulated")}};
@@ -2000,6 +2029,9 @@ private:
     }
 
     void discard_ocr_review() {
+        if (pending_ocr_)
+            wardogs::log_info(std::string("ocr.review_discarded action=") +
+                action_name(pending_ocr_->action) + " epoch=" + std::to_string(input_epoch_));
         pending_ocr_.reset();
         if (ocr_review_) ocr_review_->hide();
     }
@@ -2033,6 +2065,8 @@ private:
             if (message.action == OcrAction::target)
                 (void)wardogs::calculate_shot(base_, message.point);
             message.confirmed = true;
+            log_coordinate_event("ocr.review_confirmed", action_name(message.action),
+                                 "user", message.point);
             discard_ocr_review();
             ocr_hold_ = false;
             finish_ocr(std::move(message));
@@ -2043,6 +2077,8 @@ private:
 
     void cancel_ocr_review() {
         if (!pending_ocr_) return;
+        log_coordinate_event("ocr.review_cancelled", action_name(pending_ocr_->action),
+                             "user", pending_ocr_->point);
         if (pending_ocr_->action == OcrAction::base) base_capture_pending_ = false;
         advance_input_epoch();
         ocr_hold_ = false;
@@ -2198,7 +2234,22 @@ private:
             .arg(guidance_ready ? QStringLiteral("✓") : QStringLiteral("○")));
     }
 
-    void remember_target(wardogs::Point target) {
+    void log_coordinate_event(const char* event, const char* action,
+                              const char* source, wardogs::Point point) {
+        std::ostringstream diagnostic;
+        diagnostic.imbue(std::locale::classic());
+        diagnostic.precision(17);
+        diagnostic << event << " action=" << action << " source=" << source
+                   << " point=" << point.x << ',' << point.y
+                   << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
+                   << " map_confirmed=" << map_confirmed_
+                   << " weapon=" << (vehicle_mode_ ? "sph2" : "l81")
+                   << " input_epoch=" << input_epoch_ << " calibration_epoch=" << calibration_epoch_;
+        wardogs::log_info(diagnostic.str());
+    }
+
+    void remember_target(wardogs::Point target, const char* source = "manual") {
+        log_coordinate_event("coordinates.accepted", "target", source, target);
         remember_accepted_point(wardogs::FireMissionKind::target, target);
         const auto existing = std::find(history_.begin(), history_.end(), target);
         if (existing != history_.end()) history_.erase(existing);
@@ -2872,10 +2923,10 @@ private:
         update_readiness();
         update_terrain_summary();
 
-        connect(manual_base, &QPushButton::clicked, this, &MainWindow::manual_base);
-        connect(base_input_, &QLineEdit::returnPressed, this, &MainWindow::manual_base);
-        connect(manual_target, &QPushButton::clicked, this, &MainWindow::manual_target);
-        connect(target_input_, &QLineEdit::returnPressed, this, &MainWindow::manual_target);
+        connect(manual_base, &QPushButton::clicked, this, [this] { this->manual_base(); });
+        connect(base_input_, &QLineEdit::returnPressed, this, [this] { this->manual_base(); });
+        connect(manual_target, &QPushButton::clicked, this, [this] { this->manual_target(); });
+        connect(target_input_, &QLineEdit::returnPressed, this, [this] { this->manual_target(); });
         connect(mode_button_, &QPushButton::clicked, this, &MainWindow::toggle_mode);
         connect(ghost_button_, &QPushButton::clicked, this, [this](bool enabled) { set_ghost_enabled(enabled); });
         connect(pin_button_, &QPushButton::clicked, this, &MainWindow::enter_pinned_mode);
@@ -3009,6 +3060,7 @@ private:
     void toggle_mode() {
         advance_input_epoch();
         vehicle_mode_ = !vehicle_mode_;
+        wardogs::log_info(std::string("weapon.selected weapon=") + (vehicle_mode_ ? "sph2" : "l81"));
         update_mode_button();
         update_action_labels();
         terrain_group_->show();
@@ -3149,6 +3201,8 @@ private:
         terrain_.reset();
         terrain_map_.reset();
         current_game_map_ = selected;
+        wardogs::log_info("terrain.selection_requested map=" +
+            utf8(qtext(std::wstring{wardogs::game_map_key(selected)})) + " confirmed=0");
         invalidate_corrections();
         ocr_hold_ = false;
         base_capture_pending_ = false;
@@ -3345,6 +3399,9 @@ private:
 
     void reset_continuous_calibration() {
         ++calibration_epoch_;
+        wardogs::log_info("continuous.reset previous_count=" +
+            std::to_string(continuous_calibration_ ? continuous_calibration_->sample_count() : 0U) +
+            " calibration_epoch=" + std::to_string(calibration_epoch_));
         continuous_calibration_.reset();
         last_impact_feedback_.reset();
         continuous_impact_->clear();
@@ -3373,6 +3430,19 @@ private:
     bool record_continuous_impact(wardogs::Point impact, const QString& source,
                                   wardogs::FiringSnapshot firing) {
         try {
+            std::ostringstream request;
+            request.imbue(std::locale::classic());
+            request.precision(17);
+            request << "continuous.impact_requested source=" << utf8(source)
+                    << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
+                    << " base=" << base_.x << ',' << base_.y
+                    << " target=" << firing.target.x << ',' << firing.target.y
+                    << " impact=" << impact.x << ',' << impact.y
+                    << " arc=" << (firing.arc == wardogs::Arc::low ? "low" : "high")
+                    << " bearing=" << firing.bearing_deg << " mil=" << firing.mil
+                    << " target_height_delta_m=" << firing.target_height_delta_m
+                    << " calibration_epoch=" << calibration_epoch_;
+            wardogs::log_info(request.str());
             if (!vehicle_mode_ || !base_set_ || !target_ || base_capture_pending_ || ocr_hold_)
                 throw std::invalid_argument("Сначала получите действующую наводку SPH-2 для цели");
             if (firing.target != *target_)
@@ -3434,6 +3504,7 @@ private:
                       .arg(QString::number(observed_miss_m, 'f', 0), signed_value(bearing_change), signed_value(mil_change), terrain_status));
             return true;
         } catch (const std::exception& error) {
+            log_coordinate_event("continuous.impact_rejected", "impact", "observation", impact);
             set_status(wardogs::i18n::text(QStringLiteral("Поправка не применена: ")) + error_text(error), true);
             return false;
         }
@@ -3734,6 +3805,7 @@ private:
         } catch (const std::exception& error) {
             low_result_.reset();
             high_result_.reset();
+            log_coordinate_event("solution.sph2_height_unavailable", "target", "calculation", result.target);
             low_solution_->set_height_unavailable();
             high_solution_->set_height_unavailable();
             vehicle_note_->setText(wardogs::i18n::text(QStringLiteral("Высота орудия или цели недоступна")));
@@ -3780,6 +3852,8 @@ private:
                 ++available;
             } catch (const std::exception& error) {
                 card->set_unavailable(raw_distance, raw_bearing);
+                wardogs::log_warning(std::string("solution.sph2_arc_unavailable arc=") +
+                    (arc == wardogs::Arc::low ? "low" : "high") + " error=" + error.what());
                 warnings.push_back(name + QStringLiteral("：") + error_text(error));
             }
         }
@@ -3787,6 +3861,23 @@ private:
         set_vehicle_result_error(none_available);
         sync_ghost_solution();
         sync_pinned_result();
+        std::ostringstream diagnostic;
+        diagnostic.imbue(std::locale::classic());
+        diagnostic.precision(17);
+        diagnostic << "terrain.solution map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
+                   << " heights=" << static_cast<bool>(terrain_) << " base=" << result.base.x << ',' << result.base.y
+                   << " target=" << result.target.x << ',' << result.target.y
+                   << " target_range_m=" << result.distance * 100.0 << " height_delta_m=" << height_delta;
+        const auto selected_arc = effective_vehicle_arc();
+        diagnostic << " selected_arc=" << (!selected_arc ? "unavailable" :
+            *selected_arc == wardogs::Arc::high ? "high" : "low")
+                   << " low_available=" << static_cast<bool>(low_result_)
+                   << " high_available=" << static_cast<bool>(high_result_)
+                   << " correction_count=" << (continuous_calibration_ ? continuous_calibration_->sample_count() : 0U)
+                   << " calibration_epoch=" << calibration_epoch_;
+        if (low_result_) diagnostic << " low_bearing=" << low_result_->bearing_deg << " low_mil=" << low_result_->mil;
+        if (high_result_) diagnostic << " high_bearing=" << high_result_->bearing_deg << " high_mil=" << high_result_->mil;
+        wardogs::log_info(diagnostic.str());
         if (!warnings.isEmpty()) {
             if (available > 0) {
                 vehicle_note_->setText(wardogs::i18n::text(QStringLiteral("Одна траектория недоступна · используйте доступную")));
@@ -3805,19 +3896,6 @@ private:
             (terrain_map_ ? wardogs::i18n::text(QStringLiteral(" · %1 · перепад %2 м"))
                 .arg(wardogs::i18n::text(qtext(terrain_map_->spec.display_name))).arg(height_delta, 0, 'f', 1)
                           : wardogs::i18n::text(QStringLiteral(" · рельеф не учтён"))));
-        std::ostringstream diagnostic;
-        diagnostic.imbue(std::locale::classic());
-        diagnostic.precision(17);
-        diagnostic << "terrain.solution map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
-                   << " heights=" << static_cast<bool>(terrain_) << " base=" << result.base.x << ',' << result.base.y
-                   << " target=" << result.target.x << ',' << result.target.y
-                   << " target_range_m=" << result.distance * 100.0 << " height_delta_m=" << height_delta;
-        diagnostic << " selected_arc=" << (effective_vehicle_arc() == wardogs::Arc::high ? "high" : "low")
-                   << " correction_count=" << (continuous_calibration_ ? continuous_calibration_->sample_count() : 0U)
-                   << " calibration_epoch=" << calibration_epoch_;
-        if (low_result_) diagnostic << " low_bearing=" << low_result_->bearing_deg << " low_mil=" << low_result_->mil;
-        if (high_result_) diagnostic << " high_bearing=" << high_result_->bearing_deg << " high_mil=" << high_result_->mil;
-        wardogs::log_info(diagnostic.str());
         return false;
     }
 
@@ -3900,6 +3978,10 @@ private:
         sync_pinned_result();
         const bool high =
             settings_.ghost_reticle.preferred_arc == wardogs::Arc::high;
+        wardogs::log_info(std::string("guidance.arc_selected preferred=") + (high ? "high" : "low") +
+            " effective=" + (!effective_vehicle_arc() ? "unavailable" :
+                            *effective_vehicle_arc() == wardogs::Arc::high ? "high" : "low") +
+            " calibration_epoch=" + std::to_string(calibration_epoch_));
         set_status(high ? wardogs::i18n::text(QStringLiteral("Предпочтительная траектория: навесная; при недоступности используется настильная"))
                         : wardogs::i18n::text(QStringLiteral("Предпочтительная траектория: настильная; при недоступности используется навесная")));
         if (effective_vehicle_arc()) set_status(sph2_workflow_hint());
@@ -3947,20 +4029,20 @@ private:
                 (void)wardogs::calculate_shot(base_, point);
             }
             (base ? base_input_ : target_input_)->setText(text.trimmed());
-            if (base) manual_base(); else manual_target();
+            if (base) manual_base("clipboard"); else manual_target("clipboard");
         } catch (const std::exception& error) {
             set_status(wardogs::i18n::text(QStringLiteral("Вставка не выполнена: ")) + error_text(error), true);
         }
     }
 
-    void manual_base() {
+    void manual_base(const char* source = "manual") {
         try {
             const auto point = wardogs::parse_manual_coordinate(base_input_->text().toStdWString());
-            accept_manual_base(point);
+            accept_manual_base(point, source);
         } catch (const std::exception& error) { set_status(error_text(error), true); }
     }
 
-    void accept_manual_base(wardogs::Point point) {
+    void accept_manual_base(wardogs::Point point, const char* source = "manual") {
         if (!std::isfinite(point.x) || !std::isfinite(point.y))
             throw std::invalid_argument("Координаты должны быть конечными числами.");
         advance_input_epoch();
@@ -3971,6 +4053,7 @@ private:
         remember_accepted_point(wardogs::FireMissionKind::firing_position, point);
         target_.reset();
         invalidate_corrections();
+        log_coordinate_event("coordinates.accepted", "base", source, point);
         base_input_->clear();
         update_coordinates();
         clear_result(wardogs::i18n::text(QStringLiteral("Орудие задано · укажите цель")));
@@ -4008,29 +4091,29 @@ private:
         if (!context.map_confirmed || context.map != map || context.weapon != weapon ||
             context.capture_pending)
             throw std::invalid_argument("Подтвердите карту и завершите чтение координат.");
-        if (kind == wardogs::FireMissionKind::firing_position) accept_manual_base(point);
+        if (kind == wardogs::FireMissionKind::firing_position) accept_manual_base(point, "planning");
         else {
             if (!base_set_) throw std::invalid_argument("Сначала задайте координаты орудия.");
             if (ocr_hold_) throw std::invalid_argument("Подтвердите карту и завершите чтение координат.");
-            accept_manual_target(point);
+            accept_manual_target(point, "planning");
         }
     }
 
-    void manual_target() {
+    void manual_target(const char* source = "manual") {
         if (!base_set_) { set_status(wardogs::i18n::text(QStringLiteral("Сначала задайте координаты орудия")), true); return; }
         if (base_capture_pending_) { set_status(wardogs::i18n::text(QStringLiteral("Сначала завершите чтение нового орудия или отклоните его захват")), true); return; }
         try {
             const auto point = wardogs::parse_manual_coordinate(target_input_->text().toStdWString());
-            accept_manual_target(point);
+            accept_manual_target(point, source);
         } catch (const std::exception& error) { set_status(error_text(error), true); }
     }
 
-    void accept_manual_target(wardogs::Point point) {
+    void accept_manual_target(wardogs::Point point, const char* source = "manual") {
         (void)wardogs::calculate_shot(base_, point);
         advance_input_epoch();
         ocr_hold_ = false;
         target_ = point;
-        remember_target(point);
+        remember_target(point, source);
         target_input_->clear();
         update_coordinates();
         if (!show_result(point)) set_status(vehicle_mode_ ? sph2_workflow_hint() : wardogs::i18n::text(QStringLiteral("Расчёт готов")));
@@ -4042,7 +4125,7 @@ private:
         if (base_capture_pending_) { set_status(wardogs::i18n::text(QStringLiteral("Сначала завершите чтение нового орудия или отклоните его захват")), true); return; }
         // Display text is rounded; restore the retained point before MRU reordering.
         const auto point = history_[static_cast<std::size_t>(index)];
-        try { accept_manual_target(point); }
+        try { accept_manual_target(point, "history"); }
         catch (const std::exception& error) { set_status(error_text(error), true); }
     }
 
@@ -4560,7 +4643,9 @@ private:
         }
         if (!message.success) {
             wardogs::log_error(std::string("ocr.finished success=0 action=") +
-                               action_name(message.action) + " error=" +
+                               action_name(message.action) +
+                               " input_epoch=" + std::to_string(message.input_epoch) +
+                               " elapsed_ms=" + std::to_string(message.elapsed_ms) + " error=" +
                                utf8(message.error));
             ocr_text_->setText(wardogs::i18n::text(QStringLiteral("Текст: ")) +
                 (message.text.empty() ? wardogs::i18n::text(QStringLiteral("пусто")) : qtext(message.text)));
@@ -4573,12 +4658,16 @@ private:
         }
         {
             std::ostringstream diagnostic;
+            diagnostic.imbue(std::locale::classic());
+            diagnostic.precision(17);
             diagnostic << "ocr.finished success=1 action="
                        << action_name(message.action) << " point="
                        << message.point.x << ',' << message.point.y
                        << " confidence=" << message.confidence
                        << " elapsed_ms=" << message.elapsed_ms
-                       << " review=" << message.requires_review();
+                       << " review=" << message.requires_review()
+                       << " confirmed=" << message.confirmed
+                       << " input_epoch=" << message.input_epoch;
             wardogs::log_info(diagnostic.str());
         }
         QString confidence;
@@ -4586,6 +4675,8 @@ private:
             confidence = wardogs::i18n::text(QStringLiteral(" · уверенность символов %1%")).arg(qRound(message.confidence * 100.0F));
         ocr_text_->setText(wardogs::i18n::text(QStringLiteral("Текст: ")) + qtext(message.text) + confidence + wardogs::i18n::text(QStringLiteral(" · %1 мс")).arg(qRound(message.elapsed_ms)));
         if (!message.confirmed && message.requires_review()) {
+            log_coordinate_event("ocr.review_required", action_name(message.action),
+                                 "ocr", message.point);
             QStringList reasons;
             if (message.force_review) reasons << (!message.evidence_review_reason.isEmpty()
                 ? wardogs::i18n::text(message.evidence_review_reason) : message.map_coordinates
@@ -4595,6 +4686,11 @@ private:
             if (message.assessment.pass_disagreement) reasons << wardogs::i18n::text(QStringLiteral("проходы распознавания расходятся"));
             if (message.assessment.low_confidence) reasons << wardogs::i18n::text(QStringLiteral("слабая уверенность символов"));
             if (message.assessment.multiple_lines) reasons << wardogs::i18n::text(QStringLiteral("выделено несколько строк"));
+            wardogs::log_info("ocr.review_reason action=" + std::string(action_name(message.action)) +
+                " ambiguous=" + std::to_string(message.assessment.ambiguous) +
+                " pass_disagreement=" + std::to_string(message.assessment.pass_disagreement) +
+                " low_confidence=" + std::to_string(message.assessment.low_confidence) +
+                " evidence=" + utf8(message.evidence_review_reason));
             ocr_review_reason_->setText(wardogs::i18n::text(QStringLiteral("%1. Орудие, цель и поправки пока не изменены.")).arg(reasons.join(QStringLiteral("; "))));
             ocr_candidates_->clear();
             for (const auto& candidate : message.assessment.candidates)
@@ -4628,13 +4724,15 @@ private:
             remember_accepted_point(wardogs::FireMissionKind::firing_position, message.point);
             target_.reset();
             invalidate_corrections();
+            log_coordinate_event("coordinates.accepted", "base",
+                message.confirmed ? "ocr_confirmed" : "ocr_auto", message.point);
             clear_result(wardogs::i18n::text(QStringLiteral("Орудие задано · укажите цель")));
             set_status(wardogs::i18n::text(QStringLiteral("Орудие распознано: ")) + qtext(wardogs::format_point(message.point)));
             base_input_->setText(qtext(wardogs::format_point(message.point)));
         } else {
             advance_input_epoch();
             target_ = message.point;
-            remember_target(message.point);
+            remember_target(message.point, message.confirmed ? "ocr_confirmed" : "ocr_auto");
             if (!show_result(message.point))
                 set_status(vehicle_mode_ ? sph2_workflow_hint()
                     : wardogs::i18n::text(QStringLiteral("Цель распознана: ")) +
@@ -5059,10 +5157,36 @@ int run_application(int argc, char* argv[]) {
         const auto log_path = diagnostic
             ? std::filesystem::path{QFileInfo(test_path.isEmpty() ? snapshot_path : test_path).absolutePath().toStdWString()} / L"diagnostic.log"
             : wardogs::settings_path().parent_path() / L"logs" / L"latest.log";
-        if (!wardogs::initialize_session_log(log_path, WARDOGS_VERSION))
-            QMessageBox::warning(nullptr, wardogs::i18n::text(QStringLiteral("Диагностика")), wardogs::i18n::text(QStringLiteral("Журнал недоступен. Проверьте доступ к папке приложения в профиле Windows.")));
+        const bool logging_started = wardogs::initialize_session_log(log_path, WARDOGS_VERSION);
+        if (!logging_started) {
+            if (diagnostic) return 1;
+            QMessageBox::warning(nullptr, wardogs::i18n::text(QStringLiteral("Диагностика")),
+                wardogs::i18n::text(QStringLiteral("Журнал недоступен. Проверьте доступ к папке приложения в профиле Windows.")) +
+                QStringLiteral("\n") + QString::fromStdWString(log_path.wstring()));
+        }
         wardogs::log_info("application.initialized version=" WARDOGS_VERSION);
+        wardogs::log_info("application.context mode=" + std::string(diagnostic ? "diagnostic" : "user") +
+            " executable=" + QCoreApplication::applicationFilePath().toUtf8().toStdString() +
+            " started_utc=" + QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs).toStdString());
         MainWindow window(diagnostic);
+        // Publish even an unfinished capture or a quiet session once per second.
+        // Report a later disk/rotation failure once, without blocking input.
+        QTimer log_timer(&window);
+        bool log_failure_reported = !logging_started;
+        QObject::connect(&log_timer, &QTimer::timeout, &window, [&] {
+            if (log_failure_reported || wardogs::flush_session_log()) return;
+            log_failure_reported = true;
+            if (diagnostic) { app.exit(1); return; }
+            auto* warning = new QMessageBox(QMessageBox::Warning,
+                wardogs::i18n::text(QStringLiteral("Диагностика")),
+                wardogs::i18n::text(QStringLiteral("Запись журнала остановлена. Новые действия не сохраняются. Проверьте свободное место и доступ к папке журналов, затем перезапустите программу.")) +
+                QStringLiteral("\n") + QString::fromStdWString(log_path.wstring()),
+                QMessageBox::Ok, &window);
+            warning->setAttribute(Qt::WA_DeleteOnClose);
+            warning->setWindowModality(Qt::NonModal);
+            warning->show();
+        });
+        log_timer.start(1000);
         if (!diagnostic) wardogs::log_info(std::string("taskbar.action success=") +
             (wardogs_ui::install_unlock_jump_list_task() ? "1" : "0"));
         window.show();
@@ -5091,8 +5215,9 @@ int run_application(int argc, char* argv[]) {
         }
         const int result = app.exec();
         wardogs::log_info("application.exit code=" + std::to_string(result));
+        const bool logging_complete = wardogs::flush_session_log();
         wardogs::shutdown_session_log();
-        return result;
+        return diagnostic && !logging_complete ? 1 : result;
     } catch (const std::exception& error) {
         QMessageBox::critical(nullptr, wardogs::i18n::text(QStringLiteral("Не удалось запустить")), error_text(error));
         wardogs::shutdown_session_log();

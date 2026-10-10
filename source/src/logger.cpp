@@ -442,7 +442,10 @@ void write_locked(LoggerState& logger, LogLevel level,
     // Keep high-frequency capture diagnostics buffered, but publish completed
     // user actions immediately so a running session can be audited without
     // closing the game or losing the current correction history.
-    const bool completed_action = message.starts_with("continuous.impact_recorded") ||
+    const bool completed_action = message.starts_with("continuous.") ||
+        message.starts_with("coordinates.") || message.starts_with("weapon.") ||
+        message.starts_with("guidance.") || message.starts_with("ocr.review") ||
+        message.starts_with("ocr.request") ||
         message.starts_with("impact.") || message.starts_with("shot.") ||
         message.starts_with("ocr.finished") || message.starts_with("terrain.selected") ||
         message.starts_with("terrain.solution") || message.starts_with("solution.l81");
@@ -559,6 +562,17 @@ bool session_log_healthy() noexcept {
     try {
         std::scoped_lock lock(logger.mutex);
         return logger.healthy && logger.stream.is_open();
+    } catch (...) {
+        OutputDebugStringW(L"WARDOGS Fire Control: log.synchronization_failed.\n");
+        return false;
+    }
+}
+
+bool flush_session_log() noexcept {
+    auto& logger = state();
+    try {
+        std::scoped_lock lock(logger.mutex);
+        return logger.healthy && logger.stream.is_open() && flush_locked(logger);
     } catch (...) {
         OutputDebugStringW(L"WARDOGS Fire Control: log.synchronization_failed.\n");
         return false;

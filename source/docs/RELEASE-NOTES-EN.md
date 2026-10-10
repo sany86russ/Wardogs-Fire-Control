@@ -2,6 +2,13 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.11.1 — candidate: complete battle diagnostics · October 10, 2026
+
+- Separate accepted gun/target events with exact coordinates, map, weapon and input source. OCR results are distinct from player acceptance; reviews, confirmations and cancellations are explicit.
+- Weapon/arc changes and correction resets/rejections are recorded. SPH-2 calculation logs are no longer skipped when an arc is unavailable.
+- Main actions flush immediately; other events flush once per second. A recording failure after startup displays a notification; a diagnostic run fails if its log is unavailable.
+- Regression checks read events from an open log and verify closed sessions, failures and separation of user/test data. Tables and coordinate acceptance rules are preserved. This section describes the prepared fix; publication and installation are separate actions.
+
 ## 2.11.0 — unified fire-control workflow and ranging · October 10, 2026
 
 Changelog date: **October 10, 2026, Moscow time**. Version 2.11 brings the initial calculation, selected aiming command, observed impact and command refinement into one workflow. It includes the additional tools developed in **2.9** and coordinate-reading/logging changes developed in **2.10**, after the published 2.8 release. Historical 2.9/2.10 entries are retained below; their “candidate” wording describes those development stages.

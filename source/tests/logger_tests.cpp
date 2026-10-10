@@ -158,12 +158,21 @@ int main() {
     for (const auto* event : {"ocr.finished success=1", "continuous.impact_recorded count=5",
                               "shot.recorded number=2", "impact.guidance_accepted source=manual",
                               "terrain.selected map=ozeti", "terrain.solution height_delta_m=12",
-                              "solution.l81 range_m=850 bearing_deg=236 available=1 mil=705"}) {
+                              "solution.l81 range_m=250 bearing_deg=236 available=1 mil=705",
+                              "coordinates.accepted action=base source=manual point=1,2",
+                              "weapon.selected weapon=sph2", "guidance.arc_selected preferred=high",
+                              "ocr.review_cancelled action=target", "ocr.review_required action=base",
+                              "ocr.request action=target", "continuous.cleared"}) {
         wardogs::log_info(event);
         check(read_file(path).find(event) != std::string::npos,
               "a completed action is visible while the logger remains open");
     }
+    wardogs::log_info("ocr.worker_started action=target buffered-tail");
+    check(wardogs::flush_session_log() &&
+              read_file(path).find("buffered-tail") != std::string::npos,
+          "periodic flushing publishes an incomplete OCR attempt while the session stays open");
     wardogs::shutdown_session_log();
+    check(!wardogs::flush_session_log(), "flushing a closed session reports unavailable");
     check(wardogs::initialize_session_log(path, "bounded-message"),
           "a later run replaces the prior session");
     const auto first_archives = archives(archive_directory);
@@ -440,6 +449,7 @@ int main() {
     check(!wardogs::session_log_healthy() &&
               std::filesystem::is_directory(previous),
           "rotation failure is explicit and never removes a directory");
+    check(!wardogs::flush_session_log(), "periodic flushing cannot hide a failed session");
     const auto failed_size = std::filesystem::file_size(path);
     wardogs::log_error("must-not-grow-after-disk-failure");
     wardogs::shutdown_session_log();

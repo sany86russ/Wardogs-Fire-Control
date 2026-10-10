@@ -25,5 +25,6 @@
   {"ru": "Дополнительные инструменты · позиции и полёт", "en": "Additional tools · positions and flight"},
   {"ru": "История и именованные точки, перенос цели, измерения времени и профиль рельефа", "en": "History and named points, target relocation, time measurements and terrain profile"},
   {"ru": "ПРИСТРЕЛКА", "en": "RANGING"},
+  {"ru": "Запись журнала остановлена. Новые действия не сохраняются. Проверьте свободное место и доступ к папке журналов, затем перезапустите программу.", "en": "Log recording has stopped. New actions are not being saved. Check free disk space and access to the log folder, then restart the application."},
   {"ru": "\nВ текущей команде учтено: азимут %1° · MIL %2. При смене цели или дуги влияние поправки может уменьшиться.", "en": "\nIncluded in the current command: azimuth %1° · MIL %2. Changing the target or arc may reduce the correction."}
 ]

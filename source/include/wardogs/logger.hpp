@@ -22,6 +22,9 @@ inline constexpr std::size_t max_session_log_archives = 32;
 bool initialize_session_log(const std::filesystem::path& path,
                             std::string_view version) noexcept;
 void shutdown_session_log() noexcept;
+// Publishes buffered diagnostics without closing or rotating the session.
+// False if the session is unavailable or flushing failed.
+[[nodiscard]] bool flush_session_log() noexcept;
 void write_log(LogLevel level, std::string_view message) noexcept;
 // False when there is no open session or a write/rotation/flush has failed.
 // Failures also emit fixed OutputDebugString events without message contents.
