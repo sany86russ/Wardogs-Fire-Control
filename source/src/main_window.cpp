@@ -1854,6 +1854,17 @@ public:
             catch (const std::invalid_argument&) { wrong_map_rejected = true; }
             check("planning_owner_rechecks_confirmed_map", wrong_map_rejected && target_->x > 7.6);
         }
+        OcrMessage automatic_base;
+        automatic_base.success = true;
+        automatic_base.action = OcrAction::base;
+        automatic_base.point = {80, 80};
+        automatic_base.text = L"x80.00 y80.00";
+        automatic_base.assessment = wardogs::assess_ocr_result({automatic_base.text, 0.99F, 0.99F});
+        automatic_base.input_epoch = input_epoch_;
+        automatic_base.calibration_epoch = calibration_epoch_;
+        finish_ocr(automatic_base);
+        check("automatic_base_acceptance_is_exercised_before_log_audit",
+              base_set_ && base_ == automatic_base.point && !target_ && !pending_ocr_ && !ocr_hold_);
         resize(previous_size);
         QApplication::processEvents();
         QApplication::clipboard()->setMimeData(previous_clipboard.release());
