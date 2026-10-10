@@ -1707,6 +1707,18 @@ public:
         restore_after_selection(); QApplication::processEvents();
         check("pinned_selection_hide_show_preserves_user_geometry",
               pinned_window_->geometry() == card_geometry_before_return);
+        SettingsDialog pinned_settings_snapshot(settings_);
+        const auto opacity_before_snapshot = pinned_window_->opacity_percent();
+        pinned_window_->set_opacity_percent(79);
+        pinned_window_->set_locked(true);
+        const auto settings_after_card_change = settings_from_dialog(pinned_settings_snapshot);
+        check("settings_editor_snapshot_preserves_later_owned_card_changes",
+              settings_after_card_change.pinned_card.locked &&
+              settings_after_card_change.pinned_card.opacity_percent == 79 &&
+              settings_after_card_change.pinned_card.placement == settings_.pinned_card.placement &&
+              settings_after_card_change.pinned_card.mode_sizes == settings_.pinned_card.mode_sizes);
+        pinned_window_->set_locked(false);
+        pinned_window_->set_opacity_percent(opacity_before_snapshot);
         exit_pinned_mode();
         setGeometry(main_geometry_before_pin_test); QApplication::processEvents();
         check("mouse_foreground_filters_helpers", is_wardogs_window_title(L"WARDOGS") &&
@@ -5435,6 +5447,15 @@ private:
             settings_.game_integration_enabled) enter_game_mode();
     }
 
+    wardogs::AppSettings settings_from_dialog(const SettingsDialog& dialog) const {
+        auto candidate = dialog.settings();
+        // The map and mini card own these fields. Their queued callbacks can
+        // finish during dialog.exec(), after the editor took its snapshot.
+        candidate.last_game_map = settings_.last_game_map;
+        candidate.pinned_card = settings_.pinned_card;
+        return candidate;
+    }
+
     void edit_settings() {
         enter_game_after_terrain_ = false;
         wardogs::log_info("settings.dialog_opened");
@@ -5454,15 +5475,7 @@ private:
             }
             return;
         }
-        auto candidate = dialog.settings();
-        // A queued terrain verification may finish inside dialog.exec(). This
-        // field belongs to map confirmation, not to the settings editor.
-        candidate.last_game_map = settings_.last_game_map;
-        // The mini card owns placement; queued display changes can occur
-        // while the modal editor is open. Its snapshot must not overwrite them.
-        candidate.pinned_card.placement = settings_.pinned_card.placement;
-        candidate.pinned_card.mode_sizes = settings_.pinned_card.mode_sizes;
-        candidate.pinned_card.always_on_top = settings_.pinned_card.always_on_top;
+        auto candidate = settings_from_dialog(dialog);
         const bool adjust_ghost = dialog.adjust_ghost_requested();
         const auto previous = settings_;
         try {
