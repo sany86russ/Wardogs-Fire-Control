@@ -1693,6 +1693,17 @@ public:
         QApplication::processEvents();
         const auto card_geometry_before_return = pinned_window_->geometry();
         const auto card_context = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedContextCaption"));
+        const auto card_workflow = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus"));
+        check("pinned_context_matches_confirmed_map_and_retains_real_terrain_limitations",
+              vehicle_mode_ && map_confirmed_ && current_game_map_ == wardogs::GameMap::training && !terrain_map_ &&
+              card_context && card_context->text() == game_map_name(wardogs::GameMap::training) +
+                  wardogs::i18n::text(QStringLiteral(" · без высот")) &&
+              !terrain_assistance_->text().isEmpty() &&
+              card_context->toolTip().contains(terrain_assistance_->text()) &&
+              card_context->accessibleDescription() == card_context->toolTip());
+        check("pinned_ready_status_identifies_the_actual_selected_target",
+              target_ == wardogs::Point{92, 90} && card_workflow && card_workflow->text() ==
+                  wardogs::i18n::text(QStringLiteral("Цель: ")) + qtext(wardogs::format_point({92, 90})));
         const auto context_before_notice = card_context ? card_context->text() : QString{};
         set_status(wardogs::i18n::text(QStringLiteral("Настройки сохранены")));
         check("pinned_map_and_height_context_survive_unrelated_status",
