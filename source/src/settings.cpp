@@ -285,6 +285,102 @@ void remove_value(const std::filesystem::path& path, const wchar_t* key) {
     }
 }
 
+std::optional<int> read_placement_integer(const std::filesystem::path& path,
+                                           const wchar_t* key, int minimum, int maximum) {
+    const auto text = read_value(path, key, L"");
+    if (text.empty()) return std::nullopt;
+    std::string ascii;
+    ascii.reserve(text.size());
+    for (const auto character : text) {
+        if (character > 127) return std::nullopt;
+        ascii.push_back(static_cast<char>(character));
+    }
+    int value{};
+    const auto parsed = std::from_chars(ascii.data(), ascii.data() + ascii.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr != ascii.data() + ascii.size() ||
+        value < minimum || value > maximum) return std::nullopt;
+    return value;
+}
+
+std::optional<PinnedCardSize> read_pinned_size(const std::filesystem::path& path,
+                                              std::wstring_view prefix) {
+    const auto width = read_placement_integer(path, (std::wstring{prefix} + L"width").c_str(),
+        1, pinned_card_dimension_limit);
+    const auto height = read_placement_integer(path, (std::wstring{prefix} + L"height").c_str(),
+        1, pinned_card_dimension_limit);
+    if (!width || !height) return std::nullopt;
+    return PinnedCardSize{*width, *height};
+}
+
+std::optional<PinnedCardRect> read_pinned_rect(const std::filesystem::path& path,
+                                              std::wstring_view prefix) {
+    const auto x = read_placement_integer(path, (std::wstring{prefix} + L"x").c_str(),
+        -pinned_card_coordinate_limit, pinned_card_coordinate_limit);
+    const auto y = read_placement_integer(path, (std::wstring{prefix} + L"y").c_str(),
+        -pinned_card_coordinate_limit, pinned_card_coordinate_limit);
+    const auto size = read_pinned_size(path, prefix);
+    if (!x || !y || !size) return std::nullopt;
+    const PinnedCardRect result{*x, *y, size->width, size->height};
+    if (!valid_pinned_card_rect(result)) return std::nullopt;
+    return result;
+}
+
+std::optional<PinnedCardPlacement> read_pinned_placement(const std::filesystem::path& path) {
+    if (read_value(path, L"pinned_card_placement_version", L"") != L"1") return std::nullopt;
+    const auto available = read_pinned_rect(path, L"pinned_card_available_");
+    const auto rect = read_pinned_rect(path, L"pinned_card_");
+    if (!available || !rect) return std::nullopt;
+    PinnedCardPlacement placement{read_value(path, L"pinned_card_screen_id", L""), *available, *rect};
+    if (!valid_pinned_card_placement(placement)) return std::nullopt;
+    return placement;
+}
+
+void write_pinned_size(const std::filesystem::path& path, std::wstring_view prefix,
+                       const std::optional<PinnedCardSize>& size) {
+    const auto width_key = std::wstring{prefix} + L"width";
+    const auto height_key = std::wstring{prefix} + L"height";
+    if (size) {
+        write_value(path, width_key.c_str(), std::to_wstring(size->width));
+        write_value(path, height_key.c_str(), std::to_wstring(size->height));
+    } else {
+        remove_value(path, width_key.c_str());
+        remove_value(path, height_key.c_str());
+    }
+}
+
+void write_pinned_rect(const std::filesystem::path& path, std::wstring_view prefix,
+                       PinnedCardRect rect) {
+    write_value(path, (std::wstring{prefix} + L"x").c_str(), std::to_wstring(rect.x));
+    write_value(path, (std::wstring{prefix} + L"y").c_str(), std::to_wstring(rect.y));
+    write_pinned_size(path, prefix, PinnedCardSize{rect.width, rect.height});
+}
+
+void validate_pinned_geometry(const PinnedCardPreferences& preferences) {
+    if (preferences.placement && !valid_pinned_card_placement(*preferences.placement))
+        throw std::invalid_argument("Некорректное расположение мини-карточки.");
+    for (const auto& size : preferences.mode_sizes)
+        if (size && !valid_pinned_card_size(*size))
+            throw std::invalid_argument("Некорректный размер мини-карточки.");
+}
+
+void write_pinned_geometry(const std::filesystem::path& path,
+                           const PinnedCardPreferences& preferences) {
+    if (preferences.placement) {
+        const auto& placement = *preferences.placement;
+        write_value(path, L"pinned_card_placement_version", L"1");
+        write_value(path, L"pinned_card_screen_id", placement.screen_id);
+        write_pinned_rect(path, L"pinned_card_available_", placement.available);
+        write_pinned_rect(path, L"pinned_card_", placement.rect);
+    } else {
+        for (const wchar_t* key : {L"pinned_card_placement_version", L"pinned_card_screen_id",
+                L"pinned_card_available_x", L"pinned_card_available_y", L"pinned_card_available_width",
+                L"pinned_card_available_height", L"pinned_card_x", L"pinned_card_y",
+                L"pinned_card_width", L"pinned_card_height"}) remove_value(path, key);
+    }
+    write_pinned_size(path, L"pinned_card_mortar_", preferences.mode_sizes[0]);
+    write_pinned_size(path, L"pinned_card_sph2_", preferences.mode_sizes[1]);
+}
+
 }  // namespace
 
 std::filesystem::path settings_path() {
@@ -340,6 +436,11 @@ AppSettings load_settings_from(const std::filesystem::path& requested_path,
                            : OcrBackend::rapid;
     settings.pinned_card.locked =
         read_value(path, L"pinned_card_locked", L"0") == L"1";
+    settings.pinned_card.always_on_top =
+        read_value(path, L"pinned_card_always_on_top", L"1") != L"0";
+    settings.pinned_card.placement = read_pinned_placement(path);
+    settings.pinned_card.mode_sizes[0] = read_pinned_size(path, L"pinned_card_mortar_");
+    settings.pinned_card.mode_sizes[1] = read_pinned_size(path, L"pinned_card_sph2_");
     settings.pinned_card.unlock_hotkey = read_value(
         path, L"pinned_card_unlock_hotkey",
         settings.pinned_card.unlock_hotkey);
@@ -412,6 +513,7 @@ AppSettings load_settings_from(const std::filesystem::path& requested_path,
 void save_settings_to(const std::filesystem::path& requested_path,
                       const AppSettings& settings,
                       const std::filesystem::path& legacy_path) {
+    validate_pinned_geometry(settings.pinned_card);
     const auto destination = std::filesystem::absolute(requested_path);
     std::filesystem::create_directories(destination.parent_path());
     TemporaryIni temporary{destination};
@@ -459,6 +561,9 @@ void save_settings_to(const std::filesystem::path& requested_path,
     write_value(path, L"automatic_chat_region", settings.automatic_chat_region ? L"1" : L"0");
     write_value(path, L"pinned_card_locked",
                 settings.pinned_card.locked ? L"1" : L"0");
+    write_value(path, L"pinned_card_always_on_top",
+                settings.pinned_card.always_on_top ? L"1" : L"0");
+    write_pinned_geometry(path, settings.pinned_card);
     write_value(path, L"pinned_card_unlock_hotkey",
                 settings.pinned_card.unlock_hotkey);
     write_value(path, L"pinned_card_opacity_percent",

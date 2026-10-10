@@ -21,7 +21,9 @@ class QLabel;
 class QMouseEvent;
 class QResizeEvent;
 class QShowEvent;
+class QScreen;
 class QSlider;
+class QTimer;
 class QToolButton;
 class VehicleSolutionWidget;
 
@@ -47,10 +49,17 @@ public:
                             const VehicleSolutionWidget& high);
     void set_selected_arc(std::optional<wardogs::Arc> arc);
     void set_error(bool error);
-    void set_workflow_status(const QString& text);
+    void set_context_caption(const QString& caption, const QString& detail = {});
+    void set_workflow_status(const QString& caption, const QString& detail = {});
+    // Restore once on entering pinned mode. Later entries retain the live placement.
+    void prepare_for_show(const QRect& anchor);
+    // Flush the pending user gesture before the owner snapshots settings or exits.
+    bool flush_preferences();
     [[nodiscard]] bool hasHeightForWidth() const override;
     void set_locked(bool locked);
     [[nodiscard]] bool is_locked() const { return preferences_.locked; }
+    void set_always_on_top(bool enabled);
+    [[nodiscard]] bool always_on_top() const { return preferences_.always_on_top; }
     void set_opacity_percent(int opacity_percent);
     void configure_unlock_hotkey(const std::wstring& hotkey);
     [[nodiscard]] int opacity_percent() const {
@@ -90,9 +99,16 @@ private:
                                        bool preserve_result_height = true);
     void build_context_menu();
     void update_lock_control();
+    void update_header_controls();
     void update_unlock_hotkey_control();
+    void fit_unlock_editor_height() const;
     [[nodiscard]] bool commit_preferences(Preferences preferences);
     void apply_mouse_transparency();
+    void show_context_menu();
+    void observe_screen(QScreen* screen);
+    void fit_current_placement();
+    [[nodiscard]] std::optional<wardogs::PinnedCardPlacement> current_placement() const;
+    void queue_geometry_preferences();
     [[nodiscard]] QPoint context_menu_position() const;
 
     std::function<void()> exit_callback_;
@@ -100,7 +116,11 @@ private:
     Preferences preferences_;
     QFrame* frame_{};
     QWidget* context_menu_{};
+    QLabel* weapon_caption_{};
+    QLabel* lock_hint_{};
+    QToolButton *header_lock_button_{}, *controls_button_{}, *header_return_button_{};
     QToolButton* lock_button_{};
+    QToolButton* topmost_button_{};
     QSlider* opacity_slider_{};
     QToolButton* ghost_button_{};
     QSlider* ghost_opacity_slider_{};
@@ -112,6 +132,7 @@ private:
     QWidget *mortar_panel_{}, *vehicle_panel_{};
     QLabel *distance_{}, *bearing_{}, *mortar_mil_{};
     QLabel* workflow_status_{};
+    QLabel* context_caption_{};
     VehicleSolutionWidget *low_{}, *high_{};
     bool vehicle_mode_{};
     bool dragging_{};
@@ -119,7 +140,14 @@ private:
     Edges resize_edges_;
     QPoint resize_start_global_{};
     QRect resize_start_geometry_{};
-    std::map<bool, QSize> mode_sizes_{{false, {430, 112}}, {true, {420, 116}}};
+    QRect gesture_start_geometry_{};
+    std::map<bool, QSize> mode_sizes_;
+    QTimer* geometry_save_timer_{};
+    std::optional<wardogs::PinnedCardPlacement> pending_placement_;
+    std::array<std::optional<wardogs::PinnedCardSize>, 2> pending_mode_sizes_;
+    bool placement_initialized_{};
+    QRect placement_anchor_{};
+    std::optional<wardogs::PinnedCardPlacement> live_placement_;
     double font_scale_{1.0};
     bool applying_font_scale_{};
     bool updating_workflow_status_layout_{};

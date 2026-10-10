@@ -12,8 +12,10 @@ import zlib
 MODES = ('planning', 'planning-details', 'planning-positions', 'planning-times', 'planning-profiles')
 
 
-def read_png(path, minimum_height=300):
+def read_png(path, minimum_height=300, minimum_width=400):
     """Decode the bounded RGB/RGBA PNG output produced by QWidget::grab()."""
+    if not 128 <= minimum_width <= 400:
+        raise ValueError('Invalid minimum PNG width')
     data = path.read_bytes()
     if len(data) > 16 * 1024 * 1024 or data[:8] != b'\x89PNG\r\n\x1a\n':
         raise ValueError('Invalid or oversized PNG')
@@ -48,7 +50,7 @@ def read_png(path, minimum_height=300):
     width, height, depth, colour_type, compression, filtering, interlace = header
     if not 96 <= minimum_height <= 300:
         raise ValueError('Unexpected minimum screenshot height')
-    if not (400 <= width <= 4096 and minimum_height <= height <= 4096 and width * height <= 8_000_000):
+    if not (minimum_width <= width <= 4096 and minimum_height <= height <= 4096 and width * height <= 8_000_000):
         raise ValueError('Unexpected screenshot dimensions')
     if depth != 8 or colour_type not in (2, 6) or compression or filtering or interlace:
         raise ValueError('Unsupported screenshot PNG encoding')

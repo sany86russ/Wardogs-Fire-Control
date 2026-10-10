@@ -56,7 +56,9 @@ The application does not observe firing, actual sight settings or the vehicle's 
 
 The **Positions and flight** button opens **target shifts**, **recent and named points**, **terrain** and **your own flight-time observations**. Normal firing does not require these tools. Calculation details and assumed-model settings expand separately. **History and direction** expands current-session targets beside the main solution. **Alt+I does not measure flight time**; the model is disabled by default and always labelled as an assumption.
 
-Drag the mini card or its edges to move or resize it. **Right-click the card** for opacity, locking and reticle controls. A locked card passes clicks to the game; its menu shows the unlock shortcut.
+Drag the mini card to a second monitor and drag its edges to resize it. Position, monitor and separate L81/SPH-2 sizes are saved automatically. The header buttons open controls, lock the card and return to the main window. **Right-click** also opens controls for opacity, the reticle and **Always on top**, which can be disabled on a second monitor.
+
+A locked card passes clicks to the game. The default unlock shortcut is **Ctrl+Alt+Q**; the card's header shows the current shortcut. Map, height status and target remain below the values. Hover over a caption for model details; capture warnings remain visible.
 
 ## Updates and saved data
 

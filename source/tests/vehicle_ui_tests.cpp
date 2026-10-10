@@ -17,6 +17,7 @@
 #include <QDoubleSpinBox>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QFontMetrics>
 #include <QHoverEvent>
 #include <QImage>
@@ -31,6 +32,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTemporaryFile>
 #include <QToolButton>
 #include <QPushButton>
 #include <QPlainTextEdit>
@@ -333,11 +335,270 @@ void native_solution_geometry_tests() {
     std::cout << "Native four-metric solution geometry passed\n" << std::flush;
 }
 
+void check_pinned_passive_geometry() {
+    VehicleSolutionWidget low(wardogs::Arc::low), high(wardogs::Arc::high);
+    low.set_solution({wardogs::Arc::low, 188.4, 1391, 90}, 2221);
+    high.set_solution({wardogs::Arc::high, 188.4, 2616, 673}, 2221);
+    PinnedResultWindow card([] {});
+    card.set_mode(true);
+    card.set_vehicle_values(low, high);
+    card.set_selected_arc(wardogs::Arc::high);
+    card.show();
+    QApplication::processEvents();
+    const auto available = QGuiApplication::primaryScreen()->availableGeometry();
+    card.resize(std::min(720, available.width() - 40), std::min(240, available.height() - 40));
+    card.move(available.topLeft() + QPoint(20, 20));
+    QApplication::processEvents();
+    const QRect before_data = card.geometry();
+    low.set_solution({wardogs::Arc::low, 190.2, 1410, 92}, 2250);
+    high.set_solution({wardogs::Arc::high, 190.2, 2620, 670}, 2250);
+    card.set_vehicle_values(low, high);
+    card.set_selected_arc(wardogs::Arc::low);
+    card.set_error(true);
+    card.set_error(false);
+    QApplication::processEvents();
+    check(card.geometry() == before_data,
+          "new commands, selected arc and error styling preserve a user's roomy mini-card geometry");
+
+    const QPoint origin = card.pos();
+    card.set_context_caption(QStringLiteral("SPH-2 · Training · no heights"),
+                             QStringLiteral("Nominal model; terrain, buildings and barrel height are unavailable."));
+    QApplication::processEvents();
+    check(card.pos() == origin && card.width() == before_data.width(),
+          "persistent map and model context adds its own space without moving the mini-card");
+    card.set_workflow_status(QStringLiteral("Reading coordinates; old guidance is hidden until confirmation."));
+    QApplication::processEvents();
+    check(card.pos() == origin && card.width() == before_data.width(),
+          "a transient workflow message reserves its own height without moving the card");
+    card.set_workflow_status({});
+    card.set_context_caption({});
+    card.hide();
+    card.show();
+    QApplication::processEvents();
+    check(card.pos() == origin,
+          "capture-style hide and show preserve the independently positioned mini-card");
+
+    const QRect before_lock = card.geometry();
+    card.set_locked(true);
+    QApplication::processEvents();
+    check(card.geometry() == before_lock && card.isVisible(),
+          "locking a visible mini-card preserves its native position and canvas");
+    auto* lock_hint = card.findChild<QLabel*>(QStringLiteral("pinnedLockHint"));
+    check(lock_hint && lock_hint->isVisible() && lock_hint->text().contains(QStringLiteral("Ctrl+Alt+Q")),
+          "a locked click-through card visibly explains the actual recovery shortcut");
+    card.configure_unlock_hotkey(L"Ctrl+Alt+U");
+    check(lock_hint->text().contains(QStringLiteral("Ctrl+Alt+U")) &&
+              !lock_hint->text().contains(QStringLiteral("Ctrl+Alt+Q")) &&
+              lock_hint->toolTip().contains(QStringLiteral("Ctrl+Alt+U")) &&
+              lock_hint->accessibleDescription() == lock_hint->toolTip(),
+          "replacing a recovery shortcut immediately updates the visible and accessible locked instruction");
+    check(card.geometry() == before_lock,
+          "updating the locked recovery instruction preserves the mini-card canvas");
+    card.set_locked(false);
+    QApplication::processEvents();
+    check(card.geometry() == before_lock && card.isVisible(),
+          "unlocking a visible mini-card preserves its native position and canvas");
+    check(!lock_hint->isVisible(), "an unlocked card collapses the dedicated recovery instruction");
+    card.set_opacity_percent(57);
+    check(card.geometry() == before_lock,
+          "changing mini-card opacity does not reposition or resize its results");
+    card.set_always_on_top(false);
+    QApplication::processEvents();
+    check(card.geometry() == before_lock && card.isVisible(),
+          "changing always-on-top native flags preserves a visible mini-card's geometry");
+    card.set_always_on_top(true);
+
+    low.set_waiting();
+    high.set_waiting();
+    card.set_vehicle_values(low, high);
+    card.set_selected_arc(std::nullopt);
+    QApplication::processEvents();
+    for (auto* value : card.findChildren<QLabel*>(QStringLiteral("solutionMil")))
+        check(value->text() == QStringLiteral("—"),
+              "waiting mini-card rows cannot retain a previously displayed firing command");
+    check(card.pos() == origin,
+          "invalidating old guidance does not move the mini-card to the main window");
+    card.set_mode(false);
+    card.set_values(QStringLiteral("470 m"), QStringLiteral("180.0° S"), QStringLiteral("500 MIL"));
+    card.set_mode(true);
+    QApplication::processEvents();
+    check(card.pos() == origin,
+          "weapon changes preserve mini-card placement while each mode owns its canvas");
+    card.hide();
+}
+
+void check_pinned_preferences_reconstruction() {
+    const auto* screen = QGuiApplication::primaryScreen();
+    const QRect available = screen->availableGeometry();
+    PinnedResultWindow::Preferences saved;
+    int commits = 0;
+    PinnedResultWindow original([] {}, {}, [&](PinnedResultWindow::Preferences& preferences) {
+        saved = preferences;
+        ++commits;
+        return true;
+    });
+    original.set_values(QStringLiteral("470 m"), QStringLiteral("180.0° S"), QStringLiteral("500 MIL"));
+    original.set_context_caption(QStringLiteral("Training · no heights"),
+                                 QStringLiteral("Nominal model; buildings are not checked."));
+    original.prepare_for_show(QRect(available.topLeft() + QPoint(10, 10), QSize(200, 100)));
+    original.show();
+    original.resize(std::min(520, available.width() - 100), std::min(190, available.height() - 100));
+    original.move(available.topLeft() + QPoint(20, 20));
+    QApplication::processEvents();
+    check(commits == 0 && original.flush_preferences() && commits == 0,
+          "programmatic placement and layout do not overwrite a persisted user placement");
+
+    const auto gesture = [](PinnedResultWindow& card, QPoint local, QPoint delta, bool resize) {
+        const QRect before = card.geometry();
+        const QPoint start = card.mapToGlobal(local);
+        const QPoint finish = start + delta;
+        // Qt 6's constructors update the pointing device's shared event point.
+        // Construct and deliver each event before creating the next one, as a
+        // real pointer does; preconstructing the batch corrupts its press point.
+        bool press_accepted{}, motion_accepted{}, release_accepted{};
+        {
+            QMouseEvent press(QEvent::MouseButtonPress, QPointF(local), QPointF(start),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &press);
+            press_accepted = press.isAccepted();
+            check(press.globalPosition().toPoint() == start && card.geometry() == before,
+                  "the actual gesture press retains its starting pointer and canvas before motion");
+        }
+        {
+            QMouseEvent motion(QEvent::MouseMove, QPointF(card.mapFromGlobal(finish)), QPointF(finish),
+                               Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &motion);
+            motion_accepted = motion.isAccepted();
+            check(motion.globalPosition().toPoint() == finish,
+                  "the actual gesture motion retains its own final global pointer coordinate");
+        }
+        const QRect after_motion = card.geometry();
+        {
+            QMouseEvent release(QEvent::MouseButtonRelease, QPointF(card.mapFromGlobal(finish)), QPointF(finish),
+                                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &release);
+            release_accepted = release.isAccepted();
+        }
+        QApplication::processEvents();
+        const QRect expected = resize
+            ? QRect(before.topLeft(), before.size() + QSize(delta.x(), delta.y()))
+            : before.translated(delta);
+        if (!press_accepted || !motion_accepted || !release_accepted ||
+            after_motion != expected || card.geometry() != expected) {
+            const auto describe = [](const QRect& rect) {
+                std::cerr << rect.x() << ',' << rect.y() << ',' << rect.width() << ',' << rect.height();
+            };
+            std::cerr << "Mini-card " << (resize ? "resize" : "drag") << " gesture: before=";
+            describe(before);
+            std::cerr << " motion=";
+            describe(after_motion);
+            std::cerr << " released=";
+            describe(card.geometry());
+            std::cerr << " expected=";
+            describe(expected);
+            std::cerr << " accepted=" << press_accepted << ',' << motion_accepted << ',' << release_accepted << '\n';
+        }
+        check(press_accepted && motion_accepted && release_accepted,
+              "the unlocked card accepts each press, held-button motion and release of a real gesture");
+        check(after_motion == expected && card.geometry() == expected,
+              "each actual user gesture changes exactly its intended position or bottom-right canvas size");
+    };
+    gesture(original, QPoint(original.width() / 2, original.height() / 2), QPoint(24, 18), false);
+    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(28, 14), true);
+    const bool flushed = original.flush_preferences();
+    if (!flushed || commits == 0 || !saved.placement || !saved.mode_sizes[0])
+        std::cerr << "Mini-card placement flush: screen='" << screen->name().toStdString()
+                  << "' available=" << available.x() << ',' << available.y() << ','
+                  << available.width() << ',' << available.height() << " geometry="
+                  << original.x() << ',' << original.y() << ',' << original.width() << ',' << original.height()
+                  << " flush=" << flushed << " commits=" << commits
+                  << " placement=" << bool(saved.placement) << " mortar_size=" << bool(saved.mode_sizes[0]) << '\n';
+    check(flushed, "a completed valid mini-card gesture can flush its pending settings without a save error");
+    check(commits > 0 && saved.placement && saved.mode_sizes[0],
+          "dragging and resizing flush an actual user placement and mortar canvas before exit");
+    check(wardogs::valid_pinned_card_placement(*saved.placement) &&
+              wardogs::valid_pinned_card_size(*saved.mode_sizes[0]),
+          "a completed gesture persists a valid named screen placement and weapon canvas");
+    const QRect moved_geometry = original.geometry();
+    check(saved.placement->rect == wardogs::PinnedCardRect{moved_geometry.x(), moved_geometry.y(),
+                                                         moved_geometry.width(), moved_geometry.height()},
+          "saved placement matches the actual user gesture geometry in logical pixels");
+    check(saved.placement->screen_id == screen->name().toStdWString(),
+          "user placement retains the screen identity instead of assuming the primary origin");
+    check(saved.mode_sizes[0]->height < moved_geometry.height(),
+          "a saved weapon canvas excludes the separately measured context footer height");
+    VehicleSolutionWidget low(wardogs::Arc::low), high(wardogs::Arc::high);
+    low.set_solution({wardogs::Arc::low, 188.4, 1391, 90}, 2221);
+    high.set_solution({wardogs::Arc::high, 188.4, 2616, 673}, 2221);
+    original.set_mode(true);
+    original.set_vehicle_values(low, high);
+    original.set_selected_arc(wardogs::Arc::high);
+    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(24, 18), true);
+    check(original.flush_preferences() && saved.mode_sizes[0] && saved.mode_sizes[1],
+          "user geometry stores both weapon canvases without conflating their content heights");
+    const QSize vehicle_canvas = original.size();
+    original.set_mode(false);
+    check(original.geometry() == moved_geometry,
+          "returning to the mortar restores its independently resized canvas and keeps its placement");
+    original.configure_unlock_hotkey(L"Ctrl+Alt+U");
+    original.set_always_on_top(false);
+    original.set_opacity_percent(63);
+    original.set_locked(true);
+    check(original.flush_preferences(), "pending geometry can be flushed alongside ordinary card preferences");
+    original.hide();
+
+    PinnedResultWindow restored([] {}, saved, {});
+    restored.set_values(QStringLiteral("470 m"), QStringLiteral("180.0° S"), QStringLiteral("500 MIL"));
+    restored.set_context_caption(QStringLiteral("Training · no heights"),
+                                 QStringLiteral("Nominal model; buildings are not checked."));
+    restored.prepare_for_show(QRect(available.topLeft() + QPoint(150, 120), QSize(120, 80)));
+    restored.show();
+    QApplication::processEvents();
+    check(restored.geometry() == moved_geometry && restored.is_locked() && !restored.always_on_top() &&
+              restored.opacity_percent() == 63,
+          "a new card reconstructs the saved user's geometry and preferences independently of the main anchor");
+    auto* restored_hint = restored.findChild<QLabel*>(QStringLiteral("pinnedLockHint"));
+    check(restored_hint && restored_hint->isVisible() &&
+              restored_hint->text().contains(QStringLiteral("Ctrl+Alt+U")),
+          "a reconstructed locked card exposes the saved custom recovery shortcut");
+    restored.hide();
+    restored.prepare_for_show(QRect(available.topLeft() + QPoint(200, 160), QSize(100, 90)));
+    restored.show();
+    QApplication::processEvents();
+    check(restored.geometry() == moved_geometry,
+          "re-entering the same restored card retains its live placement after the main window moves");
+    restored.set_mode(true);
+    restored.set_vehicle_values(low, high);
+    restored.set_selected_arc(wardogs::Arc::high);
+    QApplication::processEvents();
+    check(restored.pos() == moved_geometry.topLeft() && restored.size() == vehicle_canvas,
+          "a reconstructed card restores the separately saved SPH-2 canvas at the same user placement");
+    restored.hide();
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
     const bool native_geometry = argc == 2 && std::string_view(argv[1]) == "--solution-geometry-native";
-    qputenv("QT_QPA_PLATFORM", native_geometry ? "windows" : "offscreen");
+    // Qt 6.8's default offscreen screen has no name. Give this isolated
+    // fixture a real backend identity while retaining all default geometry,
+    // DPI and frame behavior, so persistence uses the same validation as Windows.
+    // A relative basename also avoids ':' splitting a Windows drive in QPA args.
+    QTemporaryFile offscreen_config(QStringLiteral("wardogs-offscreen-XXXXXX.json"));
+    if (native_geometry) {
+        qputenv("QT_QPA_PLATFORM", "windows");
+    } else {
+        check(offscreen_config.open(), "the isolated offscreen fixture can create its temporary backend configuration");
+        const QByteArray config = R"({"synchronousWindowSystemEvents":false,"windowFrameMargins":true,
+            "screens":[{"name":"pinned-fixture-screen","x":0,"y":0,"width":800,"height":800,
+            "logicalDpi":96,"logicalBaseDpi":96,"dpr":1.0}]})";
+        check(offscreen_config.write(config) == config.size() && offscreen_config.flush(),
+              "the isolated offscreen fixture writes its complete named-screen configuration");
+        const QByteArray backend = QByteArray("offscreen:configfile=") +
+            QFileInfo(offscreen_config.fileName()).fileName().toUtf8();
+        offscreen_config.close();
+        check(qputenv("QT_QPA_PLATFORM", backend), "the isolated fixture selects the configured offscreen backend");
+    }
     // The offscreen backend otherwise uses its fixed-width fallback glyphs,
     // unlike the Windows backend used by the application. Measure the same
     // installed fonts so minimum-width assertions reflect the actual UI.
@@ -348,10 +609,19 @@ int main(int argc, char* argv[]) {
     qputenv("QT_QPA_FONTDIR", (QString::fromWCharArray(windows_directory) +
                               QStringLiteral("\\Fonts")).toUtf8());
     QApplication app(argc, argv);
+    if (!native_geometry)
+        check(QGuiApplication::primaryScreen() &&
+                  QGuiApplication::primaryScreen()->name() == QStringLiteral("pinned-fixture-screen") &&
+                  QGuiApplication::primaryScreen()->geometry() == QRect(0, 0, 800, 800),
+              "the real offscreen backend applies only the fixture's screen identity to its default canvas");
     if (native_geometry) {
         native_solution_geometry_tests();
+        check_pinned_passive_geometry();
+        check_pinned_preferences_reconstruction();
         return 0;
     }
+    check_pinned_passive_geometry();
+    check_pinned_preferences_reconstruction();
     check(!wardogs_application_icon().isNull(),
           "the application icon is available to windows and title bars");
     check_coordinate_pattern_settings();
