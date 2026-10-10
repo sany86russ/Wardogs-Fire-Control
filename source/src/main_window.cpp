@@ -1145,6 +1145,12 @@ public:
               observation_count() == 1 && high_result_ &&
               std::abs(std::remainder(high_result_->bearing_deg - first_raw_high.bearing_deg, 360.0) - 1.0) < 1e-6 &&
               std::abs(high_result_->mil - first_raw_high.mil + 10.0) < 1e-6);
+        const auto first_shown_high = wardogs::displayed_firing_command(first_raw_high);
+        const auto corrected_shown_high = wardogs::displayed_firing_command(*high_result_);
+        check("ranging_summary_uses_the_change_in_displayed_settings",
+              std::abs(active_aim_offsets_[1].first - std::remainder(
+                  corrected_shown_high.bearing_deg - first_shown_high.bearing_deg, 360.0)) < 1e-9 &&
+              active_aim_offsets_[1].second == corrected_shown_high.mil - first_shown_high.mil);
         check("SPH2_first_optional_impact_preserves_target_history_and_other_arc",
               target_ == initial_high_context.impact_firing->target && history_ == first_history &&
               low_result_ && low_result_->bearing_deg == first_raw_low.bearing_deg &&
@@ -3925,8 +3931,10 @@ private:
                 if (continuous_calibration_) {
                     const auto baseline = wardogs::corrected_solution(
                         result.base, result.target, calibration, arc, height_delta);
+                    const auto displayed_baseline = wardogs::displayed_firing_command(baseline);
                     active_aim_offsets_[arc == wardogs::Arc::low ? 0U : 1U] = {
-                        std::remainder(solution.bearing_deg - baseline.bearing_deg,360.0), solution.mil-baseline.mil};
+                        std::remainder(displayed.bearing_deg - displayed_baseline.bearing_deg, 360.0),
+                        displayed.mil - displayed_baseline.mil};
                     if (std::abs(std::remainder(solution.bearing_deg - baseline.bearing_deg, 360.0)) > 1e-9 ||
                         std::abs(solution.mil - baseline.mil) > 1e-9)
                         corrected_arcs.push_back(name.toLower());
