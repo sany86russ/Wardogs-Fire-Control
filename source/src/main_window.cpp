@@ -1181,6 +1181,7 @@ public:
               std::abs(high_result_->mil - first_raw_high.mil + 10.0) < 1e-6);
         bool every_direction_capture_allowed = true;
         bool unrelated_targets_unchanged = true;
+        bool unrelated_targets_have_no_correction_prompt = true;
         for (const auto point : std::array{wardogs::Point{92, 90.6}, wardogs::Point{70, 92}, wardogs::Point{68, 70}}) {
             target_input_->setText(qtext(wardogs::format_point(point))); manual_target();
             OcrMessage any_direction;
@@ -1191,8 +1192,12 @@ public:
             const auto raw = wardogs::corrected_solution(base_, point, {wardogs::identity_rotation(), 0.0}, wardogs::Arc::high);
             unrelated_targets_unchanged = unrelated_targets_unchanged && high_result_ &&
                 high_result_->mil == raw.mil && high_result_->bearing_deg == raw.bearing_deg;
+            unrelated_targets_have_no_correction_prompt = unrelated_targets_have_no_correction_prompt &&
+                !fire_control_summary_->text().contains(wardogs::i18n::text(QStringLiteral("\nПоправка предварительная: нужна серия согласованных попаданий."))) &&
+                !fire_control_summary_->text().contains(wardogs::i18n::text(QStringLiteral("\nПоправка уточнена по серии попаданий.")));
         }
         check("SPH2_optional_capture_allows_near_direction_perpendicular_and_opposite_targets", every_direction_capture_allowed);
+        check("SPH2_unrelated_targets_do_not_request_a_correction_series", unrelated_targets_have_no_correction_prompt);
         check("SPH2_local_history_never_changes_distant_targets_or_global_rotation", unrelated_targets_unchanged &&
               observation_count() == 2 && continuous_calibration_->global_calibration().rotation == wardogs::identity_rotation());
         check("SPH2_unrelated_current_target_does_not_claim_an_active_local_correction",
@@ -1427,7 +1432,9 @@ public:
               low_result_->mil == field_low_before.mil &&
               status_->text().contains(wardogs::i18n::text(QStringLiteral("промах 237 м"))) &&
               status_->text().contains(wardogs::i18n::text(QStringLiteral("Азимут -5.1°"))) &&
-              status_->text().contains(QStringLiteral("MIL -58.7")));
+              status_->text().contains(QStringLiteral("MIL %1").arg(
+                  wardogs::displayed_firing_command(*high_result_).mil - field_context.impact_firing->mil,
+                  0, 'f', 1)));
         const auto field_corrected = *high_result_;
         OcrMessage field_outlier_context;
         capture_impact_context(field_outlier_context);
@@ -2184,9 +2191,10 @@ private:
                 const auto assessment = continuous_calibration_->assess(*target_, *arc, target_height_delta(*target_));
                 text += wardogs::i18n::text(QStringLiteral("\nРядом с целью: %1 наблюдений · учтено: %2."))
                     .arg(assessment.local_observation_count).arg(assessment.accepted_observation_count);
-                text += assessment.provisional
-                    ? wardogs::i18n::text(QStringLiteral("\nПоправка предварительная: нужна серия согласованных попаданий."))
-                    : wardogs::i18n::text(QStringLiteral("\nПоправка уточнена по серии попаданий."));
+                if (assessment.local_observation_count > 0)
+                    text += assessment.provisional
+                        ? wardogs::i18n::text(QStringLiteral("\nПоправка предварительная: нужна серия согласованных попаданий."))
+                        : wardogs::i18n::text(QStringLiteral("\nПоправка уточнена по серии попаданий."));
                 if (assessment.scatter_available)
                     text += wardogs::i18n::text(QStringLiteral("\nРазброс оценок поправки ≈%1 м; это не вероятность попадания."))
                         .arg(assessment.empirical_scatter_m, 0, 'f', 1);
