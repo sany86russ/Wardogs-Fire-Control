@@ -233,8 +233,9 @@ def verify_snapshot(path, language, scale, mode):
                                 ('solutionTableDistance', 2), ('solutionMetricCaption', 8)):
                 for widget in named(name, expected=count, visible=True):
                     widget_surface(name, widget, minimum_foreground=10, label=True, meaningful_text=True)
-            for widget in named('fireControlCompact', visible=True):
-                widget_surface('fireControlCompact', widget, label=True, meaningful_text=True)
+            for name in ('fireControlCompact', 'terrainAssistance'):
+                for widget in named(name, visible=True):
+                    widget_surface(name, widget, label=True, meaningful_text=True)
             named('fireControlDetails', visible=False)
             named('fireControlSummary', visible=False)
             for widget in named('fireControlDetailsToggle', visible=True):

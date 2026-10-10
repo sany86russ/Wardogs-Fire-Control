@@ -557,6 +557,9 @@ QHeaderView::section,QTableCornerButton::section {
     s.summary->setObjectName(QStringLiteral("planningSummary"));
     s.summary->setProperty("auxiliarySection", true);
     analysis_page->addWidget(s.summary);
+    s.clearance = note({});
+    s.clearance->setObjectName(QStringLiteral("terrainClearance"));
+    analysis_page->addWidget(s.clearance);
     s.plot = new TerrainProfileWidget;
     s.plot->setObjectName(QStringLiteral("terrainProfile"));
     s.plot->setMinimumHeight(230);
@@ -567,9 +570,6 @@ QHeaderView::section,QTableCornerButton::section {
         ui_text("Зелёный — поверхность земли, оранжевый — оценочная дуга. Пробелы означают отсутствие данных. Дома, крыши, мосты, деревья и высота ствола в файле рельефа не представлены."));
     s.plot->setToolTip(graph_caption->toolTip());
     analysis_page->addWidget(graph_caption);
-    s.clearance = note({});
-    s.clearance->setObjectName(QStringLiteral("terrainClearance"));
-    analysis_page->addWidget(s.clearance);
     auto* result_details = details(analysis_page, ui_text("Подробности расчёта"),
         QStringLiteral("planningResultDetails"));
     s.result = note({});
