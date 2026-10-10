@@ -605,6 +605,7 @@ public:
     }
 
     void stop_background_tasks() {
+        if (pinned_window_) pinned_window_->flush_preferences();
         closing_ = true;
         if (terrain_tasks_) terrain_tasks_->stop();
         if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
@@ -687,8 +688,10 @@ public:
             dialog = std::make_unique<QMessageBox>(QMessageBox::Warning,
                 wardogs::i18n::text(QStringLiteral("Диагностика")), problem, QMessageBox::Ok, this);
         }
-        else if (mode == QStringLiteral("pinned") || mode == QStringLiteral("pinned-menu")) {
+        else if (mode == QStringLiteral("pinned") || mode == QStringLiteral("pinned-menu") ||
+                 mode == QStringLiteral("pinned-locked")) {
             enter_pinned_mode(); view = pinned_window_.get();
+            if (mode == QStringLiteral("pinned-locked")) pinned_window_->set_locked(true);
             if (mode == QStringLiteral("pinned-menu")) {
                 QContextMenuEvent event(QContextMenuEvent::Mouse, QPoint(20, 20), pinned_window_->mapToGlobal(QPoint(20, 20)));
                 QApplication::sendEvent(pinned_window_.get(), &event);
@@ -699,16 +702,22 @@ public:
             ghost_window_->begin_adjustment();
             view = ghost_window_.get();
         }
-        else if (mode == QStringLiteral("vehicle") || mode == QStringLiteral("vehicle-pinned") ||
+        else if (mode == QStringLiteral("vehicle") || mode.startsWith(QStringLiteral("vehicle-pinned")) ||
                  mode == QStringLiteral("calibration")) {
             terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
             if (!vehicle_mode_) toggle_mode();
             target_input_->setText(QStringLiteral("92 90"));
             manual_target();
             toggle_ghost_arc();
-            if (mode == QStringLiteral("vehicle-pinned")) {
+            if (mode.startsWith(QStringLiteral("vehicle-pinned"))) {
                 enter_pinned_mode();
                 view = pinned_window_.get();
+                if (mode == QStringLiteral("vehicle-pinned-locked")) pinned_window_->set_locked(true);
+                if (mode == QStringLiteral("vehicle-pinned-menu")) {
+                    QContextMenuEvent event(QContextMenuEvent::Mouse, QPoint(20, 20), pinned_window_->mapToGlobal(QPoint(20, 20)));
+                    QApplication::sendEvent(pinned_window_.get(), &event);
+                    if (auto* menu = pinned_window_->findChild<QWidget*>(QStringLiteral("pinnedContextMenu"))) view = menu;
+                }
             } else if (mode == QStringLiteral("calibration")) {
                 calibration_toggle_->setChecked(true);
                 QApplication::processEvents();
@@ -808,6 +817,7 @@ public:
         for (auto* widget : objects) {
             QJsonObject item{{QStringLiteral("type"), QString::fromLatin1(widget->metaObject()->className())},
                 {QStringLiteral("name"), widget->objectName()}, {QStringLiteral("visible"), widget->isVisible()},
+                {QStringLiteral("enabled"), widget->isEnabled()},
                 {QStringLiteral("width"), widget->width()}, {QStringLiteral("height"), widget->height()}};
             QRect snapshot_rect(view->mapFromGlobal(widget->mapToGlobal(QPoint{})), widget->size());
             if (widget->isVisible()) {
@@ -824,13 +834,18 @@ public:
             item.insert(QStringLiteral("snapshot_rect"), QJsonObject{
                 {QStringLiteral("x"), snapshot_rect.x()}, {QStringLiteral("y"), snapshot_rect.y()},
                 {QStringLiteral("width"), snapshot_rect.width()}, {QStringLiteral("height"), snapshot_rect.height()}});
-            for (const auto* property : {"text", "title", "windowTitle", "toolTip", "accessibleName", "placeholderText"}) {
+            for (const auto* property : {"text", "title", "windowTitle", "toolTip", "accessibleName", "accessibleDescription", "placeholderText"}) {
                 const auto value = widget->property(property).toString();
                 if (!value.isEmpty()) item.insert(QString::fromLatin1(property), value);
             }
             if (auto* label = qobject_cast<QLabel*>(widget)) {
                 item.insert(QStringLiteral("wordWrap"), label->wordWrap());
-                item.insert(QStringLiteral("text_width"), QFontMetrics(label->font()).horizontalAdvance(label->text()));
+                const QFontMetrics metrics(label->font());
+                int text_width = 0;
+                for (const auto& line : label->text().split(QLatin1Char('\n')))
+                    text_width = std::max(text_width, metrics.horizontalAdvance(line));
+                item.insert(QStringLiteral("text_width"), text_width);
+                item.insert(QStringLiteral("text_line_height"), metrics.height());
                 item.insert(QStringLiteral("content_width"), label->contentsRect().width());
                 item.insert(QStringLiteral("required_height"), label->heightForWidth(label->width()));
             }
@@ -851,11 +866,42 @@ public:
             }
             widgets.append(item);
         }
+        QJsonArray main_commands;
+        if (vehicle_mode_) {
+            for (const auto arc : {wardogs::Arc::low, wardogs::Arc::high}) {
+                const auto* solution = arc == wardogs::Arc::low ? low_solution_ : high_solution_;
+                main_commands.append(QJsonObject{
+                    {QStringLiteral("arc"), arc == wardogs::Arc::low ? QStringLiteral("low") : QStringLiteral("high")},
+                    {QStringLiteral("distance"), solution->distance_text()}, {QStringLiteral("bearing"), solution->bearing_text()},
+                    {QStringLiteral("mil"), solution->mil_text()}, {QStringLiteral("table_distance"), solution->table_distance_text()},
+                    {QStringLiteral("available"), arc == wardogs::Arc::low ? low_result_.has_value() : high_result_.has_value()},
+                    {QStringLiteral("selected"), effective_vehicle_arc() == arc}});
+            }
+        } else {
+            main_commands.append(QJsonObject{{QStringLiteral("arc"), QStringLiteral("mortar")},
+                {QStringLiteral("distance"), distance_->text()}, {QStringLiteral("bearing"), bearing_->text()},
+                {QStringLiteral("mil"), mortar_mil_result_ ? mortar_mil_->text() : QStringLiteral("—")},
+                {QStringLiteral("table_distance"), QString{}}, {QStringLiteral("available"), mortar_mil_result_.has_value()},
+                {QStringLiteral("selected"), true}});
+        }
+        QJsonObject pinned_context;
+        if (pinned_window_) {
+            if (auto* context = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedContextCaption"))) {
+                pinned_context.insert(QStringLiteral("caption"), context->text());
+                pinned_context.insert(QStringLiteral("detail"), context->toolTip());
+            }
+            if (auto* status = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus")))
+                pinned_context.insert(QStringLiteral("status"), status->text());
+        }
         QSaveFile receipt(file.absoluteFilePath() + QStringLiteral(".json"));
         const auto bytes = QJsonDocument(QJsonObject{
             {QStringLiteral("language"), settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru")},
             {QStringLiteral("mode"), mode}, {QStringLiteral("game_integration_enabled"), settings_.game_integration_enabled},
             {QStringLiteral("map_confirmed"), map_confirmed_},
+            {QStringLiteral("main_commands"), main_commands}, {QStringLiteral("pinned_context"), pinned_context},
+            {QStringLiteral("pinned_locked"), pinned_window_ && pinned_window_->is_locked()},
+            {QStringLiteral("pinned_always_on_top"), pinned_window_ && pinned_window_->always_on_top()},
+            {QStringLiteral("pinned_unlock_hotkey"), qtext(settings_.pinned_card.unlock_hotkey)},
             {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
             {QStringLiteral("snapshot_width"), view->width()}, {QStringLiteral("snapshot_height"), view->height()},
             {QStringLiteral("widgets"), widgets}}).toJson();
@@ -1640,8 +1686,29 @@ public:
         }
         enter_pinned_mode(); QApplication::processEvents();
         check("pinned_card_visible", pinned_mode_ && pinned_window_->isVisible());
+        const auto main_geometry_before_pin_test = geometry();
+        const auto available = screen()->availableGeometry();
+        pinned_window_->resize(pinned_window_->size().expandedTo(QSize(480, 230)));
+        pinned_window_->move(available.topLeft() + QPoint(24, 24));
+        QApplication::processEvents();
+        const auto card_geometry_before_return = pinned_window_->geometry();
+        const auto card_context = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedContextCaption"));
+        const auto context_before_notice = card_context ? card_context->text() : QString{};
+        set_status(wardogs::i18n::text(QStringLiteral("Настройки сохранены")));
+        check("pinned_map_and_height_context_survive_unrelated_status",
+              card_context && !context_before_notice.isEmpty() && card_context->text() == context_before_notice);
         exit_pinned_mode(); QApplication::processEvents();
         check("return_from_card_restores_main", !pinned_mode_ && isVisible());
+        move(available.topLeft() + QPoint(90, 80));
+        enter_pinned_mode(); QApplication::processEvents();
+        check("pinned_reentry_preserves_position_and_size_independent_of_main",
+              pinned_window_->geometry() == card_geometry_before_return);
+        hide_for_selection();
+        restore_after_selection(); QApplication::processEvents();
+        check("pinned_selection_hide_show_preserves_user_geometry",
+              pinned_window_->geometry() == card_geometry_before_return);
+        exit_pinned_mode();
+        setGeometry(main_geometry_before_pin_test); QApplication::processEvents();
         check("mouse_foreground_filters_helpers", is_wardogs_window_title(L"WARDOGS") &&
               !is_wardogs_window_title(L"WarDogsDistanceCalculator.exe") && !is_wardogs_window_title(L"WARDOGSLauncher.exe") &&
               !is_wardogs_window_title(L"notepad.exe") && !is_wardogs_window_title(L"WARDOGS · notes") &&
@@ -1783,6 +1850,9 @@ public:
             start_map_ocr(map_event, false, OcrAction::target, true);
             check("native_middle_initial_capture_waits_for_game_render", !busy_ &&
                   mouse_timer_->isActive() && map_retry_event_ && ocr_hold_ && !mortar_mil_result_);
+            check("native_pending_map_capture_hides_old_card_guidance",
+                  pinned_window_ && pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedMortarMil")) &&
+                  pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedMortarMil"))->text().contains(QStringLiteral("—")));
             wait_for_ocr();
             check("native_delayed_middle_capture_reaches_temporal_consensus", !busy_ &&
                   !pending_ocr_ && target_ == wardogs::Point{99.51, 113.81} && !ocr_hold_ && mortar_mil_result_);
@@ -1802,6 +1872,9 @@ public:
             wait_for_ocr();
             check("native_repeated_map_target_recovers_and_latest_job_applies", !busy_ &&
                   !queued_map_job_ && !pending_ocr_ && !ocr_hold_ && target_ == map_target && mortar_mil_result_);
+            pinned_window_->move(screen()->availableGeometry().topLeft() + QPoint(30, 34));
+            QApplication::processEvents();
+            const auto card_origin_before_map_return = pinned_window_->pos();
             exit_game_mode();
             check("native_return_restores_main_and_cancels_inflight_capture", !game_mode_ && !pinned_mode_ &&
                   !mouse_listener_.active() && !queued_map_job_ && !map_retry_event_ && isVisible());
@@ -1815,6 +1888,8 @@ public:
             check("native_map_capture_remains_ready_after_return_to_main", returned_to_fixture &&
                   !game_mode_ && pinned_mode_ && !pending_ocr_ && !ocr_hold_ &&
                   target_ == map_target && mortar_mil_result_);
+            check("native_map_capture_after_return_preserves_card_monitor_position",
+                  pinned_window_->pos() == card_origin_before_map_return);
             if (!vehicle_mode_) toggle_mode();
             base_input_->setText(QStringLiteral("85 105")); manual_base();
             target_input_->setText(QStringLiteral("99.51 113.81")); manual_target();
@@ -4054,7 +4129,7 @@ private:
         }
         const auto displayed = wardogs::i18n::text(text);
         status_->setText(displayed);
-        if (pinned_window_) pinned_window_->set_workflow_status(displayed);
+        sync_pinned_status();
     }
 
     void set_failure_state(bool failed) {
@@ -4124,9 +4199,9 @@ private:
                 [this](int opacity) { set_ghost_opacity(opacity); });
         }
         sync_pinned_result();
-        pinned_window_->set_workflow_status(status_->text());
+        sync_pinned_status();
         pinned_window_->set_error(failure_state_);
-        pinned_window_->move(frameGeometry().topLeft());
+        pinned_window_->prepare_for_show(frameGeometry());
         pinned_mode_ = true;
         hide();
         pinned_window_->show();
@@ -4137,7 +4212,7 @@ private:
         if (!pinned_mode_) return;
         wardogs::log_info("window.exit_pinned_mode");
         pinned_mode_ = false;
-        if (pinned_window_) pinned_window_->hide();
+        if (pinned_window_) { pinned_window_->flush_preferences(); pinned_window_->hide(); }
         showNormal();
         raise();
         activateWindow();
@@ -4463,6 +4538,56 @@ private:
         pinned_window_->set_ghost_enabled(ghost_enabled_);
         pinned_window_->set_ghost_opacity_percent(
             settings_.ghost_reticle.opacity_percent);
+        sync_pinned_status();
+    }
+
+    void sync_pinned_status() {
+        if (!pinned_window_) return;
+        const auto arc = effective_vehicle_arc();
+        const bool ready = map_confirmed_ && base_set_ && target_ &&
+            !base_capture_pending_ && !ocr_hold_ &&
+            (vehicle_mode_ ? arc.has_value() : mortar_mil_result_.has_value());
+        QString caption = map_confirmed_ ? game_map_name(current_game_map_)
+            : wardogs::i18n::text(QStringLiteral("Карта не подтверждена"));
+        QStringList details;
+        if (quick_state_) details.append(quick_state_->text());
+        if (map_confirmed_ && vehicle_mode_) {
+            caption += terrain_map_ ? wardogs::i18n::text(ready ? QStringLiteral(" · высоты учтены")
+                                                             : QStringLiteral(" · высоты подключены"))
+                                    : wardogs::i18n::text(QStringLiteral(" · без высот"));
+            if (ready && terrain_ && automatic_analysis_ && automatic_analysis_->arcs[*arc == wardogs::Arc::low ? 0U : 1U]) {
+                const auto& clearance = automatic_analysis_->arcs[*arc == wardogs::Arc::low ? 0U : 1U]->clearance;
+                if (clearance.status == wardogs::TerrainClearanceStatus::blocked)
+                    caption += wardogs::i18n::text(QStringLiteral("\nМодель: пересечение земли на ≈%1 м"))
+                        .arg(clearance.first_blocked_distance_m.value_or(0.0), 0, 'f', 0);
+                else if (clearance.status == wardogs::TerrainClearanceStatus::incomplete)
+                    caption += wardogs::i18n::text(QStringLiteral(" · профиль земли неполный"));
+                else if (clearance.status != wardogs::TerrainClearanceStatus::clear_at_samples)
+                    caption += wardogs::i18n::text(QStringLiteral(" · профиль земли не проверен"));
+            } else if (ready && terrain_) {
+                caption += wardogs::i18n::text(QStringLiteral(" · профиль земли не проверен"));
+            }
+            if (ready) {
+                const auto [azimuth, mil] = active_aim_offsets_[*arc == wardogs::Arc::low ? 0U : 1U];
+                if (azimuth != 0.0 || mil != 0.0)
+                    caption += wardogs::i18n::text(QStringLiteral(" · поправка учтена"));
+            }
+            if (vehicle_note_) details.append(vehicle_note_->text());
+            if (terrain_assistance_) details.append(terrain_assistance_->text());
+            if (fire_control_summary_) details.append(fire_control_summary_->text());
+        } else if (map_confirmed_) {
+            caption += wardogs::i18n::text(QStringLiteral(" · табличная наводка"));
+        }
+        details.removeAll(QString{});
+        pinned_window_->set_context_caption(caption, details.join(QStringLiteral("\n")));
+        QString workflow = status_->text();
+        if (ready && !failure_state_ && !busy_) {
+            workflow = wardogs::i18n::text(QStringLiteral("Цель: ")) + qtext(wardogs::format_point(*target_));
+            if (vehicle_mode_ && last_impact_feedback_ && last_impact_feedback_->target == *target_ &&
+                last_impact_feedback_->arc == *arc && fire_control_compact_)
+                workflow += QStringLiteral("\n") + fire_control_compact_->text();
+        }
+        pinned_window_->set_workflow_status(workflow, status_->text());
     }
 
     void set_ghost_enabled(bool enabled) {
@@ -5317,6 +5442,7 @@ private:
             set_status(wardogs::i18n::text(QStringLiteral("Дождитесь окончания распознавания перед изменением настроек")));
             return;
         }
+        if (pinned_window_) pinned_window_->flush_preferences();
         SettingsDialog dialog(settings_, this);
         if (mouse_timer_) mouse_timer_->stop();
         unregister_hotkeys();
@@ -5332,6 +5458,11 @@ private:
         // A queued terrain verification may finish inside dialog.exec(). This
         // field belongs to map confirmation, not to the settings editor.
         candidate.last_game_map = settings_.last_game_map;
+        // The mini card owns placement; queued display changes can occur
+        // while the modal editor is open. Its snapshot must not overwrite them.
+        candidate.pinned_card.placement = settings_.pinned_card.placement;
+        candidate.pinned_card.mode_sizes = settings_.pinned_card.mode_sizes;
+        candidate.pinned_card.always_on_top = settings_.pinned_card.always_on_top;
         const bool adjust_ghost = dialog.adjust_ghost_requested();
         const auto previous = settings_;
         try {
@@ -5680,12 +5811,13 @@ int run_application(int argc, char* argv[]) {
     for (const auto& mode : {QStringLiteral("ui"), QStringLiteral("manual-ui"), QStringLiteral("compact-ui"), QStringLiteral("pinned-ui"), QStringLiteral("review-ui"),
                             QStringLiteral("settings-ui"), QStringLiteral("tutorial-ui"), QStringLiteral("notice-ui"),
                             QStringLiteral("vehicle-ui"), QStringLiteral("vehicle-pinned-ui"),
+                            QStringLiteral("vehicle-pinned-locked-ui"), QStringLiteral("vehicle-pinned-menu-ui"),
                             QStringLiteral("calibration-ui"), QStringLiteral("recognition"),
                             QStringLiteral("recognition-bottom"), QStringLiteral("tutorial-bottom"),
                             QStringLiteral("tutorial-keys"), QStringLiteral("tutorial-help"), QStringLiteral("workspace-ui"),
                             QStringLiteral("first-start-ui"), QStringLiteral("workspace-sidebar-ui"),
                             QStringLiteral("standalone-ui"),
-                            QStringLiteral("pinned-menu-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
+                            QStringLiteral("pinned-menu-ui"), QStringLiteral("pinned-locked-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),
                             QStringLiteral("folder-ui"), QStringLiteral("error-ui"),

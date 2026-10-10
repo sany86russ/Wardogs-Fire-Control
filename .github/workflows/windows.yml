@@ -66,6 +66,8 @@ jobs:
         run: python source/tests/ux_snapshots.py --include-compact-2
       - name: Verify unified ranging and four sight metrics on the isolated runner
         run: python source/tests/fire_control_snapshots.py
+      - name: Verify mini card commands and controls at native display scales
+        run: python source/tests/pinned_card_snapshots.py
       - name: Verify offline accuracy excludes real diagnostic application events
         run: |
           $accuracyEvidence = 'source/build/release/Testing/shot-accuracy.json'
