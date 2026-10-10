@@ -1,14 +1,18 @@
 #include "wardogs/core.hpp"
 #include "wardogs/ocr.hpp"
 #include "wardogs/windows_ocr.hpp"
+#include "wardogs/ocr_preprocessing.hpp"
+#include "ocr_preprocessing_reference.hpp"
 
 #include <Windows.h>
 #include <winrt/base.h>
 
 #include <exception>
+#include <array>
 #include <chrono>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <stop_token>
@@ -30,10 +34,51 @@ void check(bool value, const char* message) {
         std::cerr << "FAIL: " << message << '\n';
     }
 }
+
+void check_bitmap_preprocessing() {
+    for (const auto size : std::array<std::pair<int, int>, 5>{{
+             {1, 1}, {2, 3}, {33, 31}, {226, 47}, {320, 96}}}) {
+        const auto image = ocr_preprocessing_reference::pixels(size.first, size.second);
+        for (const int scale : {1, 2, 3, 7, 96}) {
+            if (static_cast<std::size_t>(image.width) * image.height * scale * scale > 16'000'000)
+                continue;
+            for (const bool contrast : {false, true}) {
+                std::vector<std::uint8_t> reference;
+                ocr_preprocessing_reference::windows_pixels(image, scale, contrast, reference);
+                std::vector<std::uint8_t> actual(reference.size(), 17);
+                wardogs::detail::prepare_windows_ocr_pixels(image, scale, contrast, actual, {});
+                check(actual == reference,
+                      "optimized Windows BGRA pixels exactly preserve scaling, color, green mask and opaque alpha");
+            }
+        }
+    }
+    const auto tiny = ocr_preprocessing_reference::pixels(1, 1);
+    std::vector<std::uint8_t> output(4);
+    for (const int scale : {0, -1, 97, (std::numeric_limits<int>::max)()}) {
+        try {
+            wardogs::detail::prepare_windows_ocr_pixels(tiny, scale, false, output, {});
+            check(false, "unsupported scale is rejected before multiplication or writes");
+        } catch (const std::invalid_argument&) {}
+    }
+    try {
+        wardogs::detail::prepare_windows_ocr_pixels(tiny, 2, false, output, {});
+        check(false, "a short BGRA span is rejected before writes");
+    } catch (const std::invalid_argument&) {}
+    std::stop_source stopped;
+    stopped.request_stop();
+    try {
+        wardogs::detail::prepare_windows_ocr_pixels(tiny, 1, false, output, stopped.get_token());
+        check(false, "pixel preparation honours an already cancelled request");
+    } catch (const std::runtime_error& error) {
+        check(std::string_view(error.what()) == "Распознавание отменено",
+              "pixel preparation keeps the established cancellation reason");
+    }
+}
 }  // namespace
 
 int run_tests() {
     try {
+        check_bitmap_preprocessing();
         const auto image = wardogs::load_image_file(WARDOGS_TEST_IMAGE);
         const auto caller_sta = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         check(SUCCEEDED(caller_sta),

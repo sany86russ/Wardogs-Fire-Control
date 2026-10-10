@@ -2,6 +2,8 @@
 
 # WARDOGS Fire Control
 
+**In development — 2.13.0:** a simpler interface with one next action, expandable details, new help and background map verification. This is not a published release; downloads still point to stable 2.12.0. [Changes](source/docs/RELEASE-NOTES-EN.md).
+
 **A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.
 
 [![Version](https://img.shields.io/badge/version-2.12.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)

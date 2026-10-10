@@ -1204,5 +1204,29 @@
   {
     "ru": "Азимут должен быть конечным числом",
     "en": "The bearing must be a finite number"
+  },
+  {
+    "ru": "Не удалось начать фоновую проверку карт",
+    "en": "Could not start background map verification"
+  },
+  {
+    "ru": "Для подключения высот нужна выбранная локальная папка",
+    "en": "Select a local folder to import elevations"
+  },
+  {
+    "ru": "Неизвестная операция рельефа",
+    "en": "Unknown terrain operation"
+  },
+  {
+    "ru": "Неизвестная ошибка фоновой проверки рельефа",
+    "en": "Unknown background terrain verification error"
+  },
+  {
+    "ru": "Неверный масштаб изображения Windows OCR",
+    "en": "Invalid Windows OCR image scale"
+  },
+  {
+    "ru": "Неверный размер буфера изображения Windows OCR",
+    "en": "Invalid Windows OCR image buffer size"
   }
 ]

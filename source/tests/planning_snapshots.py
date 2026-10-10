@@ -9,7 +9,7 @@ import subprocess
 import zlib
 
 
-MODES = ('planning', 'planning-positions', 'planning-times', 'planning-profiles')
+MODES = ('planning', 'planning-details', 'planning-positions', 'planning-times', 'planning-profiles')
 
 
 def read_png(path, minimum_height=300):
@@ -147,6 +147,13 @@ def verify_snapshot(path, language, mode, require_geometry=True):
     widgets = receipt.get('widgets', [])
     required = {'planningPageViewport': False, 'planningCoordinates': True}
     if mode == 'planning':
+        required['planningSummary'] = True
+        required['terrainClearance'] = True
+        for name in ('flightTimeResult', 'assumeFlightModel', 'assumedGravity', 'assumedSpeed'):
+            matches = [widget for widget in widgets if widget.get('name') == name]
+            if len(matches) != 1 or matches[0].get('visible'):
+                errors.append(f'{name}: optional details must exist but start collapsed')
+    elif mode == 'planning-details':
         required['flightTimeResult'] = True
     elif mode == 'planning-positions':
         required['planningMissionsViewport'] = False  # Empty data is valid in a fresh fixture.
@@ -164,6 +171,12 @@ def verify_snapshot(path, language, mode, require_geometry=True):
         if not all(type(bounds.get(key)) is int for key in ('x', 'y', 'width', 'height')):
             errors.append(f'{name}: native visible geometry is missing')
             continue
+        if name in ('planningSummary', 'flightTimeResult', 'terrainClearance'):
+            widget = matches[0]
+            if bounds['width'] != widget.get('width') or bounds['height'] != widget.get('height'):
+                errors.append(f'{name}: result text is partially clipped by the actual viewport')
+            if widget.get('wordWrap') and widget.get('height', 0) < widget.get('required_height', 0):
+                errors.append(f'{name}: wrapped result text does not fit its own label')
         # The diagnostic geometry is nonnegative. Match Qt's nearest-integer
         # pixel rounding and scale endpoints, so fractional DPI cannot add a
         # stray pixel by rounding origin and extent independently.

@@ -33,6 +33,7 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTextBrowser>
+#include <QToolButton>
 #include <QUuid>
 
 #include <algorithm>
@@ -321,6 +322,54 @@ void inspect_english(PlanningDialog& dialog) {
 bool time_unknown(PlanningDialog& dialog) {
     return child<QLabel>(dialog, "flightTimeResult")->text().contains(
         translated("\nВремя полёта неизвестно: добавьте замеры или явно включите модель."));
+}
+
+void disclosure_and_sampling_tests(const QString& language) {
+    QTemporaryDir storage;
+    require(storage.isValid(), "compact planning tests use an isolated user profile");
+    Harness harness;
+    harness.context.map = wardogs::GameMap::bakurani;
+    harness.context.weapon = wardogs::AnalysisWeapon::sph2;
+    harness.context.target = wardogs::Point{15, 0}; // 1500 m, within both retained SPH-2 arcs.
+    int terrain_reads{};
+    harness.context.terrain = [&terrain_reads](wardogs::Point) -> std::optional<double> {
+        ++terrain_reads;
+        return 0.0;
+    };
+    PlanningDialog dialog(harness.provider(), harness.apply(), nullptr, native_path(storage.path()));
+    dialog.show();
+    settle();
+    auto* summary = child<QLabel>(dialog, "planningSummary");
+    auto* detailed = child<QLabel>(dialog, "flightTimeResult");
+    auto* model = child<QCheckBox>(dialog, "assumeFlightModel");
+    auto* result_toggle = child<QToolButton>(dialog, "planningResultDetails");
+    auto* model_toggle = child<QToolButton>(dialog, "planningModelDetails");
+    check(summary->isVisible() && !detailed->isVisible() && !model->isVisible() &&
+              !result_toggle->isChecked() && !model_toggle->isChecked(),
+          "planning starts with its short summary while detailed calculations and optional model settings stay collapsed");
+    check(summary->text().contains(translated(" · предварительный расчёт")) &&
+              summary->text().contains(translated("\nВремя полёта неизвестно")),
+          "a compact summary still identifies a preview and unknown flight time without claiming active aim or measured time");
+    terrain_reads = 0;
+    dialog.refresh();
+    check(terrain_reads > 700 && terrain_reads < 1000,
+          "a 1500-m unmeasured analysis samples terrain once instead of repeating a complete trajectory calculation");
+    const auto precise_result = detailed->text();
+    result_toggle->click();
+    settle();
+    check(detailed->isVisible() && detailed->text() == precise_result && harness.applied.empty(),
+          "expanding calculation details exposes the same precise provenance without applying coordinates or changing the command");
+    screenshot(dialog, language + QStringLiteral("-calculation-details"), detailed);
+    result_toggle->click();
+    model_toggle->click();
+    settle();
+    check(model->isVisible() && !model->isChecked() && harness.applied.empty(),
+          "revealing model settings never silently opts the user into an assumed physical model");
+    screenshot(dialog, language + QStringLiteral("-model-details"), model);
+    model_toggle->click();
+    check(!model->isVisible() && !model->isChecked(),
+          "collapsing optional model settings preserves the disabled model choice");
+    dialog.close();
 }
 
 void assert_error(PlanningDialog& dialog) {
@@ -905,6 +954,7 @@ void language_suite(wardogs::UiLanguage language, const QString& code) {
     }
     corruption_tests(harness, code);
     timing_byte_limit_tests(code);
+    disclosure_and_sampling_tests(code);
 }
 
 } // namespace

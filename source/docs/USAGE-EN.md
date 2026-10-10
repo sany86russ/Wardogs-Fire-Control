@@ -1,8 +1,8 @@
-# WARDOGS Fire Control 2.11 — workflow
+# WARDOGS Fire Control — workflow
 
 [Русский](USAGE-RU.md) · [App overview](../../README.en.md) · [Mathematics](CALCULATIONS-EN.md)
 
-This guide describes the version 2.11 workflow. The complete package for the intended version is available on its release page. L81 and SPH-2 tables are unchanged; the interface brings input, the selected command and optional ranging into one cycle. First-shot accuracy and agreement between table metres and the game's RNG are not promised.
+This guide describes the current workflow: map, gun, target and optional ranging. Download the complete package from the release page. L81 and SPH-2 tables are unchanged. First-shot accuracy and agreement between table metres and the game's RNG are not promised.
 
 ## Before calculating
 
@@ -73,7 +73,7 @@ Corrections are local: only same-arc observations near the target contribute, wi
 
 Reset immediately restores the baseline calculation. Set the gun again after moving it. Reset corrections manually if the vehicle's body changes orientation at the same point: the app does not observe its tilt.
 
-Manual actual-impact entry is in the main window: **Manual input and diagnostics → Impact corrections**. It records the same kind of observation as Alt+I and does not move the target.
+Manual actual-impact entry is under **Impact corrections** in the main window. Gun and target coordinates are under **Manual input**. Recording an impact has the same effect as Alt+I and does not move the target. Expand **Correction details** for the full report and reset action.
 
 ## Automatic ground assessment
 
@@ -90,9 +90,9 @@ The other arc may be suggested based on ground assessment, but the app does not 
 
 The check concerns the **baseline model arc**, not measured flight after Alt+I. Aiming corrections do not determine the actual trajectory. Buildings, trees, bridges, roofs and barrel height are excluded; no detected crossing does not mean a safe shot. See [model boundaries](CALCULATIONS-EN.md).
 
-## Additional tools
+## Positions and flight
 
-Additional tools are optional for the main cycle. They provide manual actions and detailed analysis.
+**Positions and flight** is optional for the main cycle. It provides manual actions and detailed analysis. Expand **Calculation details** and **Model settings** for the full result and assumed model.
 
 ### Manual target shifts
 
@@ -107,13 +107,13 @@ Accepted positions and targets are saved automatically with exact coordinates, m
 To restore a point:
 
 1. Confirm the appropriate map and select the matching weapon.
-2. Open saved points in additional tools.
+2. Open **Positions and flight → Positions and targets**.
 3. Explicitly select and apply the desired record.
 4. Set a target again after restoring the gun; previous ranging corrections are not restored.
 
 Ambiguous OCR, unaccepted review and empty coordinates do not become successful positions. Coordinates retain their original precision; a rounded list label is not calculation input.
 
-Saved points survive app updates but **do not restore the map or gun automatically on launch**. The last 12 targets in the current session are a separate list.
+Saved points survive app updates but **do not restore the map or gun automatically on launch**. The last 12 targets in the current session are a separate list under **History and direction** in the main window.
 
 ### Flight time
 
@@ -135,7 +135,7 @@ During a new capture or unresolved review, previous guidance is hidden. Do not t
 - For a target, middle-click again while keeping the cursor beside both labels.
 - For an impact, repeat Alt+I on the same actual point before changing the target or arc.
 - Resolve ambiguous coordinates by editing and applying them in review, or explicitly reject the capture.
-- Manual input and fallback target reading are available in advanced settings. With automatic search enabled, Alt+T reads an active target draft; with a custom-region choice, it uses that region.
+- Manual input and additional captures are under **Manual input**. Set the fallback reading source in **Settings → Recognition**: with automatic search enabled, Alt+T reads an active target draft; with a custom-region choice, it uses that region.
 
 Actual controls can differ from these examples after a Windows hotkey conflict. Use the combinations shown by the app.
 

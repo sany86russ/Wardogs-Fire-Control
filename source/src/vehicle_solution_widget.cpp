@@ -17,6 +17,10 @@
 
 namespace {
 
+void update_style(QWidget* widget, const QString& style) {
+    if (widget->styleSheet() != style) widget->setStyleSheet(style);
+}
+
 // Reserve the complete rendered text for both the short caption and its value.
 // Fixed column proportions and QLabel's word-wrap minimum hint can leave less
 // room than the current font needs after polishing or changing its scale.
@@ -88,9 +92,10 @@ VehicleSolutionWidget::VehicleSolutionWidget(wardogs::Arc arc, bool compact,
     mil_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("Установить")),
                       QStringLiteral("solutionMil"), compact_ ? 100 : 130);
     table_distance_ = add_metric(layout, wardogs::i18n::text(QStringLiteral("По таблице ≈")),
-                                QStringLiteral("solutionTableDistance"), compact_ ? 88 : 112);
+                                QStringLiteral("solutionTableDistance"), compact_ ? 76 : 95);
+    table_distance_->setProperty("secondaryMetric", true);
     table_distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Оценка табличной дальности SPH-2")));
-    if (!compact_) table_distance_->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:20px;"));
+    if (!compact_) table_distance_->setStyleSheet(QStringLiteral("color:#94a3b8;font-size:17px;"));
     distance_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Дальность до цели SPH-2")));
     distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Горизонтальное расстояние до цели по карте.")));
     mil_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Наводка SPH-2 по игровой шкале MIL")));
@@ -250,7 +255,7 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
     if (!compact_) return;
     compact_scale_ = scale;
     const int label_size = std::clamp(qRound(10 * scale), 8, 12);
-    trajectory_->setStyleSheet(QStringLiteral("color:%1;font-family:'Segoe UI';font-size:%2px;font-weight:%3;")
+    update_style(trajectory_, QStringLiteral("color:%1;font-family:'Segoe UI';font-size:%2px;font-weight:%3;")
         .arg(selected_ ? QStringLiteral("#63d8c5") : QStringLiteral("#94a3b8"))
         .arg(label_size).arg(selected_ ? 700 : 400));
     const auto name = arc_ == wardogs::Arc::low
@@ -259,15 +264,15 @@ void VehicleSolutionWidget::set_compact_scale(double scale) {
     trajectory_->setFixedWidth(std::max(std::clamp(qRound(82 * scale), 62, 99), name_width));
     const int size = std::max(16, qRound(20 * scale));
     const int distance_size = distance_is_target_ ? size : std::max(16, size - 1);
-    distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(distance_size));
-    table_distance_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(std::max(14, size - 2)));
+    update_style(distance_, QStringLiteral("color:#dce6f4;font-family:'Segoe UI';font-size:%1px;").arg(distance_size));
+    update_style(table_distance_, QStringLiteral("color:#94a3b8;font-family:'Segoe UI';font-size:%1px;").arg(std::max(13, size - 4)));
     for (auto* caption : findChildren<QLabel*>(QStringLiteral("solutionMetricCaption")))
-        caption->setStyleSheet(QStringLiteral("color:#b5c5dc;font-size:%1px;font-weight:600;").arg(std::clamp(qRound(10 * scale), 10, 12)));
-    bearing_->setStyleSheet(QStringLiteral("font-family:'Segoe UI';font-size:%1px;").arg(size));
+        update_style(caption, QStringLiteral("color:#b5c5dc;font-size:%1px;font-weight:600;").arg(std::clamp(qRound(10 * scale), 10, 12)));
+    update_style(bearing_, QStringLiteral("color:#e8eef7;font-family:'Segoe UI';font-size:%1px;font-weight:600;").arg(size));
     const auto color = unavailable() ? QStringLiteral("#ff9d9d")
                                      : QStringLiteral("#e8eef7");
-    mil_->setStyleSheet(
-        QStringLiteral("color:%1;font-family:'Segoe UI';font-size:%2px;").arg(color).arg(size));
+    update_style(mil_,
+        QStringLiteral("color:%1;font-family:'Segoe UI';font-size:%2px;font-weight:700;").arg(color).arg(size));
     refresh_metric_minimums();
 }
 

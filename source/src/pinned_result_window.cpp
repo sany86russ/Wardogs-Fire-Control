@@ -131,7 +131,7 @@ protected:
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(QStringLiteral("#111b28")));
+        painter.setBrush(QColor(QStringLiteral("#111926")));
         painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5),
                                 10.0, 10.0);
     }
@@ -362,10 +362,12 @@ void PinnedResultWindow::build_context_menu() {
     hotkey_layout->addWidget(unlock_hotkey_, 1);
     layout->addWidget(hotkey_row);
     auto* interaction_hint = new QLabel(wardogs::i18n::text(QStringLiteral(
-        "Перетаскивайте карточку и её края.\nБлокировка пропускает нажатия в игру.")));
+        "Перетащите карточку или её края.")));
     interaction_hint->setObjectName(QStringLiteral("muted"));
     interaction_hint->setWordWrap(true);
     interaction_hint->setMaximumWidth(280);
+    interaction_hint->setToolTip(wardogs::i18n::text(QStringLiteral(
+        "Перетаскивайте карточку и её края.\nБлокировка пропускает нажатия в игру.")));
     layout->addWidget(interaction_hint);
     auto* return_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Вернуться в калькулятор")));
     return_button->setObjectName(QStringLiteral("pinnedReturnButton"));
@@ -582,7 +584,7 @@ QWidget* PinnedResultWindow::result_card(const QString& color, const QString& ca
     value = new QLabel(QStringLiteral("—"));
     value->setAlignment(Qt::AlignCenter);
     value->setStyleSheet(QStringLiteral(
-        "color:%1;font-family:'Bahnschrift';font-size:30px;font-weight:700;")
+        "color:%1;font-family:'Segoe UI';font-size:30px;font-weight:700;")
                              .arg(color));
     layout->addWidget(value);
     if (secondary) {
@@ -590,7 +592,7 @@ QWidget* PinnedResultWindow::result_card(const QString& color, const QString& ca
         (*secondary)->setObjectName(QStringLiteral("pinnedMortarMil"));
         (*secondary)->setAlignment(Qt::AlignCenter);
         (*secondary)->setStyleSheet(QStringLiteral(
-            "color:#e8eef7;font-family:'Bahnschrift';font-size:18px;"
+            "color:#e8eef7;font-family:'Segoe UI';font-size:18px;"
             "font-weight:700;"));
         layout->addWidget(*secondary);
     }
@@ -847,14 +849,14 @@ void PinnedResultWindow::apply_font_scale() {
     font_scale_ = requested_scale();
     const int size = std::max(22, qRound(30 * font_scale_));
     distance_->setStyleSheet(QStringLiteral(
-        "color:#f0b45d;font-family:'Bahnschrift';font-size:%1px;font-weight:700;")
+        "color:#f0b45d;font-family:'Segoe UI';font-size:%1px;font-weight:700;")
                                  .arg(size));
     bearing_->setStyleSheet(QStringLiteral(
-        "color:#63d8c5;font-family:'Bahnschrift';font-size:%1px;font-weight:700;")
+        "color:#63d8c5;font-family:'Segoe UI';font-size:%1px;font-weight:700;")
                                 .arg(size));
     const int mil_size = std::max(15, qRound(18 * font_scale_));
     mortar_mil_->setStyleSheet(QStringLiteral(
-        "color:#e8eef7;font-family:'Bahnschrift';font-size:%1px;"
+        "color:#e8eef7;font-family:'Segoe UI';font-size:%1px;"
         "font-weight:700;")
                                    .arg(mil_size));
     applying_font_scale_ = false;

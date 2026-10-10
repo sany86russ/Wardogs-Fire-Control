@@ -413,10 +413,12 @@ int main(int argc, char* argv[]) {
           "settings exposes seven configurable global hotkeys including game-mode exit");
     auto* settings_tabs = settings_dialog.findChild<QTabWidget*>(
         QStringLiteral("settingsTabs"));
-    check(settings_tabs && settings_tabs->count() == 2 &&
+    check(settings_tabs && settings_tabs->count() == 4 &&
               settings_tabs->tabText(0) == QStringLiteral("Основные") &&
-              settings_tabs->tabText(1) == QStringLiteral("Дополнительно"),
-          "the settings start with a compact main view and one advanced tab");
+              settings_tabs->tabText(1) == QStringLiteral("Клавиши") &&
+              settings_tabs->tabText(2) == QStringLiteral("Прицел") &&
+              settings_tabs->tabText(3) == QStringLiteral("Распознавание"),
+          "settings groups the main workflow, shortcuts, reticle and recognition into focused pages");
     auto* middle_mouse = settings_dialog.findChild<QCheckBox*>(
         QStringLiteral("middleMouseEnabled"));
     auto* capture_delay = settings_dialog.findChild<QSpinBox*>(
@@ -429,11 +431,28 @@ int main(int argc, char* argv[]) {
     auto* base_hotkey = settings_dialog.findChild<QKeySequenceEdit*>(QStringLiteral("baseHotkey"));
     auto* backend_choice = settings_dialog.findChild<QComboBox*>(QStringLiteral("ocrBackend"));
     auto* coordinate_pattern = settings_dialog.findChild<QPlainTextEdit*>(QStringLiteral("coordinatePattern"));
-    check(capture_delay && capture_delay->isVisible() && workflow_steps && workflow_steps->isVisible() &&
+    check(capture_delay && !capture_delay->isVisible() && workflow_steps && workflow_steps->isVisible() &&
               workflow_steps->text().contains(QStringLiteral("Alt+X")) &&
               base_hotkey && !base_hotkey->isVisible() && backend_choice && !backend_choice->isVisible() &&
-              coordinate_pattern && !coordinate_pattern->isVisible() && standalone && !standalone->isVisible(),
-          "the first settings view shows the workflow and delay while advanced controls stay hidden");
+              coordinate_pattern && !coordinate_pattern->isVisible() && standalone && standalone->isVisible() &&
+              middle_mouse && middle_mouse->isVisible(),
+          "the first settings view exposes the workflow and capture mode without advanced recognition controls");
+    auto* pattern_details = settings_dialog.findChild<QToolButton*>(QStringLiteral("coordinatePatternDetails"));
+    check(pattern_details && !pattern_details->isChecked(),
+          "custom coordinate patterns start collapsed instead of competing with ordinary recognition settings");
+    if (settings_tabs && pattern_details && coordinate_pattern && capture_delay) {
+        settings_tabs->setCurrentIndex(3);
+        QApplication::processEvents();
+        check(capture_delay->isVisible() && backend_choice->isVisible() && !coordinate_pattern->isVisible(),
+              "recognition settings expose the engine and retry delay while keeping the custom pattern secondary");
+        const auto previous_pattern = coordinate_pattern->toPlainText();
+        pattern_details->click();
+        QApplication::processEvents();
+        check(coordinate_pattern->isVisible() && coordinate_pattern->toPlainText() == previous_pattern,
+              "opening custom settings reveals the existing pattern without changing its value");
+        pattern_details->click();
+        settings_tabs->setCurrentIndex(0);
+    }
     check(automatic_chat && automatic_chat->isChecked(),
           "fresh profiles enable automatic coordinate search");
     automatic_chat->setChecked(false);

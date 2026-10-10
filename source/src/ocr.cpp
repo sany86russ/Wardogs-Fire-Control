@@ -1,4 +1,5 @@
 #include "wardogs/ocr.hpp"
+#include "wardogs/ocr_preprocessing.hpp"
 #include "wardogs/logger.hpp"
 
 #include <onnxruntime_cxx_api.h>
@@ -91,11 +92,21 @@ void prepare_ocr_tensor(const Image& image, std::vector<float>& tensor, int& ten
                             static_cast<int>(target_height * std::max(320.0 / 48.0, ratio)));
     const int resized_width = std::min(
         tensor_width, static_cast<int>(std::ceil(target_height * ratio)));
-    tensor.assign(static_cast<std::size_t>(3 * target_height * tensor_width), 0.0F);
+    tensor.resize(static_cast<std::size_t>(3 * target_height * tensor_width));
 
     const double scale_x = static_cast<double>(image.width) / resized_width;
     const double scale_y = static_cast<double>(source_height) / target_height;
     const std::size_t plane = static_cast<std::size_t>(target_height * tensor_width);
+    // Horizontal sampling is identical for all 48 rows. Compute each clamped
+    // coordinate once; retain the exact bilinear order and float conversion.
+    struct SampleColumn { int left; int right; double fraction; };
+    std::array<SampleColumn, 4096> columns;
+    for (int x = 0; x < resized_width; ++x) {
+        const double source_x = std::clamp((x + 0.5) * scale_x - 0.5, 0.0,
+                                          static_cast<double>(image.width - 1));
+        const int x0 = static_cast<int>(std::floor(source_x));
+        columns[x] = {x0 * 3, std::min(x0 + 1, image.width - 1) * 3, source_x - x0};
+    }
     for (int y = 0; y < target_height; ++y) {
         if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
         // Clamp the sampling coordinate before calculating its fraction.
@@ -107,25 +118,28 @@ void prepare_ocr_tensor(const Image& image, std::vector<float>& tensor, int& ten
         const int y0 = static_cast<int>(std::floor(source_y));
         const int y1 = std::min(y0 + 1, image.height - crop_bottom - 1);
         const double fy = source_y - y0;
+        const auto* top_row = image.bgr.data() + static_cast<std::size_t>(y0) * image.width * 3;
+        const auto* bottom_row = image.bgr.data() + static_cast<std::size_t>(y1) * image.width * 3;
         for (int x = 0; x < resized_width; ++x) {
-            const double source_x = std::clamp((x + 0.5) * scale_x - 0.5, 0.0,
-                                              static_cast<double>(image.width - 1));
-            const int x0 = static_cast<int>(std::floor(source_x));
-            const int x1 = std::min(x0 + 1, image.width - 1);
-            const double fx = source_x - x0;
+            const auto& column = columns[x];
+            const double fx = column.fraction;
             for (int channel = 0; channel < 3; ++channel) {
-                const auto sample = [&](int sx, int sy) {
-                    return image.bgr[static_cast<std::size_t>((sy * image.width + sx) * 3 +
-                                                              channel)];
-                };
-                const double top = sample(x0, y0) * (1.0 - fx) + sample(x1, y0) * fx;
-                const double bottom = sample(x0, y1) * (1.0 - fx) + sample(x1, y1) * fx;
+                const double top = top_row[column.left + channel] * (1.0 - fx) +
+                                   top_row[column.right + channel] * fx;
+                const double bottom = bottom_row[column.left + channel] * (1.0 - fx) +
+                                      bottom_row[column.right + channel] * fx;
                 const double pixel = top * (1.0 - fy) + bottom * fy;
                 tensor[static_cast<std::size_t>(channel) * plane +
                        static_cast<std::size_t>(y * tensor_width + x)] =
                     static_cast<float>(pixel / 127.5 - 1.0);
             }
         }
+        // All active samples were overwritten. Clear only the right padding,
+        // including columns left behind when a retained buffer's crop narrows.
+        for (int channel = 0; channel < 3; ++channel)
+            std::fill_n(tensor.data() + static_cast<std::size_t>(channel) * plane +
+                            static_cast<std::size_t>(y * tensor_width + resized_width),
+                        tensor_width - resized_width, 0.0F);
     }
 }
 
