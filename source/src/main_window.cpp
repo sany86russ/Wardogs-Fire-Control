@@ -2823,7 +2823,7 @@ private:
         auto* root = new QVBoxLayout(content);
         root->setSizeConstraint(QLayout::SetMinimumSize);
         root->setContentsMargins(20, 12, 20, 12);
-        root->setSpacing(10);
+        root->setSpacing(8);
 
         auto* heading = new QHBoxLayout;
         auto* brand = new QVBoxLayout;
@@ -2925,13 +2925,13 @@ private:
         auto* work_layout = new QVBoxLayout(work);
         work_layout->setSizeConstraint(QLayout::SetMinimumSize);
         work_layout->setContentsMargins(0, 0, 0, 0);
-        work_layout->setSpacing(10);
+        work_layout->setSpacing(8);
 
         auto* quick = new QGroupBox(wardogs::i18n::text(QStringLiteral("Следующий шаг")));
         quick->setObjectName(QStringLiteral("quickWorkflow"));
         quick->setTitle({});
         auto* quick_layout = new QVBoxLayout(quick);
-        quick_layout->setContentsMargins(12, 10, 12, 10);
+        quick_layout->setContentsMargins(12, 8, 12, 8);
         quick_layout->setSpacing(6);
         quick_guide_ = new QLabel;
         quick_guide_->setObjectName(QStringLiteral("quickGuide"));
@@ -3081,7 +3081,7 @@ private:
         vehicle_result_group_->setObjectName(QStringLiteral("vehicleResultGroup"));
         vehicle_result_group_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* vehicle_results = new QVBoxLayout(vehicle_result_group_);
-        vehicle_results->setContentsMargins(12, 23, 12, 12);
+        vehicle_results->setContentsMargins(12, 20, 12, 10);
         low_solution_ = new VehicleSolutionWidget(wardogs::Arc::low);
         high_solution_ = new VehicleSolutionWidget(wardogs::Arc::high);
         vehicle_results->addWidget(low_solution_);
@@ -3149,6 +3149,7 @@ private:
         });
 
         terrain_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("Карта")));
+        terrain_group_->setObjectName(QStringLiteral("terrainControls"));
         terrain_group_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         terrain_group_->setTitle({});
         auto* terrain_layout = new QVBoxLayout(terrain_group_);
@@ -3192,7 +3193,11 @@ private:
         work_layout->addWidget(calibration_group_);
         auto* fire_control = new QGroupBox(wardogs::i18n::text(QStringLiteral("Пристрелка")));
         fire_control->setObjectName(QStringLiteral("fireControlGroup"));
+        fire_control->setAccessibleName(fire_control->title());
+        fire_control->setTitle({});
         auto* fire_layout = new QVBoxLayout(fire_control);
+        fire_layout->setContentsMargins(12, 8, 12, 8);
+        fire_layout->setSpacing(6);
         fire_control_compact_ = new QLabel;
         fire_control_compact_->setObjectName(QStringLiteral("fireControlCompact"));
         fire_control_compact_->setWordWrap(true);
@@ -3546,18 +3551,21 @@ private:
         import_terrain_->setVisible(!map_confirmed_ && !terrain_loading_ && wardogs::game_map_has_terrain(selected_game_map()));
         if (terrain_loading_) {
             terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Проверяю карту… Окно остаётся доступным.")));
+            terrain_selector_->setToolTip(terrain_summary_->text());
             return;
         }
         if (!map_confirmed_) {
             terrain_summary_->setText(selected_game_map() == wardogs::GameMap::unselected
                 ? wardogs::i18n::text(QStringLiteral("Перед расчётом выберите карту, на которой играете."))
                 : wardogs::i18n::text(QStringLiteral("Подтвердите текущую карту перед расчётом. Прошлый выбор не определяет новый матч.")));
+            terrain_selector_->setToolTip(terrain_summary_->text());
             return;
         }
         if (!terrain_map_) {
             terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Карта подтверждена · без высот")));
             terrain_summary_->setToolTip(game_map_name(current_game_map_) +
                 wardogs::i18n::text(QStringLiteral(". Рельеф не учтён: высоты орудия и цели считаются равными.")));
+            terrain_selector_->setToolTip(terrain_summary_->toolTip());
             return;
         }
         auto text = game_map_name(current_game_map_) +
@@ -3578,6 +3586,7 @@ private:
                     value + QStringLiteral(" m");
         }
         terrain_summary_->setToolTip(text);
+        terrain_selector_->setToolTip(text);
         terrain_summary_->setText(vehicle_mode_
             ? wardogs::i18n::text(QStringLiteral("Карта подтверждена · высоты подключены"))
             : wardogs::i18n::text(QStringLiteral("Карта подтверждена · L81 без поправки высоты")));
@@ -5627,9 +5636,10 @@ QSpinBox { background:#0c1420; color:#e8eef7; border:1px solid #2b3b50; border-r
 QMenu { background:#111b28; border:1px solid #34445a; padding:6px; }
 QMenu::item { padding:8px 22px; border-radius:5px; }
 QMenu::item:selected { background:#244b4b; }
-QLabel[workflowStep="true"] { background:#162536; color:#8fa1ba; border-radius:8px; padding:9px 12px; font-size:12px; }
+QGroupBox#terrainControls,QGroupBox#quickWorkflow,QGroupBox#fireControlGroup { margin-top:0; padding-top:0; }
+QLabel[workflowStep="true"] { background:#162536; color:#8fa1ba; border-radius:8px; padding:6px 10px; font-size:12px; }
 QLabel[workflowStep="true"][complete="true"] { background:#15322f; color:#81e7d7; }
-QLabel#nextStep { color:#edf4ff; font-size:15px; padding:9px 2px 3px; }
+QLabel#nextStep { color:#edf4ff; font-size:15px; padding:6px 2px 2px; }
 QLabel#fireControlCompact { color:#edf4ff; font-size:14px; }
 QLabel#terrainAssistance { color:#a9b9ca; font-size:12px; }
 QToolButton { color:#b5c5dc; background:#152234; border:1px solid #2b3b50; border-radius:8px; padding:8px 10px; }

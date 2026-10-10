@@ -4,7 +4,7 @@
 
 ## 2.13.0 — prepared: clearer interface and more responsive operation
 
-**This update is prepared in the working branch; release 2.13.0 has not been published. Build and interface validation in CI is still pending.**
+**Update 2.13.0 is prepared; the release has not been published. Validation and native UI screenshots are available in [PR #11](https://github.com/sany86russ/Wardogs-Fire-Control/pull/11).**
 
 - The main window guides **Map → Gun → Target** and shows the next action. Aiming values are more prominent; manual input, history with direction and the complete correction report expand when needed.
 - Settings are split into **General / Shortcuts / Sight / Recognition**. Short help and instructions explain the normal workflow; additional parameter explanations move to tooltips. **Positions and flight** shows a concise result first, with full details and model settings available through disclosure controls.

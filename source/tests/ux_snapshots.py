@@ -45,6 +45,13 @@ SETTINGS_PAGES = {
     'recognition': (3, 'ocrBackend'),
 }
 MAIN_MODES = {'ui', 'workspace', 'compact', 'first-start', 'workspace-sidebar', 'standalone'}
+FIXTURE_CANVASES = {
+    'workspace': (880, 720),
+    'standalone': (880, 720),
+    'workspace-sidebar': (640, 720),
+    'first-start': (640, 500),
+    'compact': (640, 500),
+}
 
 
 def cases(include_compact_2=False):
@@ -58,6 +65,38 @@ def cases(include_compact_2=False):
 
 def image_path(evidence, language, scale, mode):
     return evidence / f'{language}-scale-{scale}-{mode}.png'
+
+
+def mint_primary_metrics(image, rectangle, dpr):
+    """Measure dark glyphs on the theme's mint primary-button interior."""
+    # Exclude the rounded edge, whose dark pixels are not evidence of readable
+    # text. The same 100-level luminance difference applies in reverse polarity.
+    x, y, width, height = rectangle
+    inset = min(max(1, int(4 * dpr + .5)), min(width, height) // 4)
+    interior = (x + inset, y + inset, width - 2 * inset, height - 2 * inset)
+    metrics = region_metrics(image, interior)
+    image_width, _, channels, pixels = image
+    mint_colours = ((0x63, 0xd8, 0xc5), (0x81, 0xe7, 0xd7), (0x42, 0xb8, 0xa7))
+    mint_pixels = dark_foreground = 0
+    dark_limit = metrics['median_luminance'] - 100
+    for row in range(interior[1], interior[1] + interior[3]):
+        for column in range(interior[0], interior[0] + interior[2]):
+            at = (row * image_width + column) * channels
+            red, green, blue = pixels[at:at + 3]
+            if channels == 4:
+                alpha = pixels[at + 3]
+                red, green, blue = [(component * alpha + 255 * (255 - alpha)) // 255
+                                    for component in (red, green, blue)]
+            colour = (red, green, blue)
+            if any(all(abs(component - expected) <= 12 for component, expected in zip(colour, mint))
+                   for mint in mint_colours):
+                mint_pixels += 1
+            brightness = (2126 * red + 7152 * green + 722 * blue) // 10000
+            if brightness <= dark_limit:
+                dark_foreground += 1
+    return {**metrics, 'contrast_polarity': 'dark-on-mint',
+            'mint_background_fraction': mint_pixels / metrics['pixels'],
+            'foreground_pixels_delta_below_median_at_least_100': dark_foreground}
 
 
 def verify_snapshot(path, language, scale, mode):
@@ -92,20 +131,29 @@ def verify_snapshot(path, language, scale, mode):
                 check(widget.get('visible') is visible, f'{name}: unexpected default visibility')
         return matches
 
-    def surface(name, rectangle, minimum_foreground=20, white_bound=True):
+    def surface(name, rectangle, minimum_foreground=20, white_bound=True, mint_primary=False):
         try:
             metrics = region_metrics(pixels, rectangle)
+            if mint_primary:
+                metrics = {**metrics, 'primary_interior': mint_primary_metrics(pixels, rectangle, dpr)}
         except (ValueError, TypeError) as error:
             errors.append(f'{name}: {error}')
             return
         surfaces.append({'name': name, **metrics})
+        if mint_primary:
+            interior = metrics['primary_interior']
+            check(interior['mint_background_fraction'] >= .5,
+                  f'{name}: expected mint primary-button background was not actually rendered')
+            check(interior['foreground_pixels_delta_below_median_at_least_100'] >= minimum_foreground,
+                  f'{name}: dark primary-button text has insufficient actual contrast with its mint background')
+            return
         check(metrics['median_luminance'] < 80, f'{name}: a light background was actually rendered')
         if white_bound:
             check(metrics['white_surface_fraction'] < .08, f'{name}: a large white surface was actually rendered')
         check(metrics['foreground_pixels_delta_at_least_100'] >= minimum_foreground,
               f'{name}: actual pixels have insufficient foreground/background contrast')
 
-    def widget_surface(name, widget, minimum_foreground=20, label=False, meaningful_text=False):
+    def widget_surface(name, widget, minimum_foreground=20, label=False, meaningful_text=False, mint_primary=False):
         check(widget.get('visible') is True, f'{name}: required actual surface is hidden')
         bounds = widget.get('snapshot_rect')
         if not isinstance(bounds, dict) or not all(type(bounds.get(key)) is int for key in ('x', 'y', 'width', 'height')):
@@ -130,13 +178,17 @@ def verify_snapshot(path, language, scale, mode):
         top = int(bounds['y'] * dpr + .5)
         right = int((bounds['x'] + bounds['width']) * dpr + .5)
         bottom = int((bounds['y'] + bounds['height']) * dpr + .5)
-        surface(name, (left, top, right - left, bottom - top), minimum_foreground, white_bound=False)
+        surface(name, (left, top, right - left, bottom - top), minimum_foreground,
+                white_bound=False, mint_primary=mint_primary)
 
     surface('whole actual application view', (0, 0, width, height))
     if mode in MAIN_MODES:
         sidebar = mode == 'workspace-sidebar'
-        if mode in ('first-start', 'workspace-sidebar'):
-            check(receipt.get('snapshot_width') == 640, 'Narrow-window fixture must actually render at logical width 640')
+        if mode in FIXTURE_CANVASES:
+            expected_width, expected_height = FIXTURE_CANVASES[mode]
+            check((receipt.get('snapshot_width'), receipt.get('snapshot_height')) ==
+                  (expected_width, expected_height),
+                  f'{mode}: actual logical fixture canvas must remain {expected_width} x {expected_height} at every DPI')
         if mode == 'first-start':
             check(receipt.get('map_confirmed') is False, 'A new profile must ask for its current map instead of assuming it')
         for name in ('workflowStep1', 'workflowStep2', 'workflowStep3', 'nextStep'):
@@ -163,7 +215,8 @@ def verify_snapshot(path, language, scale, mode):
                     widget_surface(name, widget, minimum_foreground=10)
             for name in ('manualBaseButton', 'manualTargetButton'):
                 for widget in named(name, visible=True):
-                    widget_surface(name, widget, minimum_foreground=10, meaningful_text=True)
+                    widget_surface(name, widget, minimum_foreground=20, meaningful_text=True,
+                                   mint_primary=name == 'manualTargetButton')
             for widget in named('nextStep', visible=True):
                 instruction = widget.get('text', '').casefold()
                 check(not any(hint in instruction for hint in ('alt+', 'mark coordinates', 'среднюю кнопку', 'middle mouse')),
