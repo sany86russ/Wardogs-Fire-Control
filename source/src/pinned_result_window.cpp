@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QKeySequenceEdit>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
@@ -559,6 +560,7 @@ void PinnedResultWindow::build_context_menu() {
     });
     update_lock_control();
     update_unlock_hotkey_control();
+    fit_unlock_editor_height();
     set_ghost_enabled(false);
     set_ghost_opacity_percent(ghost_opacity_percent_);
     wardogs::i18n::watch(context_menu_);
@@ -653,6 +655,19 @@ void PinnedResultWindow::update_unlock_hotkey_control() {
     const QSignalBlocker blocker(unlock_hotkey_);
     unlock_hotkey_->setKeySequence(
         QKeySequence(QString::fromStdWString(preferences_.unlock_hotkey)));
+}
+
+void PinnedResultWindow::fit_unlock_editor_height() const {
+    if (!unlock_hotkey_) return;
+    unlock_hotkey_->ensurePolished();
+    auto* editor = unlock_hotkey_->findChild<QLineEdit*>();
+    if (!editor) return;
+    editor->ensurePolished();
+    // The native QKeySequenceEdit hint can stay at 22 DIP after its internal
+    // line edit adopts the application's padded 40-DIP style at fractional DPI.
+    // Give the actual child its required room, including any larger font/style.
+    unlock_hotkey_->setMinimumHeight(std::max({40, editor->minimumSizeHint().height(),
+                                               editor->sizeHint().height()}));
 }
 
 void PinnedResultWindow::configure_unlock_hotkey(const std::wstring& hotkey) {
@@ -1264,6 +1279,7 @@ void PinnedResultWindow::show_context_menu() {
 
 QPoint PinnedResultWindow::context_menu_position() const {
     context_menu_->ensurePolished();
+    fit_unlock_editor_height();
     context_menu_->adjustSize();
     constexpr int gap = 2;
     const QSize menu_size = context_menu_->sizeHint().expandedTo(context_menu_->size());

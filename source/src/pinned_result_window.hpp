@@ -101,6 +101,7 @@ private:
     void update_lock_control();
     void update_header_controls();
     void update_unlock_hotkey_control();
+    void fit_unlock_editor_height() const;
     [[nodiscard]] bool commit_preferences(Preferences preferences);
     void apply_mouse_transparency();
     void show_context_menu();

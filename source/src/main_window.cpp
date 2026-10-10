@@ -89,7 +89,9 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStringList>
+#include <QStyle>
 #include <QStyleFactory>
+#include <QStyleOptionFrame>
 #include <QTimer>
 #include <mutex>
 #include <QTemporaryDir>
@@ -851,6 +853,23 @@ public:
                 item.insert(QStringLiteral("text_line_height"), metrics.height());
                 item.insert(QStringLiteral("content_width"), label->contentsRect().width());
                 item.insert(QStringLiteral("required_height"), label->heightForWidth(label->width()));
+            }
+            if (auto* editor = qobject_cast<QLineEdit*>(widget)) {
+                const QFontMetrics metrics(editor->font());
+                QStyleOptionFrame option;
+                option.initFrom(editor);
+                option.rect = editor->contentsRect();
+                option.lineWidth = editor->hasFrame()
+                    ? editor->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, &option, editor) : 0;
+                option.state |= QStyle::State_Sunken;
+                if (editor->isReadOnly()) option.state |= QStyle::State_ReadOnly;
+                const QRect content = editor->style()->subElementRect(QStyle::SE_LineEditContents, &option, editor)
+                    .marginsRemoved(editor->textMargins()).adjusted(2, 1, -2, -1);
+                item.insert(QStringLiteral("text_width"), metrics.horizontalAdvance(editor->text()));
+                item.insert(QStringLiteral("text_line_height"), metrics.height());
+                item.insert(QStringLiteral("text_content_rect"), QJsonObject{
+                    {QStringLiteral("x"), content.x()}, {QStringLiteral("y"), content.y()},
+                    {QStringLiteral("width"), content.width()}, {QStringLiteral("height"), content.height()}});
             }
             if (auto* browser = qobject_cast<QTextBrowser*>(widget))
                 item.insert(QStringLiteral("content"), browser->toPlainText());

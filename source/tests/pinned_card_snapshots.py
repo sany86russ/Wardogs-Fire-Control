@@ -139,6 +139,50 @@ def verify_snapshot(path, language, scale, mode):
         for name in ('pinnedOpacitySlider', 'ghostReticleOpacitySlider', 'pinnedUnlockHotkey'):
             for widget in named(name):
                 widget_surface(name, widget)
+        editors = named('qt_keysequenceedit_lineedit')
+        parents = named('pinnedUnlockHotkey')
+        hotkey = receipt.get('pinned_unlock_hotkey')
+        for editor in editors:
+            # QKeySequenceEdit can shrink while its styled QLineEdit keeps its
+            # minimum height. Its own frame then fits, but cuts off the glyphs.
+            widget_surface('actual unlock shortcut editor', editor, text=True)
+            check(editor.get('type') == 'QLineEdit' and editor.get('enabled') is True,
+                  'Recovery shortcut must use its actual enabled internal text editor')
+            check(isinstance(hotkey, str) and bool(hotkey.strip()) and editor.get('text') == hotkey,
+                  'Recovery shortcut editor must show the complete current shortcut')
+            bounds = editor.get('snapshot_rect')
+            if len(parents) == 1 and isinstance(bounds, dict):
+                parent = parents[0].get('snapshot_rect')
+                if isinstance(parent, dict) and all(type(rect.get(key)) is int
+                        for rect in (bounds, parent) for key in ('x', 'y', 'width', 'height')):
+                    check(bounds['x'] >= parent['x'] and bounds['y'] >= parent['y'] and
+                          bounds['x'] + editor.get('width', 0) <= parent['x'] + parent['width'] and
+                          bounds['y'] + editor.get('height', 0) <= parent['y'] + parent['height'],
+                          'Recovery shortcut editor must fit completely inside its outer control')
+            content = editor.get('text_content_rect')
+            if not isinstance(content, dict) or not all(type(content.get(key)) is int
+                    for key in ('x', 'y', 'width', 'height')):
+                errors.append('Recovery shortcut editor is missing its actual styled text viewport')
+                continue
+            check(content['x'] >= 0 and content['y'] >= 0 and content['width'] > 0 and content['height'] > 0 and
+                  content['x'] + content['width'] <= editor.get('width', 0) and
+                  content['y'] + content['height'] <= editor.get('height', 0),
+                  'Recovery shortcut text viewport must fit inside the actual internal editor')
+            advance, line_height = editor.get('text_width'), editor.get('text_line_height')
+            check(type(advance) is int and advance > 0 and advance <= content['width'] and
+                  type(line_height) is int and line_height > 0 and line_height <= content['height'],
+                  'Complete recovery shortcut must fit its actual text viewport width and height')
+            if isinstance(bounds, dict) and all(type(bounds.get(key)) is int
+                    for key in ('x', 'y', 'width', 'height')):
+                left = bounds['x'] + content['x']
+                top = bounds['y'] + content['y']
+                visible_right = min(left + content['width'], bounds['x'] + bounds['width'])
+                visible_bottom = min(top + content['height'], bounds['y'] + bounds['height'])
+                check(visible_right == left + content['width'] and visible_bottom == top + content['height'],
+                      'Recovery shortcut text viewport must remain fully visible through its parent clipping')
+                x, y = int(left * dpr + .5), int(top * dpr + .5)
+                right, bottom = int(visible_right * dpr + .5), int(visible_bottom * dpr + .5)
+                surface('actual unlock shortcut text pixels', (x, y, right - x, bottom - y), foreground=20)
         for widget in named('pinnedUnlockLabel'):
             widget_surface('pinnedUnlockLabel', widget, label=True, text=True)
         for widget in named('pinnedLockButton'):
