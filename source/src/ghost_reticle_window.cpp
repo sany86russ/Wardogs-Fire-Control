@@ -1,5 +1,6 @@
 #include "ghost_reticle_window.hpp"
 #include "localization.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <Windows.h>
 
@@ -126,6 +127,14 @@ void GhostReticleWindow::changeEvent(QEvent* event) {
 
 void GhostReticleWindow::set_solution(
     std::optional<wardogs::CorrectedSolution> solution) {
+    if (solution) {
+        const auto command = wardogs::displayed_firing_command(*solution);
+        // This private copy drives the rendered ruler only; calculations and
+        // calibration retain their original full-precision solution.
+        solution->bearing_deg = command.bearing_deg;
+        solution->mil = command.mil;
+        solution->reticle_distance_m = command.table_distance_m;
+    }
     mortar_bearing_.reset();
     mortar_mil_.reset();
     solution_ = std::move(solution);

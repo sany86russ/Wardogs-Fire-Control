@@ -75,6 +75,42 @@ double weighted_median(std::vector<std::pair<double, double>> values) {
     return values.back().first;
 }
 
+double midpoint_weighted_median(std::vector<std::pair<double, double>> values) {
+    std::sort(values.begin(), values.end(), [](const auto& a, const auto& b) {
+        return a.first < b.first;
+    });
+    double total = 0.0;
+    for (const auto& value : values) total += value.second;
+    double accumulated = 0.0;
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        accumulated += values[index].second;
+        // Keep a balanced two-sided series centred between its middle
+        // observations; choosing its lower median would bias the robust fit.
+        if (index + 1 < values.size() &&
+            std::abs(accumulated - total * 0.5) <= total * 1e-12)
+            return (values[index].first + values[index + 1].first) / 2.0;
+        if (accumulated > total * 0.5) return values[index].first;
+    }
+    return values.back().first;
+}
+
+double effective_observations(double weight_sum, double squared_weight_sum) {
+    return squared_weight_sum > 0.0
+        ? weight_sum * weight_sum / squared_weight_sum : 0.0;
+}
+
+double local_metres_per_mil(const CorrectedSolution& direct) {
+    const double peak_mil = sph2_mil_for_distance(sph2_maximum_range_m, direct.arc);
+    const double gap = peak_mil - direct.mil;
+    // Probe toward the supported peak, or one MIL away when already there.
+    // The one-sided difference remains supported at either table boundary.
+    const double probe_mil = std::abs(gap) > 1e-10
+        ? direct.mil + std::copysign(std::min(1.0, std::abs(gap)), gap)
+        : direct.mil + (direct.arc == Arc::low ? -1.0 : 1.0);
+    return (sph2_distance_for_mil(probe_mil, direct.arc) -
+            direct.reticle_distance_m) / (probe_mil - direct.mil);
+}
+
 }  // namespace
 
 ContinuousCalibration::ContinuousCalibration(Point base,
@@ -332,11 +368,139 @@ ObservationAssessment ContinuousCalibration::add_landing(
     // this shot's target outside the supported sight settings. Reject before
     // committing so the displayed target keeps a usable firing solution.
     (void)updated.solution(firing.target, firing.arc, firing.target_height_delta_m);
+    auto assessment = updated.assess(
+        firing.target, firing.arc, firing.target_height_delta_m);
+    assessment.confidence = updated.confidence_scores_.back();
     active_ = updated.active_;
     samples_.swap(updated.samples_);
     confidence_scores_.swap(updated.confidence_scores_);
     local_confidence_scores_.swap(updated.local_confidence_scores_);
-    return {confidence_scores_.back(), samples_.size()};
+    return assessment;
+}
+
+ObservationAssessment ContinuousCalibration::assess(
+    Point target, Arc arc, double height_delta_m) const {
+    // Match the solution's direct geometry validation even for empty history.
+    (void)corrected_solution(base_, target, active_, arc, height_delta_m);
+    if (mode_ == ContinuousCorrectionMode::local_only)
+        return local_estimate(target, arc, height_delta_m).assessment;
+    return {confidence_scores_.empty() ? 0.0 : confidence_scores_.back(),
+            samples_.size()};
+}
+
+ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
+    Point target, Arc arc, double height_delta_m) const {
+    LocalEstimate estimate{{0.0, 0.0}, {}};
+    estimate.assessment.observation_count = samples_.size();
+    const auto [bearing, range] = bearing_and_range(base_, target);
+    std::vector<WeightedNeighbor> local;
+    std::vector<std::pair<double, double>> bearings, mils;
+    double proximity_sum = 0.0, squared_proximity_sum = 0.0;
+    for (std::size_t index = 0; index < samples_.size(); ++index) {
+        const auto& sample = samples_[index];
+        if (sample.arc != arc) continue;
+        const double near = proximity(sample, target, bearing, range, height_delta_m);
+        if (near <= 0.0) continue;
+        local.push_back({index, near});
+        bearings.emplace_back(sample.bearing_offset_deg, near);
+        mils.emplace_back(sample.mil_offset, near);
+        proximity_sum += near;
+        squared_proximity_sum += near * near;
+    }
+    estimate.assessment.local_observation_count = local.size();
+    if (local.empty()) return estimate;
+
+    const double bearing_center = midpoint_weighted_median(bearings);
+    const double mil_center = midpoint_weighted_median(mils);
+    for (auto& value : bearings) value.first = std::abs(value.first - bearing_center);
+    for (auto& value : mils) value.first = std::abs(value.first - mil_center);
+    // MAD supplies the observed scale. The existing application consistency
+    // scales are lower bounds only; they are not measured game dispersion.
+    constexpr double median_absolute_deviation_scale = 1.4826;
+    const double bearing_scale = std::max(bearing_noise_deg,
+        median_absolute_deviation_scale * midpoint_weighted_median(bearings));
+    const double mil_scale = std::max(mil_noise,
+        median_absolute_deviation_scale * midpoint_weighted_median(mils));
+    // Robust suppression needs three effective observations. A peer whose
+    // spatial weight vanishes cannot suddenly change a two-shot estimate.
+    const double robust_strength = std::clamp(
+        effective_observations(proximity_sum, squared_proximity_sum) - 2.0,
+        0.0, 1.0);
+    const auto robust_weight = [robust_strength](double difference, double scale) {
+        // Retain ordinary scatter fully, then fade continuously to zero at
+        // three observed scales. A lone outlier can change the median of a
+        // balanced even series; it must not reweight its ordinary two sides.
+        const double normalized = std::clamp(
+            (std::abs(difference) / scale - 1.0) / 2.0, 0.0, 1.0);
+        const double remaining = 1.0 - normalized * normalized;
+        const double retained = remaining * remaining;
+        return 1.0 + robust_strength * (retained - 1.0);
+    };
+
+    double bearing_sum = 0.0, mil_sum = 0.0;
+    double bearing_weight_sum = 0.0, mil_weight_sum = 0.0;
+    double retained_weight_sum = 0.0, squared_retained_weight_sum = 0.0;
+    double retained_bearing_sum = 0.0, retained_mil_sum = 0.0;
+    double confidence_sum = 0.0;
+    std::vector<double> retained_weights;
+    retained_weights.reserve(local.size());
+    for (const auto& item : local) {
+        const auto& sample = samples_[item.index];
+        const auto [bearing_quality, mil_quality] = local_confidence_scores_[item.index];
+        const double bearing_retained = robust_weight(
+            sample.bearing_offset_deg - bearing_center, bearing_scale);
+        const double mil_retained = robust_weight(sample.mil_offset - mil_center, mil_scale);
+        // Once robust series evidence is available it supplies the relative
+        // weights directly. Otherwise a rejected peer would keep changing the
+        // retained shots through their legacy pairwise compatibility scores.
+        const double bearing_weight = (bearing_quality + robust_strength *
+            (1.0 - bearing_quality)) * item.weight * bearing_retained;
+        const double mil_weight = (mil_quality + robust_strength *
+            (1.0 - mil_quality)) * item.weight * mil_retained;
+        bearing_sum += bearing_weight * item.weight * sample.bearing_offset_deg;
+        mil_sum += mil_weight * item.weight * sample.mil_offset;
+        bearing_weight_sum += bearing_weight;
+        mil_weight_sum += mil_weight;
+        // Joint evidence statistics exclude a shot rejected in either
+        // component; the valid component still contributes to its own fit.
+        const double retained = item.weight * std::min(bearing_retained, mil_retained);
+        retained_weights.push_back(retained);
+        if (retained > 0.0) ++estimate.assessment.accepted_observation_count;
+        retained_weight_sum += retained;
+        squared_retained_weight_sum += retained * retained;
+        retained_bearing_sum += retained * sample.bearing_offset_deg;
+        retained_mil_sum += retained * sample.mil_offset;
+        confidence_sum += item.weight * confidence_scores_[item.index];
+    }
+    const double spatial_strength = std::min(1.0, proximity_sum);
+    // Normalize components independently: disagreement must never turn a
+    // measured same-sign bias into an unsupported correction toward zero.
+    estimate.correction = {
+        spatial_strength * bearing_sum / bearing_weight_sum,
+        spatial_strength * mil_sum / mil_weight_sum};
+    estimate.assessment.confidence = confidence_sum / proximity_sum;
+    const double retained_count = effective_observations(
+        retained_weight_sum, squared_retained_weight_sum);
+    estimate.assessment.provisional = retained_count < 3.0 - 1e-9;
+    estimate.assessment.scatter_available = retained_count >= 2.0 - 1e-9;
+    if (!estimate.assessment.scatter_available) return estimate;
+
+    const double retained_bearing = retained_bearing_sum / retained_weight_sum;
+    const double retained_mil = retained_mil_sum / retained_weight_sum;
+    const auto direct = corrected_solution(base_, target, active_, arc, height_delta_m);
+    const double metres_per_mil = local_metres_per_mil(direct);
+    double squared_spread_sum = 0.0;
+    for (std::size_t index = 0; index < local.size(); ++index) {
+        const auto& sample = samples_[local[index].index];
+        const double lateral = range * std::sin(wrapped_difference(
+            sample.bearing_offset_deg, retained_bearing) * std::numbers::pi / 180.0);
+        const double longitudinal = metres_per_mil * (sample.mil_offset - retained_mil);
+        squared_spread_sum += retained_weights[index] *
+            (lateral * lateral + longitudinal * longitudinal);
+    }
+    estimate.assessment.empirical_scatter_m = std::sqrt(
+        squared_spread_sum / retained_weight_sum);
+    return estimate;
 }
 
 void ContinuousCalibration::refresh_offsets() {
@@ -373,6 +537,8 @@ void ContinuousCalibration::refit_global_calibration(
 std::pair<double, double> ContinuousCalibration::correction(
     Point target, Arc arc, double height_delta_m) const {
     if (samples_.empty()) return {0.0, 0.0};
+    if (mode_ == ContinuousCorrectionMode::local_only)
+        return local_estimate(target, arc, height_delta_m).correction;
     const auto [bearing, range] = bearing_and_range(base_, target);
 
     struct Group {
@@ -385,25 +551,11 @@ std::pair<double, double> ContinuousCalibration::correction(
     double local_bearing_sum = 0.0;
     double local_mil_sum = 0.0;
     double local_weight_sum = 0.0;
-    double local_bearing_weight_sum = 0.0;
-    double local_mil_weight_sum = 0.0;
-    double local_proximity_sum = 0.0;
     for (std::size_t index = 0; index < samples_.size(); ++index) {
         const auto& sample = samples_[index];
         if (sample.arc != arc) continue;
         const double quality = confidence_scores_[index];
         const double near = proximity(sample, target, bearing, range, height_delta_m);
-        if (mode_ == ContinuousCorrectionMode::local_only) {
-            const auto [bearing_quality, mil_quality] = local_confidence_scores_[index];
-            const double bearing_weight = bearing_quality * near;
-            const double mil_weight = mil_quality * near;
-            local_bearing_sum += bearing_weight * near * sample.bearing_offset_deg;
-            local_mil_sum += mil_weight * near * sample.mil_offset;
-            local_bearing_weight_sum += bearing_weight;
-            local_mil_weight_sum += mil_weight;
-            local_proximity_sum += near;
-            continue;
-        }
         const double local_weight = quality * near;
         local_bearing_sum += local_weight * sample.bearing_offset_deg;
         local_mil_sum += local_weight * sample.mil_offset;
@@ -419,19 +571,6 @@ std::pair<double, double> ContinuousCalibration::correction(
         group->bearing_sum += quality * sample.bearing_offset_deg;
         group->mil_sum += quality * sample.mil_offset;
         group->weight_sum += quality;
-    }
-    if (mode_ == ContinuousCorrectionMode::local_only) {
-        if (local_proximity_sum <= 0.0 || local_bearing_weight_sum <= 0.0 ||
-            local_mil_weight_sum <= 0.0)
-            return {0.0, 0.0};
-        // Normalize each component by its own relative evidence weights.
-        // A disagreement changes the relative influence of observations; it
-        // cannot shrink all measurements toward an unobserved zero offset.
-        // Spatial strength is independent of consistency, with an additional
-        // near factor retaining smooth fading even after many observations.
-        const double spatial_strength = std::min(1.0, local_proximity_sum);
-        return {spatial_strength * local_bearing_sum / local_bearing_weight_sum,
-                spatial_strength * local_mil_sum / local_mil_weight_sum};
     }
     if (groups.empty()) return {0.0, 0.0};
 

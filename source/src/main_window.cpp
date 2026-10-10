@@ -14,6 +14,7 @@
 #include "wardogs/capture.hpp"
 #include "wardogs/continuous_calibration.hpp"
 #include "wardogs/impact_feedback.hpp"
+#include "wardogs/presentation.hpp"
 #include "wardogs/core.hpp"
 #include "wardogs/hotkeys.hpp"
 #include "wardogs/logger.hpp"
@@ -37,6 +38,7 @@
 #include <QClipboard>
 #include <QChar>
 #include <QDateTime>
+#include <QUuid>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -422,6 +424,9 @@ struct OcrMessage {
     QString error;
     std::optional<wardogs::Point> impact_target;
     std::optional<wardogs::FiringSnapshot> impact_firing;
+    std::optional<wardogs::CorrectedSolution> impact_computed;
+    std::string impact_observation_id;
+    std::string impact_command_id;
     std::uint64_t calibration_epoch{};
     std::uint64_t input_epoch{};
     double elapsed_ms{};
@@ -1118,8 +1123,12 @@ public:
         check("SPH2_F4_and_first_optional_impact_use_displayed_high_guidance",
               effective_vehicle_arc() == wardogs::Arc::high && initial_high_context.impact_firing &&
               initial_high_context.impact_firing->arc == wardogs::Arc::high &&
-              initial_high_context.impact_firing->bearing_deg == high_result_->bearing_deg &&
-              initial_high_context.impact_firing->mil == high_result_->mil &&
+              initial_high_context.impact_firing->bearing_deg == wardogs::displayed_firing_command(*high_result_).bearing_deg &&
+              initial_high_context.impact_firing->mil == wardogs::displayed_firing_command(*high_result_).mil &&
+              initial_high_context.impact_computed &&
+              initial_high_context.impact_computed->mil == high_result_->mil &&
+              initial_high_context.impact_computed->bearing_deg == high_result_->bearing_deg &&
+              !initial_high_context.impact_observation_id.empty() && !initial_high_context.impact_command_id.empty() &&
               high_solution_->selected() && !low_solution_->selected() && !continuous_calibration_);
         const auto first_raw_high = *high_result_;
         const auto first_raw_low = *low_result_;
@@ -1395,11 +1404,16 @@ public:
         capture_impact_context(field_context);
         const bool field_impact_recorded = record_continuous_impact(
             {83.57, 92.59}, QStringLiteral("test field replay"), *field_context.impact_firing);
+        const auto field_landing = wardogs::corrected_solution(base_, {83.57, 92.59},
+            {wardogs::identity_rotation(), 0.0}, wardogs::Arc::high);
+        const double field_expected_bearing = field_high_before.bearing_deg + std::remainder(
+            field_context.impact_firing->bearing_deg - field_landing.bearing_deg, 360.0);
+        const double field_expected_mil = field_high_before.mil + field_context.impact_firing->mil - field_landing.mil;
         check("SPH2_confirmed_field_miss_accepts_237_m_without_arbitrary_angular_rejection",
               field_impact_recorded && observation_count() == 1 && high_result_ &&
               effective_vehicle_arc() == wardogs::Arc::high &&
-              std::abs(high_result_->bearing_deg - 200.7311095796922) < 1e-6 &&
-              std::abs(high_result_->mil - 914.2386) < 1e-4 &&
+              std::abs(high_result_->bearing_deg - field_expected_bearing) < 1e-6 &&
+              std::abs(high_result_->mil - field_expected_mil) < 1e-6 &&
               !ocr_hold_ && !failure_state_ && copy_button_->isEnabled());
         check("SPH2_field_impact_preserves_target_history_and_unobserved_low_arc",
               target_ == field_context.impact_firing->target && history_ == field_history_before &&
@@ -1967,6 +1981,10 @@ private:
     std::optional<AnalysisCache> automatic_analysis_;
     QString recent_history_error_;
     std::uint64_t calibration_epoch_{};
+    const std::string session_id_{QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString()};
+    std::uint64_t observation_sequence_{};
+    std::uint64_t command_sequence_{};
+    std::array<std::string, 2> command_ids_{};
     std::optional<wardogs::CaptureRegion> region_;
     std::wstring last_capture_monitor_;
     std::unique_ptr<wardogs::RapidOcr> rapid_;
@@ -2156,6 +2174,17 @@ private:
                 if (last_impact_consistency_ < 0.35)
                     text += wardogs::i18n::text(QStringLiteral("\nНаблюдения расходятся: точность поправки ограничена."));
             }
+            if (continuous_calibration_) {
+                const auto assessment = continuous_calibration_->assess(*target_, *arc, target_height_delta(*target_));
+                text += wardogs::i18n::text(QStringLiteral("\nРядом с целью: %1 наблюдений · учтено: %2."))
+                    .arg(assessment.local_observation_count).arg(assessment.accepted_observation_count);
+                text += assessment.provisional
+                    ? wardogs::i18n::text(QStringLiteral("\nПоправка предварительная: нужна серия согласованных попаданий."))
+                    : wardogs::i18n::text(QStringLiteral("\nПоправка уточнена по серии попаданий."));
+                if (assessment.scatter_available)
+                    text += wardogs::i18n::text(QStringLiteral("\nРазброс оценок поправки ≈%1 м; это не вероятность попадания."))
+                        .arg(assessment.empirical_scatter_m, 0, 'f', 1);
+            }
             text += wardogs::i18n::text(QStringLiteral("\nПравее / левее — градусы азимута. Дальше / ближе — MIL: настильная + / −, навесная − / +."));
             if (has_calibration_data()) {
                 const auto [bearing_offset,mil_offset] = active_aim_offsets_[*arc == wardogs::Arc::low ? 0U : 1U];
@@ -2273,8 +2302,13 @@ private:
         if (vehicle_mode_) {
             if (const auto arc = effective_vehicle_arc()) text += *arc == wardogs::Arc::low
                 ? wardogs::i18n::text(QStringLiteral(" | Выбрана: настильная")) : wardogs::i18n::text(QStringLiteral(" | Выбрана: навесная"));
-            if (low_result_) text += wardogs::i18n::text(QStringLiteral(" | Настильная: %1 / %2 MIL / по таблице ≈%3 м")).arg(qtext(wardogs::format_bearing(low_result_->bearing_deg))).arg(low_result_->mil, 0, 'f', 1).arg(low_result_->reticle_distance_m, 0, 'f', 1);
-            if (high_result_) text += wardogs::i18n::text(QStringLiteral(" | Навесная: %1 / %2 MIL / по таблице ≈%3 м")).arg(qtext(wardogs::format_bearing(high_result_->bearing_deg))).arg(high_result_->mil, 0, 'f', 1).arg(high_result_->reticle_distance_m, 0, 'f', 1);
+            const auto append_command = [&](const wardogs::CorrectedSolution& solution, const QString& format) {
+                const auto command = wardogs::displayed_firing_command(solution);
+                text += format.arg(qtext(wardogs::format_bearing(command.bearing_deg)))
+                    .arg(command.mil, 0, 'f', 0).arg(command.table_distance_m, 0, 'f', 1);
+            };
+            if (low_result_) append_command(*low_result_, wardogs::i18n::text(QStringLiteral(" | Настильная: %1 / %2 MIL / по таблице ≈%3 м")));
+            if (high_result_) append_command(*high_result_, wardogs::i18n::text(QStringLiteral(" | Навесная: %1 / %2 MIL / по таблице ≈%3 м")));
         } else if (mortar_mil_result_) text += QStringLiteral(" | %1 MIL").arg(qRound(*mortar_mil_result_));
         auto* clipboard = QApplication::clipboard();
         const DWORD sequence_before = diagnostic_ ? GetClipboardSequenceNumber() : 0;
@@ -3366,9 +3400,15 @@ private:
         if (!map_confirmed_ || !vehicle_mode_ || !base_set_ || !target_ || base_capture_pending_ || ocr_hold_ || !arc)
             throw std::invalid_argument("Сначала получите действующую наводку SPH-2 для цели");
         context.impact_target = target_;
+        context.input_epoch = input_epoch_;
+        context.calibration_epoch = calibration_epoch_;
         const auto& solution = *(*arc == wardogs::Arc::low ? low_result_ : high_result_);
+        const auto displayed = wardogs::displayed_firing_command(solution);
         context.impact_firing = wardogs::FiringSnapshot{
-            *target_, *arc, solution.bearing_deg, solution.mil, target_height_delta(*target_)};
+            *target_, *arc, displayed.bearing_deg, displayed.mil, target_height_delta(*target_)};
+        context.impact_computed = solution;
+        context.impact_observation_id = std::to_string(++observation_sequence_);
+        context.impact_command_id = command_ids_[*arc == wardogs::Arc::low ? 0U : 1U];
     }
 
     bool restore_failed_impact_guidance(const OcrMessage& context) {
@@ -3421,19 +3461,30 @@ private:
             record_continuous_impact(
                 wardogs::parse_manual_coordinate(
                     continuous_impact_->text().toStdWString()),
-                wardogs::i18n::text(QStringLiteral("вручную")), firing);
+                wardogs::i18n::text(QStringLiteral("вручную")), firing, &context);
         } catch (const std::exception& error) {
             set_status(wardogs::i18n::text(QStringLiteral("Некорректное попадание: ")) + error_text(error), true);
         }
     }
 
     bool record_continuous_impact(wardogs::Point impact, const QString& source,
-                                  wardogs::FiringSnapshot firing) {
+                                  wardogs::FiringSnapshot firing, const OcrMessage* evidence = nullptr) {
+        const auto observation_id = evidence && !evidence->impact_observation_id.empty()
+            ? evidence->impact_observation_id : std::to_string(++observation_sequence_);
+        const auto command_id = evidence ? evidence->impact_command_id : std::string{};
+        // Coordinate feedback observes a landing and the displayed command. It
+        // does not observe the physical shot or the game's actual sight values.
+        const auto provenance = " session_id=" + session_id_ + " observation_id=" + observation_id +
+            " command_id=" + (command_id.empty() ? "unavailable" : command_id) +
+            " command_source=displayed_unverified physical_shot_verified=0 sight_verified=0" +
+            " diagnostic=" + std::to_string(diagnostic_ ? 1 : 0) +
+            " input_epoch=" + std::to_string(evidence ? evidence->input_epoch : input_epoch_) +
+            " calibration_epoch=" + std::to_string(calibration_epoch_);
         try {
             std::ostringstream request;
             request.imbue(std::locale::classic());
             request.precision(17);
-            request << "continuous.impact_requested source=" << utf8(source)
+            request << "continuous.impact_requested" << provenance << " source=" << utf8(source)
                     << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
                     << " base=" << base_.x << ',' << base_.y
                     << " target=" << firing.target.x << ',' << firing.target.y
@@ -3441,7 +3492,10 @@ private:
                     << " arc=" << (firing.arc == wardogs::Arc::low ? "low" : "high")
                     << " bearing=" << firing.bearing_deg << " mil=" << firing.mil
                     << " target_height_delta_m=" << firing.target_height_delta_m
-                    << " calibration_epoch=" << calibration_epoch_;
+                    << " table_profile=sph2_retained_v1";
+            if (evidence && evidence->impact_computed)
+                request << " computed_bearing=" << evidence->impact_computed->bearing_deg
+                        << " computed_mil=" << evidence->impact_computed->mil;
             wardogs::log_info(request.str());
             if (!vehicle_mode_ || !base_set_ || !target_ || base_capture_pending_ || ocr_hold_)
                 throw std::invalid_argument("Сначала получите действующую наводку SPH-2 для цели");
@@ -3457,10 +3511,13 @@ private:
             const auto assessment = candidate->add_landing(firing, impact, impact_height_delta);
             const auto corrected = candidate->solution(firing.target, firing.arc,
                                                        firing.target_height_delta_m);
-            const auto feedback = wardogs::impact_feedback(base_, firing, impact, corrected);
+            const auto displayed_next = wardogs::displayed_firing_command(corrected);
+            const wardogs::CorrectedSolution next_command{corrected.arc, displayed_next.bearing_deg,
+                                                         displayed_next.table_distance_m, displayed_next.mil};
+            const auto feedback = wardogs::impact_feedback(base_, firing, impact, next_command);
             const double observed_miss_m = wardogs::calculate_shot(firing.target, impact).distance * 100.0;
-            const double bearing_change = std::remainder(corrected.bearing_deg - firing.bearing_deg, 360.0);
-            const double mil_change = corrected.mil - firing.mil;
+            const double bearing_change = feedback.bearing_change_deg;
+            const double mil_change = feedback.mil_change;
             continuous_calibration_ = std::move(candidate);
             last_impact_feedback_ = feedback;
             last_impact_consistency_ = assessment.confidence;
@@ -3472,7 +3529,7 @@ private:
             std::ostringstream diagnostic;
             diagnostic.imbue(std::locale::classic());
             diagnostic.precision(17);
-            diagnostic << "continuous.impact_recorded source=" << utf8(source)
+            diagnostic << "continuous.impact_recorded" << provenance << " source=" << utf8(source)
                        << " mode=local_only count=" << assessment.observation_count
                        << " arc=" << (firing.arc == wardogs::Arc::low ? "low" : "high")
                        << " target=" << firing.target.x << ',' << firing.target.y
@@ -3483,7 +3540,14 @@ private:
                        << " consistency=" << assessment.confidence
                        << " correction_bearing_deg=" << bearing_change
                        << " correction_mil=" << mil_change
-                       << " next_bearing=" << corrected.bearing_deg << " next_mil=" << corrected.mil
+                       << " next_bearing=" << displayed_next.bearing_deg << " next_mil=" << displayed_next.mil
+                       << " next_computed_bearing=" << corrected.bearing_deg << " next_computed_mil=" << corrected.mil
+                       << " local_count=" << assessment.local_observation_count
+                       << " accepted_count=" << assessment.accepted_observation_count
+                       << " provisional=" << assessment.provisional
+                       << " scatter_available=" << assessment.scatter_available
+                       << " sight_residual_scatter_m=" << assessment.empirical_scatter_m
+                       << " hit_radius_m=10 within_radius=" << (observed_miss_m <= 10.0)
                        << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
                        << " base=" << base_.x << ',' << base_.y
                        << " target_height_delta_m=" << firing.target_height_delta_m
@@ -3504,7 +3568,8 @@ private:
                       .arg(QString::number(observed_miss_m, 'f', 0), signed_value(bearing_change), signed_value(mil_change), terrain_status));
             return true;
         } catch (const std::exception& error) {
-            log_coordinate_event("continuous.impact_rejected", "impact", "observation", impact);
+            wardogs::log_warning("continuous.impact_rejected" + provenance + " reason=" + error.what());
+            log_coordinate_event("continuous.impact_rejected_point", "impact", "observation", impact);
             set_status(wardogs::i18n::text(QStringLiteral("Поправка не применена: ")) + error_text(error), true);
             return false;
         }
@@ -3799,6 +3864,7 @@ private:
     bool show_vehicle_result(const wardogs::Shot& result) {
         cache_automatic_analysis(result);
         active_aim_offsets_ = {};
+        command_ids_ = {};
         double height_delta{};
         try {
             height_delta = target_height_delta(result.target);
@@ -3836,6 +3902,26 @@ private:
                           result.base, result.target, calibration, arc,
                           height_delta);
                 card->set_solution(solution, result.distance * 100.0);
+                const auto displayed = wardogs::displayed_firing_command(solution);
+                const auto command_index = arc == wardogs::Arc::low ? 0U : 1U;
+                command_ids_[command_index] = std::to_string(++command_sequence_);
+                std::ostringstream issued;
+                issued.imbue(std::locale::classic());
+                issued.precision(17);
+                issued << "solution.displayed session_id=" << session_id_
+                       << " command_id=" << command_ids_[command_index]
+                       << " command_source=displayed_unverified physical_shot_verified=0 sight_verified=0"
+                       << " diagnostic=" << diagnostic_ << " input_epoch=" << input_epoch_
+                       << " calibration_epoch=" << calibration_epoch_
+                       << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
+                       << " base=" << result.base.x << ',' << result.base.y
+                       << " target=" << result.target.x << ',' << result.target.y
+                       << " arc=" << (arc == wardogs::Arc::low ? "low" : "high")
+                       << " bearing=" << displayed.bearing_deg << " mil=" << displayed.mil
+                       << " table_range_m=" << displayed.table_distance_m
+                       << " computed_bearing=" << solution.bearing_deg << " computed_mil=" << solution.mil
+                       << " target_height_delta_m=" << height_delta << " table_profile=sph2_retained_v1";
+                wardogs::log_info(issued.str());
                 if (continuous_calibration_) {
                     const auto baseline = wardogs::corrected_solution(
                         result.base, result.target, calibration, arc, height_delta);
@@ -4712,7 +4798,7 @@ private:
             update_readiness();
             if (message.impact_firing)
                 record_continuous_impact(message.point, QStringLiteral("OCR"),
-                                         *message.impact_firing);
+                                         *message.impact_firing, &message);
             else set_status(wardogs::i18n::text(QStringLiteral("Наводка выстрела не сохранена. Попадание не применено.")), true);
             return;
         }

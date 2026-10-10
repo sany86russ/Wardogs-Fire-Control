@@ -64,6 +64,15 @@ jobs:
         run: python source/tools/check_localization.py
       - name: Verify unified ranging and four sight metrics on the isolated runner
         run: python source/tests/fire_control_snapshots.py
+      - name: Verify offline accuracy excludes real diagnostic application events
+        run: |
+          $accuracyEvidence = 'source/build/release/Testing/shot-accuracy.json'
+          python source/tools/analyze_shot_accuracy.py source/build/release/Testing/fire-control-app/diagnostic.log --json --output $accuracyEvidence
+          if ($LASTEXITCODE -ne 0) { throw 'Offline impact analysis failed.' }
+          $accuracy = Get-Content -LiteralPath $accuracyEvidence -Raw | ConvertFrom-Json
+          if ($accuracy.summary.count -ne 0 -or $accuracy.diagnostic_observations_excluded -lt 1 -or $accuracy.invalid_records -ne 0 -or $accuracy.acceptance.field_99_percent_claim_accepted) {
+            throw 'Diagnostic application impacts contaminated field accuracy evidence.'
+          }
       - name: Capture planning with the application theme on the isolated runner
         run: python source/tests/planning_snapshots.py
       - name: Package binaries, public source and corresponding Qt source

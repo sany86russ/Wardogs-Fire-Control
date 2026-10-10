@@ -174,6 +174,10 @@ int main() {
         check(first_assessment.observation_count == 1 &&
                   first_assessment.confidence > 0.35 && first_assessment.confidence <= 1.0,
               "a local correction is useful after one optional landing");
+        check(first_assessment.local_observation_count == 1 &&
+                  first_assessment.accepted_observation_count == 1 &&
+                  first_assessment.provisional && !first_assessment.scatter_available,
+              "one useful correction remains provisional and cannot claim observed dispersion");
         const auto corrected_impact = impact_with_firing_bias(
             base, local.firing_snapshot(north, arc), 1.0, mil_bias);
         check(miss_distance_m(north, corrected_impact) <
@@ -212,6 +216,12 @@ int main() {
                   "a local landing has exact zero bearing influence at and beyond 50 metres", 1e-10);
             close(actual.mil, expected.mil,
                   "a local landing has exact zero MIL influence at and beyond 50 metres", 1e-10);
+            const auto evidence = local.assess(far, arc);
+            check(evidence.observation_count == local.sample_count() &&
+                      evidence.local_observation_count == 0 &&
+                      evidence.accepted_observation_count == 0 &&
+                      evidence.provisional && !evidence.scatter_available,
+                  "retained distant history cannot claim evidence for a new target");
         }
         const Point nearby{50.25, 68};
         const auto nearby_direct = corrected_solution(base, nearby, baseline, arc);
@@ -262,6 +272,9 @@ int main() {
               "a local landing never changes the other trajectory bearing", 1e-10);
         close(other_local.mil, other_direct.mil,
               "a local landing never changes the other trajectory MIL", 1e-10);
+        check(local.assess(north, other_arc).local_observation_count == 0 &&
+                  local.assess(north, other_arc).provisional,
+              "evidence assessment cannot borrow corroboration from another arc");
 
         const Point noncardinal_far{66, 64};
         for (Arc untouched_arc : {arc, other_arc}) {
@@ -412,6 +425,8 @@ int main() {
     const auto field_corrected = field.solution(field_target, Arc::high);
     check(field_assessment.observation_count == 1 && field_assessment.confidence == 0.6,
           "the field miss is accepted after one optional observation without an angular quality penalty");
+    check(field_assessment.provisional && !field_assessment.scatter_available,
+          "the complete 237-metre first correction is useful without pretending to measure scatter");
     close(field_corrected.bearing_deg, 200.731110,
           "the field correction applies its complete measured bearing offset beyond the old 3-degree cap", 1e-6);
     close(field_corrected.mil, 914.238580,
@@ -528,6 +543,16 @@ int main() {
               "balanced bearing noise retains the measured central offset", 1e-8);
         close(noisy_solution.mil - direct.mil, 10.0,
               "balanced MIL noise retains the measured central offset", 1e-8);
+        const auto noisy_evidence = noisy.assess(north, arc);
+        const double metres_per_mil = arc == Arc::low ? 4.0 : -3.1;
+        const double expected_spread = std::hypot(
+            1800.0 * std::sin(0.4 * std::numbers::pi / 180.0), 5.0 * metres_per_mil);
+        check(noisy_evidence.local_observation_count == 20 &&
+                  noisy_evidence.accepted_observation_count == 20 &&
+                  !noisy_evidence.provisional && noisy_evidence.scatter_available,
+              "a repeated noisy series exposes local corroboration without discarding normal spread");
+        close(noisy_evidence.empirical_scatter_m, expected_spread,
+              "empirical spread uses the independently known range and retained table slope", 1e-7);
 
         for (bool bearing_outlier : {false, true}) {
             ContinuousCalibration independent(base, baseline, ContinuousCorrectionMode::local_only);
@@ -542,6 +567,16 @@ int main() {
             const auto after = independent.solution(north, arc);
             check(assessment.confidence < 0.3,
                   "a single-component outlier retains a low reported consistency score");
+            check(assessment.local_observation_count == 7 &&
+                      assessment.accepted_observation_count == 6 &&
+                      !assessment.provisional && assessment.scatter_available,
+                  "one isolated outlier stays in history but cannot count as corroborated joint evidence");
+            close(after.bearing_deg, before.bearing_deg,
+                  "one gross isolated outlier cannot shift a corroborated bearing centre", 1e-8);
+            close(after.mil, before.mil,
+                  "one gross isolated outlier cannot shift a corroborated MIL centre", 1e-8);
+            close(assessment.empirical_scatter_m, 0.0,
+                  "an excluded outlier cannot inflate the scatter of the retained constant-bias series", 1e-7);
             if (bearing_outlier) {
                 close(after.mil, before.mil,
                       "bearing disagreement cannot weaken independently corroborated MIL guidance", 1e-8);
@@ -554,6 +589,51 @@ int main() {
                       "one MIL outlier cannot overturn the supported MIL history");
             }
         }
+
+        ContinuousCalibration zero_bias(base, baseline, ContinuousCorrectionMode::local_only);
+        for (int shot = 0; shot < 20; ++shot) {
+            const auto firing = zero_bias.firing_snapshot(north, arc);
+            const double sign = shot % 2 == 0 ? -1.0 : 1.0;
+            zero_bias.add_landing(firing, impact_with_firing_bias(
+                base, firing, sign * 0.4, sign * 5.0));
+        }
+        const auto balanced_zero = zero_bias.solution(north, arc);
+        close(std::remainder(balanced_zero.bearing_deg - direct.bearing_deg, 360.0), 0.0,
+              "balanced repeated dispersion with no persistent bearing bias converges to direct guidance", 1e-8);
+        close(balanced_zero.mil, direct.mil,
+              "balanced repeated dispersion with no persistent MIL bias converges to direct guidance", 1e-8);
+        const auto firing = zero_bias.firing_snapshot(north, arc);
+        const auto excluded = zero_bias.add_landing(firing, impact_with_firing_bias(
+            base, firing, -5.0, -50.0));
+        const auto after_outlier = zero_bias.solution(north, arc);
+        close(after_outlier.bearing_deg, balanced_zero.bearing_deg,
+              "an isolated gross outlier cannot create a new bearing bias in a balanced noisy series", 1e-8);
+        close(after_outlier.mil, balanced_zero.mil,
+              "an isolated gross outlier cannot create a new MIL bias in a balanced noisy series", 1e-8);
+        check(excluded.local_observation_count == 21 &&
+                  excluded.accepted_observation_count == 20 &&
+                  excluded.empirical_scatter_m > 0.0,
+              "gross outliers are distinguished from the observed retained nonzero scatter");
+
+        const auto estimate_with_third_peer = [&](double separation_m) {
+            ContinuousCalibration boundary(base, baseline, ContinuousCorrectionMode::local_only);
+            for (double sign : {-1.0, 1.0}) {
+                const auto command = boundary.firing_snapshot(north, arc);
+                boundary.add_landing(command, impact_with_firing_bias(
+                    base, command, 1.0 + sign * 0.4, 10.0 + sign * 5.0));
+            }
+            const Point peer{north.x + separation_m / 100.0, north.y};
+            const auto command = boundary.firing_snapshot(peer, arc);
+            boundary.add_landing(command, impact_with_firing_bias(
+                base, command, -4.0, -40.0));
+            return boundary.solution(north, arc);
+        };
+        const auto vanished = estimate_with_third_peer(local_correction_radius_m);
+        const auto vanishing = estimate_with_third_peer(local_correction_radius_m - 0.001);
+        close(std::remainder(vanishing.bearing_deg - vanished.bearing_deg, 360.0), 0.0,
+              "a vanishing third peer cannot abruptly activate robust bearing suppression", 1e-6);
+        close(vanishing.mil, vanished.mil,
+              "a vanishing third peer cannot abruptly activate robust MIL suppression", 1e-5);
     }
 
     for (Arc arc : {Arc::low, Arc::high}) {

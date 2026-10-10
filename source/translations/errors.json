@@ -1200,5 +1200,9 @@
     "en": "The X/Y labels do not form a single coordinate pair near the marker."
   },
   {"ru": "Автоматическая история требует отдельного файла recent-fire-missions.json", "en": "Automatic history requires a separate recent-fire-missions.json file"},
-  {"ru": "Некорректные данные пристрелки", "en": "Invalid ranging data"}
+  {"ru": "Некорректные данные пристрелки", "en": "Invalid ranging data"},
+  {
+    "ru": "Азимут должен быть конечным числом",
+    "en": "The bearing must be a finite number"
+  }
 ]
