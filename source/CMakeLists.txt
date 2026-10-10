@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.11.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.11.1 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
