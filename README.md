@@ -4,7 +4,7 @@
 
 **Нативный помощник для миномёта L81 и артиллерии SPH-2 в игре WARDOGS.** Координаты → дальность, азимут и MIL → наводка в игре.
 
-[![Version](https://img.shields.io/badge/version-2.11.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.12.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#скачивание-и-запуск)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#язык-и-настройки)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
@@ -15,7 +15,9 @@
 
 **Обновления GitHub:** проверка и установка новых релизов прямо в программе, начиная с 2.8.0. Проверка при запуске, баннер новой версии, загрузка с проверкой SHA-256 и обновление всего переносимого комплекта с перезапуском. Интерфейс и справка доступны на русском и английском; язык переключается без перезапуска.
 
-**Версия 2.11.0:** единый цикл **карта → Alt+X: орудие → средняя кнопка: цель → выстрел → Alt+I: попадание → уточнённая команда**. Выпуск включает планирование, улучшенное чтение координат и архив журналов из этапов 2.9–2.10. **[Подробный ChangeLog RU](source/docs/RELEASE-NOTES-RU.md) · [EN](source/docs/RELEASE-NOTES-EN.md).**
+**Версия 2.12.0:** одинаковые целые MIL и азимут до 0,1° во всех командах; исправлено ложное обучение от округления. Пристрелка уточняет устойчивый центр серии без новых настроек, журналы связывают показанную команду и попадание, отдельный анализ измеряет критерий **не дальше 10 м**. **99% игровых попаданий не подтверждены; L81 и таблицы сохранены.** [Подробный релиз RU/EN](docs/releases/v2.12.0.md) · [ChangeLog RU](source/docs/RELEASE-NOTES-RU.md) · [EN](source/docs/RELEASE-NOTES-EN.md).
+
+Сохранён единый цикл **карта → Alt+X: орудие → средняя кнопка: цель → выстрел → Alt+I: попадание → уточнённая команда**, а также планирование, улучшенное чтение координат и архив журналов из 2.9–2.11. [Предыдущий релиз 2.11.0](docs/releases/v2.11.0.md).
 
 - **Пристрелка рядом с результатом:** последний принятый промах в метрах, уже учтённое изменение азимута/MIL, число наблюдений и сброс. Итоговые числа не требуют повторного прибавления поправки.
 - **Одна выбранная команда:** главное окно, мини-карточка, прицел и Alt+I используют те же финальные азимут/MIL. Анализ другой дуги в дополнительных инструментах явно показан как исходный.
@@ -84,7 +86,7 @@
 **Требования:** Windows 10/11 x64. Для обычного запуска не нужны установка приложения, права администратора, Qt SDK, Visual Studio или Python.
 
 1. Откройте [последний релиз](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Скачайте **WardogsFireControl-v2.11.0-win-x64.zip** из раздела **Assets**.
+2. Скачайте **WardogsFireControl-v2.12.0-win-x64.zip** из раздела **Assets**.
 3. **Распакуйте ZIP целиком** в отдельную папку.
 4. Запустите **Запустить.cmd**, **Start.cmd** или **WarDogsDistanceCalculator.exe** внутри распакованного комплекта.
 
@@ -97,13 +99,13 @@
 Рядом с архивами релиза публикуется файл контрольных сумм SHA-256. Сравните указанную сумму с результатом:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.11.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.12.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 Контрольная сумма проверяет целостность скачивания. При наличии GitHub CLI происхождение сборки можно дополнительно проверить через GitHub attestations:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.11.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.12.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Обновление из программы
