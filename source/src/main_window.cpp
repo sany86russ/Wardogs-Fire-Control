@@ -612,6 +612,11 @@ public:
     }
 
     bool export_snapshot(const QString& mode, const QString& path) {
+        if (mode == QStringLiteral("standalone")) {
+            settings_.game_integration_enabled = false;
+            update_action_labels();
+            manual_toggle_->setChecked(true);
+        }
         if (mode == QStringLiteral("selection")) {
             const QFileInfo file(path);
             if (!QDir().mkpath(file.absolutePath()) || !selector_.begin([](auto, auto) {})) return false;
@@ -628,7 +633,8 @@ public:
             const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
             return rendered && written;
         }
-        if (mode != QStringLiteral("ui") && mode != QStringLiteral("first-start") && mode != QStringLiteral("settings") && mode != QStringLiteral("recognition") &&
+        if (mode != QStringLiteral("ui") && mode != QStringLiteral("first-start") && mode != QStringLiteral("standalone") &&
+            mode != QStringLiteral("settings") && mode != QStringLiteral("recognition") &&
             mode != QStringLiteral("recognition-bottom") && mode != QStringLiteral("tutorial-bottom") &&
             mode != QStringLiteral("tutorial-keys") && mode != QStringLiteral("tutorial-help") &&
             mode != QStringLiteral("tutorial") && mode != QStringLiteral("notice")) {
@@ -739,6 +745,13 @@ public:
         // Content changes can post a second layout request to the outer footer.
         // Settle that request before rendering the diagnostic window.
         QApplication::processEvents();
+        if (mode == QStringLiteral("workspace-sidebar")) {
+            // Weapon switching posts a content-fit request. Apply the narrow
+            // diagnostic canvas only after that ordinary request has settled.
+            resize(640, 720);
+            QApplication::processEvents();
+            QApplication::processEvents();
+        }
         if (mode == QStringLiteral("recognition-bottom")) {
             if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs")))
                 if (auto* scroll = qobject_cast<QScrollArea*>(tabs->currentWidget()))
@@ -5561,6 +5574,7 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("recognition-bottom"), QStringLiteral("tutorial-bottom"),
                             QStringLiteral("tutorial-keys"), QStringLiteral("tutorial-help"), QStringLiteral("workspace-ui"),
                             QStringLiteral("first-start-ui"), QStringLiteral("workspace-sidebar-ui"),
+                            QStringLiteral("standalone-ui"),
                             QStringLiteral("pinned-menu-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),

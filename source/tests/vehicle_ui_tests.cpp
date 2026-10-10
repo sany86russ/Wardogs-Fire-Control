@@ -484,15 +484,38 @@ int main(int argc, char* argv[]) {
     check(workflow_steps && workflow_steps->text().contains(QStringLiteral("Ctrl+Alt+X")),
           "the main guide displays the actual edited base shortcut");
     if (settings_tabs) settings_tabs->setCurrentIndex(1);
-    check(base_hotkey && base_hotkey->isVisible() && backend_choice && backend_choice->isVisible() &&
-              coordinate_pattern && coordinate_pattern->isVisible(),
-          "advanced shortcuts, OCR and pattern controls remain available on the advanced tab");
+    QApplication::processEvents();
+    check(base_hotkey && base_hotkey->isVisible() &&
+              base_hotkey->keySequence().toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Alt+X") &&
+              backend_choice && !backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible(),
+          "the shortcuts page retains the edited key and keeps recognition controls on their own page");
+    if (settings_tabs) settings_tabs->setCurrentIndex(3);
+    QApplication::processEvents();
+    check(base_hotkey && !base_hotkey->isVisible() && backend_choice && backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible() && capture_delay &&
+              capture_delay->isVisible() && capture_delay->value() == 700 && automatic_chat && !automatic_chat->isChecked(),
+          "the recognition page retains the edited capture settings with the custom pattern collapsed");
+    if (pattern_details && coordinate_pattern) {
+        const auto current_pattern = coordinate_pattern->toPlainText();
+        pattern_details->click();
+        QApplication::processEvents();
+        check(pattern_details->isChecked() && coordinate_pattern->isVisible() &&
+                  coordinate_pattern->toPlainText() == current_pattern,
+              "the recognition disclosure exposes the existing editable coordinate pattern without changing it");
+    }
+    if (settings_tabs) settings_tabs->setCurrentIndex(2);
+    QApplication::processEvents();
     const auto* manual_adjust = settings_dialog.findChild<QPushButton*>(
         QStringLiteral("adjustGhostReticle"));
     auto* preset = settings_dialog.findChild<QComboBox*>(
         QStringLiteral("ghostReticlePreset"));
     check(manual_adjust && manual_adjust->text() == QStringLiteral("Настроить размер на экране"),
           "the size button clearly distinguishes manual adjustment");
+    check(manual_adjust && manual_adjust->isVisible() && preset && preset->isVisible() &&
+              backend_choice && !backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible(),
+          "the sight page exposes manual adjustment and presets without recognition fields");
     check(preset && preset->currentText().startsWith(QStringLiteral("Свой размер")),
           "a manually changed size is represented as a custom preset");
     const std::array<std::pair<QSize, int>, 4> expected_presets{{

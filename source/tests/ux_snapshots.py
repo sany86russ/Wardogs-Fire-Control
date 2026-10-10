@@ -24,6 +24,7 @@ MODES = (
     ('compact', '--compact-ui-snapshot'),
     ('first-start', '--first-start-ui-snapshot'),
     ('workspace-sidebar', '--workspace-sidebar-ui-snapshot'),
+    ('standalone', '--standalone-ui-snapshot'),
     ('tutorial', '--tutorial-ui-snapshot'),
     ('tutorial-keys', '--tutorial-keys-snapshot'),
     ('tutorial-help', '--tutorial-help-snapshot'),
@@ -43,7 +44,7 @@ SETTINGS_PAGES = {
     'recognition-reticle': (2, 'ghostReticlePreset'),
     'recognition': (3, 'ocrBackend'),
 }
-MAIN_MODES = {'ui', 'workspace', 'compact', 'first-start', 'workspace-sidebar'}
+MAIN_MODES = {'ui', 'workspace', 'compact', 'first-start', 'workspace-sidebar', 'standalone'}
 
 
 def cases(include_compact_2=False):
@@ -145,12 +146,28 @@ def verify_snapshot(path, language, scale, mode):
             named(name, visible=sidebar)
         integration = receipt.get('game_integration_enabled')
         check(type(integration) is bool, 'Manual/default state needs the recorded integration mode')
+        check(integration is (mode != 'standalone'),
+              'The fixture must actually exercise its requested automatic or standalone mode')
         if type(integration) is bool:
             for widget in named('manualControlsToggle', visible=True):
                 check(widget.get('checked') is (not integration),
                       'manualControlsToggle: automatic starts collapsed; standalone keeps manual input available')
             named('coordinatesGroup', visible=not integration)
             named('ocrGroup', visible=False)
+        if mode == 'standalone':
+            for name in ('baseInput', 'targetInput'):
+                for widget in named(name, visible=True):
+                    check(widget.get('type') == 'QLineEdit', f'{name}: real editable coordinates are required')
+                    check(bool(widget.get('text', '').strip() or widget.get('placeholderText', '').strip()),
+                          f'{name}: coordinates or their input guidance are missing')
+                    widget_surface(name, widget, minimum_foreground=10)
+            for name in ('manualBaseButton', 'manualTargetButton'):
+                for widget in named(name, visible=True):
+                    widget_surface(name, widget, minimum_foreground=10, meaningful_text=True)
+            for widget in named('nextStep', visible=True):
+                instruction = widget.get('text', '').casefold()
+                check(not any(hint in instruction for hint in ('alt+', 'mark coordinates', 'среднюю кнопку', 'middle mouse')),
+                      'Standalone guidance must not ask for a game capture shortcut or mouse trigger')
         for widget in named('sessionDetailsToggle', visible=True):
             check(widget.get('checked') is sidebar, 'Session disclosure state does not match the fixture')
         if sidebar:
