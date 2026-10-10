@@ -58,7 +58,7 @@ The **Positions and flight** button opens **target shifts**, **recent and named 
 
 Drag the mini card to a second monitor and drag its edges to resize it. Position, monitor and separate L81/SPH-2 sizes are saved automatically. The header buttons open controls, lock the card and return to the main window. **Right-click** also opens controls for opacity, the reticle and **Always on top**, which can be disabled on a second monitor.
 
-A locked card passes clicks to the game. The default unlock shortcut is **Ctrl+Alt+Q**; its menu shows the current shortcut. Map, height status and target remain below the values. Hover over a caption for model details; capture warnings remain visible.
+A locked card passes clicks to the game. The default unlock shortcut is **Ctrl+Alt+Q**; the card's header shows the current shortcut. Map, height status and target remain below the values. Hover over a caption for model details; capture warnings remain visible.
 
 ## Updates and saved data
 

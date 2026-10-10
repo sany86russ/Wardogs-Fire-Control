@@ -692,11 +692,6 @@ public:
                  mode == QStringLiteral("pinned-locked")) {
             enter_pinned_mode(); view = pinned_window_.get();
             if (mode == QStringLiteral("pinned-locked")) pinned_window_->set_locked(true);
-            if (mode == QStringLiteral("pinned-menu")) {
-                QContextMenuEvent event(QContextMenuEvent::Mouse, QPoint(20, 20), pinned_window_->mapToGlobal(QPoint(20, 20)));
-                QApplication::sendEvent(pinned_window_.get(), &event);
-                if (auto* menu = pinned_window_->findChild<QWidget*>(QStringLiteral("pinnedContextMenu"))) view = menu;
-            }
         }
         else if (mode == QStringLiteral("reticle")) {
             ghost_window_->begin_adjustment();
@@ -713,11 +708,6 @@ public:
                 enter_pinned_mode();
                 view = pinned_window_.get();
                 if (mode == QStringLiteral("vehicle-pinned-locked")) pinned_window_->set_locked(true);
-                if (mode == QStringLiteral("vehicle-pinned-menu")) {
-                    QContextMenuEvent event(QContextMenuEvent::Mouse, QPoint(20, 20), pinned_window_->mapToGlobal(QPoint(20, 20)));
-                    QApplication::sendEvent(pinned_window_.get(), &event);
-                    if (auto* menu = pinned_window_->findChild<QWidget*>(QStringLiteral("pinnedContextMenu"))) view = menu;
-                }
             } else if (mode == QStringLiteral("calibration")) {
                 calibration_toggle_->setChecked(true);
                 QApplication::processEvents();
@@ -809,6 +799,19 @@ public:
         }
         QApplication::processEvents();
         if (mode == QStringLiteral("fire-control")) QApplication::processEvents();
+        if (mode == QStringLiteral("pinned-menu") || mode == QStringLiteral("vehicle-pinned-menu")) {
+            // Settle the parent window's initial hide/show and activation first,
+            // then open the actual popup as a later user interaction does.
+            // QWidget::grab can render a hidden popup, so require live visibility.
+            QContextMenuEvent event(QContextMenuEvent::Mouse, QPoint(20, 20),
+                                   pinned_window_->mapToGlobal(QPoint(20, 20)));
+            QApplication::sendEvent(pinned_window_.get(), &event);
+            view = pinned_window_->findChild<QWidget*>(QStringLiteral("pinnedContextMenu"));
+            if (!view) return false;
+            QApplication::processEvents();
+            QApplication::processEvents();
+            if (!view->isVisible() || QApplication::activePopupWidget() != view) return false;
+        }
         const QFileInfo file(path);
         if (!QDir().mkpath(file.absolutePath())) return false;
         QJsonArray widgets;
@@ -1696,7 +1699,7 @@ public:
         const auto card_workflow = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus"));
         check("pinned_context_matches_confirmed_map_and_retains_real_terrain_limitations",
               vehicle_mode_ && map_confirmed_ && current_game_map_ == wardogs::GameMap::training && !terrain_map_ &&
-              card_context && card_context->text() == game_map_name(wardogs::GameMap::training) +
+              card_context && card_context->text() == wardogs::i18n::text(QStringLiteral("Стрельбище")) +
                   wardogs::i18n::text(QStringLiteral(" · без высот")) &&
               !terrain_assistance_->text().isEmpty() &&
               card_context->toolTip().contains(terrain_assistance_->text()) &&
@@ -3634,6 +3637,16 @@ private:
         return wardogs::i18n::text(QStringLiteral("Выберите текущую карту…"));
     }
 
+    static QString game_map_card_name(wardogs::GameMap map) {
+        // The selector explains height availability; the mini card has its own
+        // current height state and should name the map without duplicating it.
+        if (map == wardogs::GameMap::training)
+            return wardogs::i18n::text(QStringLiteral("Стрельбище"));
+        if (map == wardogs::GameMap::other)
+            return wardogs::i18n::text(QStringLiteral("Другая карта"));
+        return game_map_name(map);
+    }
+
     wardogs::GameMap selected_game_map() const {
         return static_cast<wardogs::GameMap>(terrain_selector_->currentData().toInt());
     }
@@ -4570,7 +4583,7 @@ private:
         const bool ready = map_confirmed_ && base_set_ && target_ &&
             !base_capture_pending_ && !ocr_hold_ &&
             (vehicle_mode_ ? arc.has_value() : mortar_mil_result_.has_value());
-        QString caption = map_confirmed_ ? game_map_name(current_game_map_)
+        QString caption = map_confirmed_ ? game_map_card_name(current_game_map_)
             : wardogs::i18n::text(QStringLiteral("Карта не подтверждена"));
         QStringList details;
         if (quick_state_) details.append(quick_state_->text());

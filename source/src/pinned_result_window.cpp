@@ -36,6 +36,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <utility>
 #include <vector>
@@ -218,6 +219,32 @@ QIcon reticle_icon(bool enabled) {
     return QIcon(QPixmap::fromImage(image));
 }
 
+QIcon settings_icon() {
+    QImage image(24, 24, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor(QStringLiteral("#c2cfdf")), 1.8,
+                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    QPainterPath gear;
+    constexpr double radians = 3.141592653589793 / 180.0;
+    constexpr double offsets[]{-14.0, -8.0, 8.0, 14.0};
+    constexpr double radii[]{7.5, 9.8, 9.8, 7.5};
+    for (int tooth = 0; tooth < 8; ++tooth)
+        for (int corner = 0; corner < 4; ++corner) {
+            const double angle = (tooth * 45.0 + offsets[corner]) * radians;
+            const QPointF point(12.0 + radii[corner] * std::cos(angle),
+                                12.0 + radii[corner] * std::sin(angle));
+            if (tooth == 0 && corner == 0) gear.moveTo(point);
+            else gear.lineTo(point);
+        }
+    gear.closeSubpath();
+    painter.drawPath(gear);
+    painter.drawEllipse(QPointF(12.0, 12.0), 3.0, 3.0);
+    return QIcon(QPixmap::fromImage(image));
+}
+
 }  // namespace
 
 PinnedResultWindow::PinnedResultWindow(std::function<void()> exit_callback,
@@ -299,7 +326,7 @@ PinnedResultWindow::PinnedResultWindow(
     header_lock_button_ = header_button(QStringLiteral("pinnedHeaderLockButton"));
     header_lock_button_->setCheckable(true);
     controls_button_ = header_button(QStringLiteral("pinnedControlsButton"));
-    controls_button_->setText(QStringLiteral("⋯"));
+    controls_button_->setIcon(settings_icon());
     header_return_button_ = header_button(QStringLiteral("pinnedHeaderReturnButton"));
     header_return_button_->setText(QStringLiteral("↩"));
     connect(header_lock_button_, &QToolButton::toggled, this,
