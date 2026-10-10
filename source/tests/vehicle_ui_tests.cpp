@@ -413,10 +413,12 @@ int main(int argc, char* argv[]) {
           "settings exposes seven configurable global hotkeys including game-mode exit");
     auto* settings_tabs = settings_dialog.findChild<QTabWidget*>(
         QStringLiteral("settingsTabs"));
-    check(settings_tabs && settings_tabs->count() == 2 &&
+    check(settings_tabs && settings_tabs->count() == 4 &&
               settings_tabs->tabText(0) == QStringLiteral("Основные") &&
-              settings_tabs->tabText(1) == QStringLiteral("Дополнительно"),
-          "the settings start with a compact main view and one advanced tab");
+              settings_tabs->tabText(1) == QStringLiteral("Клавиши") &&
+              settings_tabs->tabText(2) == QStringLiteral("Прицел") &&
+              settings_tabs->tabText(3) == QStringLiteral("Распознавание"),
+          "settings groups the main workflow, shortcuts, reticle and recognition into focused pages");
     auto* middle_mouse = settings_dialog.findChild<QCheckBox*>(
         QStringLiteral("middleMouseEnabled"));
     auto* capture_delay = settings_dialog.findChild<QSpinBox*>(
@@ -429,11 +431,28 @@ int main(int argc, char* argv[]) {
     auto* base_hotkey = settings_dialog.findChild<QKeySequenceEdit*>(QStringLiteral("baseHotkey"));
     auto* backend_choice = settings_dialog.findChild<QComboBox*>(QStringLiteral("ocrBackend"));
     auto* coordinate_pattern = settings_dialog.findChild<QPlainTextEdit*>(QStringLiteral("coordinatePattern"));
-    check(capture_delay && capture_delay->isVisible() && workflow_steps && workflow_steps->isVisible() &&
+    check(capture_delay && !capture_delay->isVisible() && workflow_steps && workflow_steps->isVisible() &&
               workflow_steps->text().contains(QStringLiteral("Alt+X")) &&
               base_hotkey && !base_hotkey->isVisible() && backend_choice && !backend_choice->isVisible() &&
-              coordinate_pattern && !coordinate_pattern->isVisible() && standalone && !standalone->isVisible(),
-          "the first settings view shows the workflow and delay while advanced controls stay hidden");
+              coordinate_pattern && !coordinate_pattern->isVisible() && standalone && standalone->isVisible() &&
+              middle_mouse && middle_mouse->isVisible(),
+          "the first settings view exposes the workflow and capture mode without advanced recognition controls");
+    auto* pattern_details = settings_dialog.findChild<QToolButton*>(QStringLiteral("coordinatePatternDetails"));
+    check(pattern_details && !pattern_details->isChecked(),
+          "custom coordinate patterns start collapsed instead of competing with ordinary recognition settings");
+    if (settings_tabs && pattern_details && coordinate_pattern && capture_delay) {
+        settings_tabs->setCurrentIndex(3);
+        QApplication::processEvents();
+        check(capture_delay->isVisible() && backend_choice->isVisible() && !coordinate_pattern->isVisible(),
+              "recognition settings expose the engine and retry delay while keeping the custom pattern secondary");
+        const auto previous_pattern = coordinate_pattern->toPlainText();
+        pattern_details->click();
+        QApplication::processEvents();
+        check(coordinate_pattern->isVisible() && coordinate_pattern->toPlainText() == previous_pattern,
+              "opening custom settings reveals the existing pattern without changing its value");
+        pattern_details->click();
+        settings_tabs->setCurrentIndex(0);
+    }
     check(automatic_chat && automatic_chat->isChecked(),
           "fresh profiles enable automatic coordinate search");
     automatic_chat->setChecked(false);
@@ -465,15 +484,38 @@ int main(int argc, char* argv[]) {
     check(workflow_steps && workflow_steps->text().contains(QStringLiteral("Ctrl+Alt+X")),
           "the main guide displays the actual edited base shortcut");
     if (settings_tabs) settings_tabs->setCurrentIndex(1);
-    check(base_hotkey && base_hotkey->isVisible() && backend_choice && backend_choice->isVisible() &&
-              coordinate_pattern && coordinate_pattern->isVisible(),
-          "advanced shortcuts, OCR and pattern controls remain available on the advanced tab");
+    QApplication::processEvents();
+    check(base_hotkey && base_hotkey->isVisible() &&
+              base_hotkey->keySequence().toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Alt+X") &&
+              backend_choice && !backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible(),
+          "the shortcuts page retains the edited key and keeps recognition controls on their own page");
+    if (settings_tabs) settings_tabs->setCurrentIndex(3);
+    QApplication::processEvents();
+    check(base_hotkey && !base_hotkey->isVisible() && backend_choice && backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible() && capture_delay &&
+              capture_delay->isVisible() && capture_delay->value() == 700 && automatic_chat && !automatic_chat->isChecked(),
+          "the recognition page retains the edited capture settings with the custom pattern collapsed");
+    if (pattern_details && coordinate_pattern) {
+        const auto current_pattern = coordinate_pattern->toPlainText();
+        pattern_details->click();
+        QApplication::processEvents();
+        check(pattern_details->isChecked() && coordinate_pattern->isVisible() &&
+                  coordinate_pattern->toPlainText() == current_pattern,
+              "the recognition disclosure exposes the existing editable coordinate pattern without changing it");
+    }
+    if (settings_tabs) settings_tabs->setCurrentIndex(2);
+    QApplication::processEvents();
     const auto* manual_adjust = settings_dialog.findChild<QPushButton*>(
         QStringLiteral("adjustGhostReticle"));
     auto* preset = settings_dialog.findChild<QComboBox*>(
         QStringLiteral("ghostReticlePreset"));
     check(manual_adjust && manual_adjust->text() == QStringLiteral("Настроить размер на экране"),
           "the size button clearly distinguishes manual adjustment");
+    check(manual_adjust && manual_adjust->isVisible() && preset && preset->isVisible() &&
+              backend_choice && !backend_choice->isVisible() &&
+              coordinate_pattern && !coordinate_pattern->isVisible(),
+          "the sight page exposes manual adjustment and presets without recognition fields");
     check(preset && preset->currentText().startsWith(QStringLiteral("Свой размер")),
           "a manually changed size is represented as a custom preset");
     const std::array<std::pair<QSize, int>, 4> expected_presets{{

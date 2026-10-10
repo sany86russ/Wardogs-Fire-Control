@@ -22,6 +22,7 @@
 #include "wardogs/ocr.hpp"
 #include "wardogs/settings.hpp"
 #include "wardogs/terrain_package.hpp"
+#include "wardogs/terrain_tasks.hpp"
 #include "wardogs/vehicle_ballistics.hpp"
 #include "wardogs/windows_ocr.hpp"
 
@@ -56,6 +57,7 @@
 #include <QSystemTrayIcon>
 #include <QTabWidget>
 #include <QTextBrowser>
+#include <QTextDocument>
 #include <QToolButton>
 #include <QWinEventNotifier>
 #include <QCloseEvent>
@@ -89,6 +91,7 @@
 #include <QStringList>
 #include <QStyleFactory>
 #include <QTimer>
+#include <mutex>
 #include <QTemporaryDir>
 #include <QListWidget>
 #include <QTreeView>
@@ -513,9 +516,8 @@ public:
             }
         }
         setWindowTitle(QStringLiteral("WARDOGS Fire Control"));
-        resize(1040, 790);
+        resize(880, 720);
         setMinimumSize(580, 320);
-        terrain_discovery_ = wardogs::discover_available_terrain_maps();
         build_ui();
         ghost_window_ = std::make_unique<GhostReticleWindow>(
             settings_.ghost_reticle, [this](int width) {
@@ -583,6 +585,8 @@ public:
         }
         wardogs::log_info("window.ready");
         wardogs::i18n::watch(this);
+        start_terrain_tasks();
+        start_ocr_warmup();
         if (!diagnostic_ && settings_.check_updates_on_start) {
             QTimer::singleShot(0, this, [this] {
                 if (!closing_ && settings_.check_updates_on_start && updates_) updates_->check(false);
@@ -591,17 +595,28 @@ public:
     }
 
     ~MainWindow() override {
-        closing_ = true;
+        stop_background_tasks();
         unregister_hotkeys();
         mouse_listener_.stop();
-        if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
         delete unlock_notifier_;
         delete show_notifier_;
         if (unlock_event_) CloseHandle(unlock_event_);
         if (show_event_) CloseHandle(show_event_);
     }
 
+    void stop_background_tasks() {
+        closing_ = true;
+        if (terrain_tasks_) terrain_tasks_->stop();
+        if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
+        if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
+    }
+
     bool export_snapshot(const QString& mode, const QString& path) {
+        if (mode == QStringLiteral("standalone")) {
+            settings_.game_integration_enabled = false;
+            update_action_labels();
+            manual_toggle_->setChecked(true);
+        }
         if (mode == QStringLiteral("selection")) {
             const QFileInfo file(path);
             if (!QDir().mkpath(file.absolutePath()) || !selector_.begin([](auto, auto) {})) return false;
@@ -618,8 +633,10 @@ public:
             const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
             return rendered && written;
         }
-        if (mode != QStringLiteral("ui") && mode != QStringLiteral("settings") && mode != QStringLiteral("recognition") &&
+        if (mode != QStringLiteral("ui") && mode != QStringLiteral("first-start") && mode != QStringLiteral("standalone") &&
+            mode != QStringLiteral("settings") && mode != QStringLiteral("recognition") &&
             mode != QStringLiteral("recognition-bottom") && mode != QStringLiteral("tutorial-bottom") &&
+            mode != QStringLiteral("tutorial-keys") && mode != QStringLiteral("tutorial-help") &&
             mode != QStringLiteral("tutorial") && mode != QStringLiteral("notice")) {
             terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
             base_input_->setText(QStringLiteral("80 80"));
@@ -633,9 +650,15 @@ public:
         if (mode == QStringLiteral("settings") || mode.startsWith(QStringLiteral("recognition"))) {
             dialog = std::make_unique<SettingsDialog>(settings_);
             if (mode.startsWith(QStringLiteral("recognition")))
-                if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs"))) tabs->setCurrentIndex(1);
+                if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs")))
+                    tabs->setCurrentIndex(mode == QStringLiteral("recognition-hotkeys") ? 1 :
+                        mode == QStringLiteral("recognition-reticle") ? 2 : 3);
         }
-        else if (mode == QStringLiteral("tutorial") || mode == QStringLiteral("tutorial-bottom")) dialog.reset(make_help_dialog(false));
+        else if (mode.startsWith(QStringLiteral("tutorial"))) {
+            dialog.reset(make_help_dialog(false));
+            if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("helpTabs")))
+                tabs->setCurrentIndex(mode == QStringLiteral("tutorial-keys") ? 1 : mode == QStringLiteral("tutorial-help") ? 2 : 0);
+        }
         else if (mode == QStringLiteral("notice")) dialog.reset(make_help_dialog(true));
         else if (mode.startsWith(QStringLiteral("planning"))) {
             planning_snapshot_data = std::make_unique<QTemporaryDir>();
@@ -652,6 +675,8 @@ public:
                 else if (mode == QStringLiteral("planning-times")) tabs->setCurrentIndex(2);
                 else if (mode == QStringLiteral("planning-profiles")) tabs->setCurrentIndex(3);
             }
+            if (mode == QStringLiteral("planning-details"))
+                if (auto* details = dialog->findChild<QToolButton*>(QStringLiteral("planningResultDetails"))) details->setChecked(true);
         }
         else if (mode == QStringLiteral("folder")) {
             dialog = make_terrain_folder_dialog();
@@ -697,6 +722,12 @@ public:
             OcrMessage context;
             capture_impact_context(context);
             if (!record_continuous_impact({80.2,101.7}, QStringLiteral("fixture"), *context.impact_firing)) return false;
+            fire_details_toggle_->setChecked(true);
+        }
+        else if (mode == QStringLiteral("workspace") || mode == QStringLiteral("workspace-sidebar")) {
+            if (!vehicle_mode_) toggle_mode();
+            accept_manual_target({80,102});
+            if (mode == QStringLiteral("workspace-sidebar")) { session_toggle_->setChecked(true); resize(640, 720); }
         }
         else if (mode == QStringLiteral("review") || mode == QStringLiteral("review-bottom")) {
             OcrMessage message;
@@ -706,7 +737,7 @@ public:
             message.assessment = wardogs::assess_ocr_result({message.text, 0.92F, 0.62F});
             finish_ocr(std::move(message));
         }
-        else if (mode == QStringLiteral("compact")) resize(640, 500);
+        else if (mode == QStringLiteral("compact") || mode == QStringLiteral("first-start")) resize(640, 500);
         else if (mode == QStringLiteral("manual") || mode == QStringLiteral("manual-bottom")) manual_toggle_->setChecked(true);
         if (dialog) { view = dialog.get(); view->show(); }
         view->show();
@@ -714,6 +745,20 @@ public:
         // Content changes can post a second layout request to the outer footer.
         // Settle that request before rendering the diagnostic window.
         QApplication::processEvents();
+        if (mode == QStringLiteral("workspace") ||
+            mode == QStringLiteral("workspace-sidebar") || mode == QStringLiteral("standalone") ||
+            mode == QStringLiteral("compact") || mode == QStringLiteral("first-start")) {
+            // Scale factors change the runner's logical desktop size. Hold
+            // the requested diagnostic viewport constant across actual DPIs,
+            // after ordinary screen fitting has finished. This affects only
+            // snapshots; the real application still fits the user's display.
+            const bool narrow = mode == QStringLiteral("workspace-sidebar") ||
+                mode == QStringLiteral("compact") || mode == QStringLiteral("first-start");
+            setFixedSize(narrow ? 640 : 880,
+                mode == QStringLiteral("compact") || mode == QStringLiteral("first-start") ? 500 : 720);
+            QApplication::processEvents();
+            QApplication::processEvents();
+        }
         if (mode == QStringLiteral("recognition-bottom")) {
             if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs")))
                 if (auto* scroll = qobject_cast<QScrollArea*>(tabs->currentWidget()))
@@ -732,6 +777,12 @@ public:
         } else if (mode == QStringLiteral("tutorial-bottom")) {
             if (auto* browser = dialog->findChild<QTextBrowser*>(QStringLiteral("helpText")))
                 browser->verticalScrollBar()->setValue(browser->verticalScrollBar()->maximum());
+        } else if (mode == QStringLiteral("planning-details")) {
+            auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("planningTabs"));
+            auto* scroll = tabs ? qobject_cast<QScrollArea*>(tabs->currentWidget()) : nullptr;
+            auto* result = dialog->findChild<QWidget*>(QStringLiteral("flightTimeResult"));
+            if (!scroll || !result) return false;
+            scroll->ensureWidgetVisible(result, 0, 10);
         } else if (mode == QStringLiteral("planning-times")) {
             // This page can scroll after its guidance text wraps. Capture the
             // actual measurement table, which is the surface this mode verifies;
@@ -790,17 +841,22 @@ public:
                 for (int index = 0; index < combo->count(); ++index) values.append(combo->itemText(index));
                 item.insert(QStringLiteral("items"), values);
             }
+            if (auto* button = qobject_cast<QAbstractButton*>(widget)) item.insert(QStringLiteral("checked"), button->isChecked());
             if (auto* tabs = qobject_cast<QTabWidget*>(widget)) {
                 QJsonArray values;
                 for (int index = 0; index < tabs->count(); ++index) values.append(tabs->tabText(index));
                 item.insert(QStringLiteral("tabs"), values);
+                item.insert(QStringLiteral("count"), tabs->count());
+                item.insert(QStringLiteral("currentIndex"), tabs->currentIndex());
             }
             widgets.append(item);
         }
         QSaveFile receipt(file.absoluteFilePath() + QStringLiteral(".json"));
         const auto bytes = QJsonDocument(QJsonObject{
             {QStringLiteral("language"), settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru")},
-            {QStringLiteral("mode"), mode}, {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
+            {QStringLiteral("mode"), mode}, {QStringLiteral("game_integration_enabled"), settings_.game_integration_enabled},
+            {QStringLiteral("map_confirmed"), map_confirmed_},
+            {QStringLiteral("snapshot_dpr"), view->devicePixelRatioF()},
             {QStringLiteral("snapshot_width"), view->width()}, {QStringLiteral("snapshot_height"), view->height()},
             {QStringLiteral("widgets"), widgets}}).toJson();
         const bool written = receipt.open(QIODevice::WriteOnly) && receipt.write(bytes) == bytes.size() && receipt.commit();
@@ -840,6 +896,93 @@ public:
             QApplication::processEvents();
         };
         check("first_launch_has_no_fake_base", !base_set_ && !target_ && distance_->text() == QStringLiteral("—"));
+        check("default_workspace_has_one_next_action_and_three_steps", next_step_ && !next_step_->text().isEmpty() &&
+            std::all_of(workflow_steps_.begin(), workflow_steps_.end(), [](const auto* step) { return step && !step->text().isEmpty(); }));
+        check("secondary_session_and_ranging_details_start_collapsed", side_panel_->isHidden() && fire_details_->isHidden());
+        session_toggle_->setChecked(true);
+        check("session_details_remain_available_by_disclosure", !side_panel_->isHidden() && history_selector_ && direction_plot_ && readiness_);
+        session_toggle_->setChecked(false);
+        fire_details_toggle_->setChecked(true);
+        check("ranging_details_remain_available_by_disclosure", !fire_details_->isHidden() && fire_control_summary_ && fire_control_reset_);
+        fire_details_toggle_->setChecked(false);
+        {
+            const auto generation = terrain_generation_;
+            terrain_loading_ = true;
+            auto stale = std::make_shared<wardogs::TerrainTaskResult>();
+            stale->request = {generation + 1, wardogs::TerrainTaskKind::load_map, "bakurani", std::nullopt};
+            finish_terrain_task(stale);
+            check("terrain_old_generation_cannot_complete_current_map", terrain_loading_ && !map_confirmed_ && !terrain_);
+            stale->request.generation = generation;
+            finish_terrain_task(stale);
+            check("terrain_wrong_map_cannot_complete_current_generation", terrain_loading_ && !map_confirmed_ && !terrain_);
+            terrain_loading_ = false;
+        }
+        {
+            enter_game_after_terrain_ = true;
+            std::unique_ptr<QDialog> help(make_help_dialog(false));
+            auto* tabs = help->findChild<QTabWidget*>(QStringLiteral("helpTabs"));
+            auto* keys = help->findChild<QTextBrowser*>(QStringLiteral("helpKeys"));
+            check("help_is_split_into_start_keys_and_troubleshooting", tabs && tabs->count() == 3 &&
+                keys && keys->toPlainText().contains(qtext(settings_.base_hotkey)));
+            check("opening_help_cancels_pending_game_entry", !enter_game_after_terrain_);
+        }
+        {
+            const auto original_settings = settings_;
+            const auto original_base = base_;
+            const auto original_target = target_;
+            const auto original_input_epoch = input_epoch_;
+            const auto original_base_input = base_input_->text();
+            const auto original_target_input = target_input_->text();
+            settings_.middle_mouse_enabled = false;
+            settings_.target_hotkey = L"Ctrl+Alt+T";
+            settings_.game_integration_enabled = true;
+            {
+                std::unique_ptr<QDialog> help(make_help_dialog(false));
+                auto* start = help->findChild<QTextBrowser*>(QStringLiteral("helpText"));
+                auto* keys = help->findChild<QTextBrowser*>(QStringLiteral("helpKeys"));
+                check("help_without_middle_mouse_uses_current_target_key", start && keys &&
+                      start->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      start->toPlainText().contains(QStringLiteral("Mark Coordinates")) &&
+                      keys->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      keys->toPlainText().contains(wardogs::i18n::text(QStringLiteral("Выключено"))));
+            }
+            settings_.game_integration_enabled = false;
+            {
+                std::unique_ptr<QDialog> help(make_help_dialog(false));
+                auto* start = help->findChild<QTextBrowser*>(QStringLiteral("helpText"));
+                auto* keys = help->findChild<QTextBrowser*>(QStringLiteral("helpKeys"));
+                const auto capture_disabled = wardogs::i18n::text(QStringLiteral(
+                    "Игровой захват, глобальные клавиши и окна поверх игры выключены."));
+                const auto capture_setup = wardogs::i18n::text(QStringLiteral(
+                    "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."));
+                check("standalone_help_starts_with_manual_input_and_exact_capture_setting", start && keys &&
+                      start->toPlainText().contains(capture_disabled) &&
+                      start->toPlainText().contains(wardogs::i18n::text(QStringLiteral("Ввод вручную"))) &&
+                      start->toPlainText().contains(QStringLiteral("12.34 56.78")) &&
+                      start->toPlainText().contains(capture_setup) &&
+                      !start->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      keys->toPlainText().contains(capture_disabled));
+                if (start && keys) {
+                    const auto other_language = wardogs::i18n::language() == wardogs::UiLanguage::russian
+                        ? wardogs::UiLanguage::english : wardogs::UiLanguage::russian;
+                    wardogs::i18n::set_language(other_language);
+                    check("standalone_help_html_switches_language_without_losing_bound_parameters",
+                          start->toPlainText().contains(wardogs::i18n::text(QStringLiteral(
+                              "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."))) &&
+                          keys->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                          keys->toPlainText().contains(wardogs::i18n::text(QStringLiteral(
+                              "Игровой захват, глобальные клавиши и окна поверх игры выключены."))));
+                    wardogs::i18n::set_language(original_settings.language);
+                }
+            }
+            settings_ = original_settings;
+            check("help_profile_examples_preserve_session_and_entered_coordinates",
+                  base_ == original_base && target_ == original_target && input_epoch_ == original_input_epoch &&
+                  base_input_->text() == original_base_input && target_input_->text() == original_target_input &&
+                  settings_.middle_mouse_enabled == original_settings.middle_mouse_enabled &&
+                  settings_.game_integration_enabled == original_settings.game_integration_enabled &&
+                  settings_.target_hotkey == original_settings.target_hotkey);
+        }
         check("diagnostic_previews_do_not_construct_network_updates", !updates_ &&
               !findChild<QPushButton*>(QStringLiteral("checkUpdatesButton"))->isEnabled());
         check("game_map_must_be_explicitly_confirmed_for_new_session", !map_confirmed_ &&
@@ -851,7 +994,8 @@ public:
         terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
         check("explicit_training_map_is_ready_and_reports_absent_heights", map_confirmed_ &&
               current_game_map_ == wardogs::GameMap::training && !terrain_ &&
-              terrain_summary_->text().contains(wardogs::i18n::text(QStringLiteral("Рельеф не учтён"))));
+              terrain_summary_->text().contains(wardogs::i18n::text(QStringLiteral("без высот"))) &&
+              terrain_summary_->toolTip().contains(wardogs::i18n::text(QStringLiteral("Рельеф не учтён"))));
         check("default_profile_is_ready_for_quick_game", settings_.game_integration_enabled &&
               settings_.middle_mouse_enabled && settings_.automatic_chat_region &&
               settings_.base_hotkey == L"Alt+X" && settings_.exit_game_mode_hotkey == L"Alt+C" &&
@@ -865,7 +1009,9 @@ public:
         click("gameButton");
         check("explicit_confirm_and_game_click_confirms_selected_map_and_hides_main",
               map_confirmed_ && game_mode_ && pinned_mode_ && !isVisible() && pinned_window_->isVisible());
+        enter_game_after_terrain_ = true;
         exit_game_mode();
+        check("explicit_return_cancels_pending_game_entry", !enter_game_after_terrain_);
         check("return_restores_main_and_simple_game_label", isVisible() && !game_mode_ &&
               game_button_->text() == wardogs::i18n::text(QStringLiteral("В игру")));
         check("manual_controls_are_optional", manual_toggle_ && !manual_toggle_->isChecked() &&
@@ -1002,6 +1148,8 @@ public:
         check("new_uncertain_gun_blocks_map_without_discarding_review", pending_ocr_ &&
               pending_ocr_->action == OcrAction::base && base_capture_pending_ &&
               input_epoch_ == held_base_epoch && base_ == old_base && target_ == old_target);
+        check("uncertain_gun_next_step_offers_review_instead_of_waiting", next_step_->text() ==
+              wardogs::i18n::text(QStringLiteral("Проверьте распознанные координаты или повторите захват.")));
         cancel_ocr_review();
         check("rejecting_new_gun_restores_previous_gun_and_solution", !base_capture_pending_ &&
               !ocr_hold_ && base_ == old_base && target_ == old_target && mortar_mil_result_);
@@ -1935,6 +2083,14 @@ protected:
 
     void resizeEvent(QResizeEvent* event) override {
         QMainWindow::resizeEvent(event);
+        if (tools_layout_) {
+            const bool narrow = width() < 780;
+            for (auto* button : {mode_button_, game_button_, pin_button_, ghost_button_}) tools_layout_->removeWidget(button);
+            tools_layout_->addWidget(mode_button_, 0, 0);
+            tools_layout_->addWidget(game_button_, 0, 1);
+            tools_layout_->addWidget(pin_button_, narrow ? 1 : 0, narrow ? 0 : 2);
+            tools_layout_->addWidget(ghost_button_, narrow ? 1 : 0, narrow ? 1 : 3);
+        }
         if (workspace_layout_) {
             const bool compact = width() < 900;
             workspace_layout_->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
@@ -1975,6 +2131,13 @@ private:
     std::optional<std::chrono::steady_clock::time_point> map_requested_at_;
     bool ocr_hold_{};
     wardogs::TerrainDiscovery terrain_discovery_;
+    std::unique_ptr<wardogs::TerrainTaskRunner> terrain_tasks_;
+    std::uint64_t terrain_generation_{};
+    bool terrain_loading_{};
+    bool terrain_importing_{};
+    bool enter_game_after_terrain_{};
+    bool terrain_had_data_{};
+    bool terrain_different_map_{};
     std::unique_ptr<wardogs::TerrainPackage> terrain_;
     std::optional<wardogs::InstalledTerrainMap> terrain_map_;
     wardogs::GameMap current_game_map_{wardogs::GameMap::unselected};
@@ -1984,6 +2147,10 @@ private:
     double last_impact_consistency_{};
     std::array<std::pair<double,double>, 2> active_aim_offsets_{};
     QLabel *fire_control_summary_{}, *terrain_assistance_{};
+    QLabel *fire_control_compact_{}, *next_step_{};
+    std::array<QLabel*, 3> workflow_steps_{};
+    QToolButton *session_toggle_{}, *fire_details_toggle_{};
+    QWidget* fire_details_{};
     QPushButton *fire_control_reset_{};
     struct AnalysisCache {
         wardogs::Point base, target;
@@ -2001,6 +2168,8 @@ private:
     std::optional<wardogs::CaptureRegion> region_;
     std::wstring last_capture_monitor_;
     std::unique_ptr<wardogs::RapidOcr> rapid_;
+    std::mutex rapid_initialization_;
+    std::jthread rapid_warmup_;
     std::unique_ptr<wardogs::WindowsOcr> windows_;
     wardogs::GlobalHotkeyListener hotkey_listener_;
     wardogs::GlobalMouseListener mouse_listener_;
@@ -2023,6 +2192,7 @@ private:
     bool ghost_enabled_{};
     bool failure_state_{};
     QFrame* app_frame_{};
+    QGridLayout* tools_layout_{};
     QBoxLayout* workspace_layout_{};
     QWidget* side_panel_{};
     DirectionPlot* direction_plot_{};
@@ -2055,7 +2225,7 @@ private:
 
     bool require_game_integration() {
         if (diagnostic_ || settings_.game_integration_enabled) return true;
-        set_status(wardogs::i18n::text(QStringLiteral("Сейчас работает отдельный калькулятор. Захват и окна поверх игры включаются в настройках → «В игре». Разрешение BULKHEAD не подтверждено.")), true);
+        set_status(wardogs::i18n::text(QStringLiteral("Включите захват: Настройки → Основные → отключите «Только ручной ввод». Разрешение BULKHEAD не подтверждено.")), true);
         return false;
     }
 
@@ -2168,6 +2338,7 @@ private:
         const bool ready = map_confirmed_ && base_set_ && target_ && arc &&
                            !base_capture_pending_ && !ocr_hold_;
         fire_control_reset_->setEnabled(has_calibration_data());
+        bool correction_provisional = false;
         QString text;
         if (!ready) text = wardogs::i18n::text(QStringLiteral("Подтвердите карту, задайте орудие и цель. Пристрелка появится после первого наблюдения попадания."));
         else {
@@ -2189,6 +2360,7 @@ private:
             }
             if (continuous_calibration_) {
                 const auto assessment = continuous_calibration_->assess(*target_, *arc, target_height_delta(*target_));
+                correction_provisional = assessment.local_observation_count > 0 && assessment.provisional;
                 text += wardogs::i18n::text(QStringLiteral("\nРядом с целью: %1 наблюдений · учтено: %2."))
                     .arg(assessment.local_observation_count).arg(assessment.accepted_observation_count);
                 if (assessment.local_observation_count > 0)
@@ -2207,6 +2379,21 @@ private:
             }
         }
         fire_control_summary_->setText(text);
+        if (fire_control_compact_) {
+            QString compact = wardogs::i18n::text(QStringLiteral("Поправка необязательна · попадание: %1")).arg(qtext(settings_.impact_hotkey));
+            if (ready && last_impact_feedback_ && last_impact_feedback_->target == *target_ && last_impact_feedback_->arc == *arc) {
+                const auto& feedback = *last_impact_feedback_;
+                compact = wardogs::i18n::text(QStringLiteral("Промах %1 м · поправка уже учтена")).arg(feedback.miss_m, 0, 'f', 0);
+                const auto [azimuth, mil] = active_aim_offsets_[*arc == wardogs::Arc::low ? 0U : 1U];
+                compact += wardogs::i18n::text(QStringLiteral("\nАзимут %1° · MIL %2")).arg(azimuth, 0, 'f', 1).arg(mil, 0, 'f', 1);
+                if (last_impact_consistency_ < 0.35)
+                    compact += wardogs::i18n::text(QStringLiteral(" · наблюдения расходятся"));
+                else if (correction_provisional)
+                    compact += wardogs::i18n::text(QStringLiteral(" · предварительно"));
+            }
+            fire_control_compact_->setText(compact);
+            fire_control_compact_->setToolTip(text);
+        }
         terrain_assistance_->clear();
         if (!ready) return;
         if (!terrain_) {
@@ -2269,6 +2456,40 @@ private:
                                              : wardogs::i18n::text(QStringLiteral("✓ Орудие: автопоиск в чате"));
         const bool guidance_ready = map_confirmed_ && base_set_ && !base_capture_pending_ && !ocr_hold_ &&
             (vehicle_mode_ ? low_result_.has_value() || high_result_.has_value() : mortar_mil_result_.has_value());
+        const std::array<bool, 3> complete{map_confirmed_, base_set_ && !base_capture_pending_, guidance_ready};
+        const std::array<QString, 3> labels{wardogs::i18n::text(QStringLiteral("Карта")),
+            wardogs::i18n::text(QStringLiteral("Орудие")), wardogs::i18n::text(QStringLiteral("Цель"))};
+        for (std::size_t index = 0; index < workflow_steps_.size(); ++index) {
+            if (auto* step = workflow_steps_[index]) {
+                step->setText((complete[index] ? QStringLiteral("✓ ") : QString::number(index + 1) + QStringLiteral(" · ")) + labels[index]);
+                if (step->property("complete").toBool() != complete[index]) {
+                    step->setProperty("complete", complete[index]);
+                    step->style()->unpolish(step); step->style()->polish(step);
+                }
+            }
+        }
+        if (next_step_) {
+            QString next;
+            if (terrain_loading_) next = wardogs::i18n::text(QStringLiteral("Проверяю карту… Окно остаётся доступным."));
+            else if (!map_confirmed_) next = wardogs::i18n::text(QStringLiteral("Выберите карту текущего матча и подтвердите её."));
+            else if (busy_) next = wardogs::i18n::text(QStringLiteral("Считываю координаты…"));
+            else if (ocr_hold_ || pending_ocr_) next = wardogs::i18n::text(QStringLiteral("Проверьте распознанные координаты или повторите захват."));
+            else if (base_capture_pending_) next = wardogs::i18n::text(QStringLiteral("Повторите захват орудия: %1. Прежняя наводка скрыта.")).arg(qtext(settings_.base_hotkey));
+            else if (!base_set_) next = settings_.game_integration_enabled
+                ? wardogs::i18n::text(QStringLiteral("M → ПКМ у орудия → Mark Coordinates → %1")).arg(qtext(settings_.base_hotkey))
+                : wardogs::i18n::text(QStringLiteral("Введите координаты орудия в блоке ниже."));
+            else if (!target_) next = settings_.game_integration_enabled
+                ? (settings_.middle_mouse_enabled
+                    ? wardogs::i18n::text(QStringLiteral("На карте игры нажмите среднюю кнопку у цели."))
+                    : wardogs::i18n::text(QStringLiteral("Захватите цель: %1. Или откройте «Ввод вручную».")).arg(qtext(settings_.target_hotkey)))
+                : wardogs::i18n::text(QStringLiteral("Задайте координаты цели. Enter — рассчитать."));
+            else next = guidance_ready ? wardogs::i18n::text(QStringLiteral("Наводка готова. Установите азимут и MIL в игре."))
+                : wardogs::i18n::text(QStringLiteral("Для этой цели нет наводки. Проверьте дальность и траекторию."));
+            if (!recent_history_error_.isEmpty()) next += QStringLiteral("\n") +
+                wardogs::i18n::text(QStringLiteral("История не сохранена: ")) + wardogs::i18n::text(recent_history_error_);
+            next_step_->setText(next);
+            next_step_->setToolTip(quick_state_->text());
+        }
         if (quick_guide_) quick_guide_->setVisible(!guidance_ready);
         readiness_->setText(wardogs::i18n::text(QStringLiteral("%1 Карта подтверждена\n%2 Орудие задано\n%3\n%4 Цель рассчитана"))
             .arg(map_confirmed_ ? QStringLiteral("✓") : QStringLiteral("○"))
@@ -2434,7 +2655,11 @@ private:
                 return;
             }
             on_terrain_changed();
-            if (!map_confirmed_) { terrain_selector_->setFocus(); return; }
+            if (!map_confirmed_) {
+                enter_game_after_terrain_ = terrain_loading_;
+                terrain_selector_->setFocus();
+                return;
+            }
         }
         game_mode_ = true;
         try { if (!mouse_listener_.active()) register_mouse_trigger(); }
@@ -2456,6 +2681,7 @@ private:
     }
 
     void exit_game_mode() {
+        enter_game_after_terrain_ = false;
         game_mode_ = false;
         advance_input_epoch(true);
         if (mouse_timer_) mouse_timer_->stop();
@@ -2472,16 +2698,32 @@ private:
     }
 
     QDialog* make_help_dialog(bool notices) {
+        enter_game_after_terrain_ = false;
         auto* dialog = new QDialog(this);
         dialog->setObjectName(notices ? QStringLiteral("noticeDialog") : QStringLiteral("tutorialDialog"));
         dialog->setWindowTitle(notices ? wardogs::i18n::text(QStringLiteral("Лицензии и источники")) : wardogs::i18n::text(QStringLiteral("Как пользоваться WARDOGS Fire Control")));
-        dialog->resize(660, 580);
+        dialog->resize(680, 570);
         auto* layout = new QVBoxLayout(dialog);
         layout->setContentsMargins(24, 24, 24, 20);
         auto* browser = new QTextBrowser;
         browser->setOpenExternalLinks(true);
         browser->setObjectName(QStringLiteral("helpText"));
         browser->setStyleSheet(QStringLiteral("QTextBrowser { background:#111b28; border:0; padding:12px; }"));
+        browser->document()->setDefaultStyleSheet(QStringLiteral(
+            "body { color:#dbe5ef; font-size:14px; } h2 { color:#edf4ff; font-size:24px; } "
+            "h3 { color:#63d8c5; font-size:17px; margin-top:20px; } p { margin-top:8px; margin-bottom:14px; } "
+            "a { color:#63d8c5; } td { padding:10px; }"));
+        const auto capture_setup = wardogs::i18n::text(QStringLiteral(
+            "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."));
+        const auto capture_disabled = wardogs::i18n::text(QStringLiteral(
+            "Игровой захват, глобальные клавиши и окна поверх игры выключены."));
+        const auto target_step = settings_.middle_mouse_enabled
+            ? wardogs::i18n::text(QStringLiteral("Нажмите <b>среднюю кнопку мыши</b> у цели на карте. Держите курсор на месте до расчёта."))
+            : settings_.automatic_chat_region
+                ? wardogs::i18n::text(QStringLiteral("В игре: <b>M → ПКМ у цели → Mark Coordinates → %1</b>. Средняя кнопка выключена."))
+                      .arg(qtext(settings_.target_hotkey))
+                : wardogs::i18n::text(QStringLiteral("Покажите X/Y цели в своей области и нажмите <b>%1</b>. Если область ещё не выбрана, выделите строку координат по запросу. Средняя кнопка выключена."))
+                      .arg(qtext(settings_.target_hotkey));
         const QString content = notices
             ? wardogs::i18n::text(QStringLiteral("<h2>Лицензии и источники</h2><p>Основной код: Rico217 / Ricoz217, MIT.<br>Доработка и интерфейс: SoNiX.</p>"
                 "<p>Qt 6: LGPL v3 / GPL v3. ONNX Runtime: MIT. PaddleOCR: Apache 2.0. Zstandard: BSD / GPL v2.</p>"
@@ -2489,21 +2731,64 @@ private:
                 "<p>Рельеф: данные сообщества Apollyon, уведомление TERRAIN_DATA_NOTICE.md. Они не перелицензируются MIT.</p>"
                 "<p>Неофициальный инструмент для игры WARDOGS. Не связан с BULKHEAD.</p>"
                 "<p><a href='https://github.com/Ricoz217/WarDogs_Distance_Calculator'>Исходный проект</a></p>"))
-            : wardogs::i18n::text(QStringLiteral("<h2>Три шага до расчёта</h2>"
-                "<p><b>1. Запустите программу и подтвердите карту игры вверху окна.</b> Для стрельбища выберите «Стрельбище · высот нет». L81 выбран по умолчанию; SPH-2 можно выбрать кнопкой орудия. Затем вернитесь в WARDOGS.</p>"
-                "<p><b>2. На карте M нажмите ПКМ у своего орудия → Mark Coordinates → %1.</b> Пара в поле чата задаст орудие автоматически. Отправлять текст и выделять область не нужно. Мини-карточка подтвердит координаты.</p>"
-                "<p><b>3. Ставьте цели средней кнопкой на карте.</b> Удерживайте курсор неподвижно: после появления подписей программа находит X/Y возле курсора и подтверждает их по двум отдельным кадрам. В чат цель отправлять не нужно. Возврат к основному окну — <b>%2</b>.</p>"
-                "<p>При перемещении орудия повторите шаг 2. Если подпись обрезана или распознавание расходится, прежняя наводка скрывается: наведите курсор на цель и повторите среднюю кнопку. Если подписи закрыты, используйте M → ПКМ на цели → Отметить координаты → клавишу захвата цели (по умолчанию Alt+T). Проверка вручную доступна для сложного захвата.</p>"
-                "<h3>Ручной ввод и настройки</h3><p>Раскройте «Ручной ввод и диагностика» для координат, вставки текста и выбора собственной области. Форматы: <b>x12.34, y56.78</b> или <b>12.34 56.78</b>; точка (0, 0) разрешена. В настройках «Дополнительно» находятся клавиши, OCR, прицел и отдельный режим калькулятора. Блокировка карточки снимается через <b>%3</b>.</p>"
-                "<h3>Точность</h3><p>Одна единица карты равна 100 м. Север — 0°, восток — 90°. MIL берётся из игровых таблиц; вне табличной дальности он не выдаётся. Если пакет высот карты не установлен, рельеф не учтён. Поправка высоты по установленному пакету приближённая.</p>"
-                "<h3>SPH-2</h3><p><b>%4</b> выбирает траекторию; выбранная отмечена галочкой. Можно стрелять сразу по указанным азимуту и MIL. Если нужен учёт промаха, наведите курсор на фактическое попадание на карте и нажмите <b>%5</b>. Это необязательно; цель сохраняется. Первый принятый промах уточняет ту же траекторию рядом с целью. По одной точке программа не определяет общий наклон машины.</p>"
-                "<p>Запишите попадание до смены цели или траектории. Программа сохраняет предъявленную наводку при чтении и не отслеживает сам выстрел. После новой позиции орудия или смены рельефа поправки сбрасываются. Основное расстояние — до цели; табличный эквивалент наводки отмечен приблизительным значением в подсказке.</p>"
-                "<p>Захват работает только для окна WARDOGS на переднем плане. При недоступной мини-карточке в полноэкранном режиме используйте оконный режим без рамки. <a href='https://www.wardogs.com/enforcement'>Правила WARDOGS</a> доступны на сайте игры.</p>"))
+            : !settings_.game_integration_enabled
+                ? wardogs::i18n::text(QStringLiteral("<h2>Первый расчёт вручную</h2><p>%1</p>"
+                    "<h3>1 · Карта и орудие</h3><p>Выберите и подтвердите карту, затем выберите L81 или SPH-2 кнопкой орудия.</p>"
+                    "<h3>2 · Координаты</h3><p>Раскройте <b>Ввод вручную</b>. Введите позицию орудия и нажмите <b>Задать</b>. Затем введите цель и нажмите <b>Enter</b> или <b>Рассчитать</b>.<br>Пример пары X/Y: <b>12.34 56.78</b>.</p>"
+                    "<h3>3 · Наводка</h3><p>Установите показанные <b>азимут и MIL</b> в игре. Для SPH-2 используйте выбранную траекторию, отмеченную галочкой.</p>"
+                    "<p>%2</p>"))
+                      .arg(capture_disabled, capture_setup)
+                : wardogs::i18n::text(QStringLiteral("<h2>Первый расчёт</h2><p>%6</p>"
+                "<h3>1 · Карта и орудие</h3><p>Выберите карту текущего матча, подтвердите её и выберите L81 или SPH-2 кнопкой орудия.</p>"
+                "<h3>2 · Позиция орудия</h3><p>В игре: <b>M → ПКМ у орудия → Mark Coordinates → %1</b>.<br>Координаты читаются из поля чата. Отправлять сообщение не нужно.</p>"
+                "<h3>3 · Цель и наводка</h3><p>%5<br>Установите показанные <b>азимут и MIL</b> в игре. Возврат к окну: <b>%2</b>.</p>"
+                "<p><b>SPH-2:</b> %3 меняет траекторию. После выстрела %4 на точке попадания уточняет наводку. Это необязательно; цель остаётся прежней.</p>"))
                 .arg(qtext(settings_.base_hotkey), qtext(settings_.exit_game_mode_hotkey),
-                     qtext(settings_.pinned_card.unlock_hotkey), qtext(settings_.ghost_arc_hotkey),
-                     qtext(settings_.impact_hotkey));
+                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.impact_hotkey), target_step, capture_setup);
         wardogs::i18n::bind_html(browser, content);
-        layout->addWidget(browser, 1);
+        if (notices) layout->addWidget(browser, 1);
+        else {
+            auto* tabs = new QTabWidget;
+            tabs->setObjectName(QStringLiteral("helpTabs"));
+            tabs->addTab(browser, wardogs::i18n::text(QStringLiteral("Начало")));
+            auto* keys = new QTextBrowser;
+            keys->setObjectName(QStringLiteral("helpKeys"));
+            keys->document()->setDefaultStyleSheet(browser->document()->defaultStyleSheet());
+            wardogs::i18n::bind_html(keys, wardogs::i18n::text(QStringLiteral(
+                "<h2>Клавиши текущего профиля</h2><p>%8</p><table width='100%' cellspacing='5' cellpadding='10'>"
+                "<tr bgcolor='#152234'><td>Позиция орудия</td><td><b>%1</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Захват цели</td><td><b>%2</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Цель на карте</td><td><b>%7</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Попадание SPH-2</td><td><b>%3</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Траектория SPH-2</td><td><b>%4</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Вернуться к расчёту</td><td><b>%5</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Разблокировать карточку</td><td><b>%6</b></td></tr></table>"
+                "<p>Сочетания меняются в настройках → Клавиши.</p>"))
+                .arg(qtext(settings_.base_hotkey), qtext(settings_.target_hotkey), qtext(settings_.impact_hotkey),
+                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey),
+                     settings_.game_integration_enabled && settings_.middle_mouse_enabled
+                         ? wardogs::i18n::text(QStringLiteral("Средняя кнопка мыши"))
+                         : wardogs::i18n::text(QStringLiteral("Выключено")),
+                     settings_.game_integration_enabled
+                         ? wardogs::i18n::text(QStringLiteral("Захват работает, когда окно WARDOGS находится на переднем плане."))
+                         : capture_disabled));
+            tabs->addTab(keys, wardogs::i18n::text(QStringLiteral("Клавиши")));
+            auto* troubleshooting = new QTextBrowser;
+            troubleshooting->setObjectName(QStringLiteral("helpTroubleshooting"));
+            troubleshooting->document()->setDefaultStyleSheet(browser->document()->defaultStyleSheet());
+            wardogs::i18n::bind_html(troubleshooting, wardogs::i18n::text(QStringLiteral(
+                "<h2>Если не работает</h2><p>%4</p>"
+                "<h3>Координаты не прочитаны</h3><p>Покажите целиком X и Y, уберите перекрывающие подписи и повторите захват. Сомнительное чтение скрывает старую наводку до проверки.</p>"
+                "<h3>Захват возле курсора не помогает</h3><p>На карте: ПКМ у цели → Mark Coordinates → %1. Либо раскройте «Ввод вручную»: вставьте пару X/Y и нажмите Enter. Формат: <b>12.34 56.78</b>.</p>"
+                "<h3>Карта не подтверждается</h3><p>Подключите проверенные локальные пакеты через «Подключить карты высот…». Для стрельбища выберите режим без высот. Название карты программа сама не определяет.</p>"
+                "<h3>Карточка не видна поверх игры</h3><p>Попробуйте оконный режим без рамки. Возврат к расчёту: %2. Блокировка карточки снимается через %3.</p>"
+                "<h3>Как читать результат</h3><p>«До цели» — расстояние на карте. Азимут и MIL — значения для установки в игре. «По таблице ≈» — вторичная оценка дальности этой команды. Высоты SPH-2 и профиль земли приближённые; здания не проверяются. L81 использует игровую таблицу без высотной поправки.</p>"
+                "<p>После перемещения орудия задайте его позицию заново. Попадание записывайте до смены цели или траектории. Расчёт не отслеживает выстрел автоматически.</p>"))
+                .arg(qtext(settings_.target_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey),
+                     settings_.game_integration_enabled ? capture_setup : capture_disabled + QStringLiteral(" ") + capture_setup));
+            tabs->addTab(troubleshooting, wardogs::i18n::text(QStringLiteral("Если не работает")));
+            layout->addWidget(tabs, 1);
+        }
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
         buttons->button(QDialogButtonBox::Close)->setText(wardogs::i18n::text(QStringLiteral("Понятно")));
         connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
@@ -2537,8 +2822,8 @@ private:
         content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* root = new QVBoxLayout(content);
         root->setSizeConstraint(QLayout::SetMinimumSize);
-        root->setContentsMargins(24, 20, 24, 20);
-        root->setSpacing(17);
+        root->setContentsMargins(20, 12, 20, 12);
+        root->setSpacing(8);
 
         auto* heading = new QHBoxLayout;
         auto* brand = new QVBoxLayout;
@@ -2548,9 +2833,11 @@ private:
         subtitle->setObjectName(QStringLiteral("brandSubtitle"));
         brand->addWidget(title);
         brand->addWidget(subtitle);
+        subtitle->hide();
         heading->addLayout(brand, 1);
         auto* badge = new QLabel(QStringLiteral("v") + QStringLiteral(WARDOGS_VERSION));
         badge->setObjectName(QStringLiteral("versionBadge"));
+        badge->setFixedHeight(32);
         heading->addWidget(badge);
         language_selector_ = new QComboBox;
         language_selector_->setObjectName(QStringLiteral("languageSelector"));
@@ -2601,7 +2888,8 @@ private:
             connect(update_button, &QPushButton::clicked, updates_, [this] { updates_->check(true); });
         }
 
-        auto* tools = new QHBoxLayout;
+        tools_layout_ = new QGridLayout;
+        auto* tools = tools_layout_;
         mode_button_ = new QPushButton;
         mode_button_->setObjectName(QStringLiteral("weaponButton"));
         mode_button_->setIconSize(QSize(22, 22));
@@ -2620,10 +2908,12 @@ private:
         ghost_button_->setCheckable(true);
         ghost_button_->setIcon(ui_icon(UiGlyph::reticle));
         ghost_button_->setToolTip(wardogs::i18n::text(QStringLiteral("Шкала наводки поверх игры")));
-        tools->addWidget(mode_button_, 1);
-        tools->addWidget(game_button_, 1);
-        tools->addWidget(pin_button_);
-        tools->addWidget(ghost_button_);
+        tools->addWidget(mode_button_, 0, 0);
+        tools->addWidget(game_button_, 0, 1);
+        tools->addWidget(pin_button_, 0, 2);
+        tools->addWidget(ghost_button_, 0, 3);
+        tools->setColumnStretch(0, 1);
+        tools->setColumnStretch(1, 1);
         root->addLayout(tools);
         update_mode_button();
 
@@ -2635,27 +2925,43 @@ private:
         auto* work_layout = new QVBoxLayout(work);
         work_layout->setSizeConstraint(QLayout::SetMinimumSize);
         work_layout->setContentsMargins(0, 0, 0, 0);
-        work_layout->setSpacing(15);
+        work_layout->setSpacing(8);
 
-        auto* quick = new QGroupBox(wardogs::i18n::text(QStringLiteral("БЫСТРАЯ ИГРА")));
+        auto* quick = new QGroupBox(wardogs::i18n::text(QStringLiteral("Следующий шаг")));
         quick->setObjectName(QStringLiteral("quickWorkflow"));
+        quick->setTitle({});
         auto* quick_layout = new QVBoxLayout(quick);
-        quick_layout->setContentsMargins(16, 23, 16, 15);
+        quick_layout->setContentsMargins(12, 8, 12, 8);
+        quick_layout->setSpacing(6);
         quick_guide_ = new QLabel;
         quick_guide_->setObjectName(QStringLiteral("quickGuide"));
         quick_guide_->setWordWrap(true);
         quick_state_ = new QLabel;
         quick_state_->setObjectName(QStringLiteral("quickState"));
         quick_state_->setWordWrap(true);
-        quick_layout->addWidget(quick_guide_);
-        quick_layout->addWidget(quick_state_);
+        auto* steps = new QHBoxLayout;
+        for (std::size_t index = 0; index < workflow_steps_.size(); ++index) {
+            auto* step = new QLabel;
+            step->setObjectName(QStringLiteral("workflowStep%1").arg(index + 1));
+            step->setProperty("workflowStep", true);
+            step->setAlignment(Qt::AlignCenter);
+            step->setWordWrap(true);
+            workflow_steps_[index] = step;
+            steps->addWidget(step, 1);
+        }
+        quick_layout->addLayout(steps);
+        next_step_ = new QLabel;
+        next_step_->setObjectName(QStringLiteral("nextStep"));
+        next_step_->setWordWrap(true);
+        quick_layout->addWidget(next_step_);
         work_layout->addWidget(quick);
 
-        auto* planning_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Дополнительные инструменты · позиции и полёт")));
+        auto* planning_button = new QPushButton(wardogs::i18n::text(QStringLiteral("Позиции и полёт")));
         planning_button->setObjectName(QStringLiteral("planningButton"));
         planning_button->setToolTip(wardogs::i18n::text(QStringLiteral("История и именованные точки, перенос цели, измерения времени и профиль рельефа")));
         work_layout->addWidget(planning_button);
         connect(planning_button, &QPushButton::clicked, this, [this] {
+            enter_game_after_terrain_ = false;
             PlanningDialog dialog([this] { return planning_context(); },
                 [this](auto kind, auto point, auto map, auto weapon) {
                     apply_planning_point(kind, point, map, weapon);
@@ -2665,12 +2971,12 @@ private:
 
         manual_toggle_ = new QToolButton;
         manual_toggle_->setObjectName(QStringLiteral("manualControlsToggle"));
-        manual_toggle_->setText(wardogs::i18n::text(QStringLiteral("Ручной ввод и диагностика")));
+        manual_toggle_->setText(wardogs::i18n::text(QStringLiteral("Ввод вручную")));
         manual_toggle_->setCheckable(true);
         manual_toggle_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         manual_toggle_->setArrowType(Qt::RightArrow);
         work_layout->addWidget(manual_toggle_);
-        auto* coordinates = new QGroupBox(wardogs::i18n::text(QStringLiteral("01  КООРДИНАТЫ")));
+        auto* coordinates = new QGroupBox(wardogs::i18n::text(QStringLiteral("Координаты")));
         coordinates->setObjectName(QStringLiteral("coordinatesGroup"));
         coordinates->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* coordinate_layout = new QVBoxLayout(coordinates);
@@ -2771,11 +3077,11 @@ private:
         result_layout->addWidget(raw_result_);
         work_layout->addWidget(mortar_result_group_);
 
-        vehicle_result_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("02  РЕШЕНИЕ ДЛЯ SPH-2")));
+        vehicle_result_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("Наводка SPH-2")));
         vehicle_result_group_->setObjectName(QStringLiteral("vehicleResultGroup"));
         vehicle_result_group_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* vehicle_results = new QVBoxLayout(vehicle_result_group_);
-        vehicle_results->setContentsMargins(12, 23, 12, 12);
+        vehicle_results->setContentsMargins(12, 20, 12, 10);
         low_solution_ = new VehicleSolutionWidget(wardogs::Arc::low);
         high_solution_ = new VehicleSolutionWidget(wardogs::Arc::high);
         vehicle_results->addWidget(low_solution_);
@@ -2792,7 +3098,7 @@ private:
         copy_button_->setEnabled(false);
         work_layout->addWidget(copy_button_);
 
-        auto* ocr = new QGroupBox(wardogs::i18n::text(QStringLiteral("03  КООРДИНАТЫ С ЭКРАНА")));
+        auto* ocr = new QGroupBox(wardogs::i18n::text(QStringLiteral("Захват координат")));
         ocr->setObjectName(QStringLiteral("ocrGroup"));
         ocr->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* ocr_layout = new QVBoxLayout(ocr);
@@ -2838,14 +3144,16 @@ private:
         ocr->hide();
         connect(manual_toggle_, &QToolButton::toggled, this, [coordinates, ocr, this](bool expanded) {
             coordinates->setVisible(expanded);
-            ocr->setVisible(expanded);
+            ocr->setVisible(expanded && settings_.game_integration_enabled);
             manual_toggle_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
         });
 
-        terrain_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("КАРТА ИГРЫ · ОБЯЗАТЕЛЬНО")));
+        terrain_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("Карта")));
+        terrain_group_->setObjectName(QStringLiteral("terrainControls"));
         terrain_group_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+        terrain_group_->setTitle({});
         auto* terrain_layout = new QVBoxLayout(terrain_group_);
-        terrain_layout->setContentsMargins(16, 23, 16, 13);
+        terrain_layout->setContentsMargins(12, 8, 12, 8);
         terrain_selector_ = new QComboBox;
         terrain_selector_->setObjectName(QStringLiteral("gameMapSelector"));
         for (const auto map : {wardogs::GameMap::unselected, wardogs::GameMap::bakurani,
@@ -2859,7 +3167,7 @@ private:
         confirm_map_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Подтвердить карту")));
         confirm_map_->setObjectName(QStringLiteral("confirmGameMap"));
         map_row->addWidget(confirm_map_);
-        import_terrain_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Подключить локальные данные высот…")));
+        import_terrain_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Подключить карты высот…")));
         import_terrain_->setObjectName(QStringLiteral("importTerrain"));
         import_terrain_->setProperty("quiet", true);
         import_terrain_->setToolTip(wardogs::i18n::text(QStringLiteral("Проверить и установить ранее полученные пакеты bakurani.wdt, ozeti.wdt и zestafona.wdt. Обновление программы сохраняет эти данные.")));
@@ -2883,13 +3191,34 @@ private:
         calibration_group_->hide();
         work_layout->addWidget(calibration_toggle_);
         work_layout->addWidget(calibration_group_);
-        auto* fire_control = new QGroupBox(wardogs::i18n::text(QStringLiteral("ПРИСТРЕЛКА")));
+        auto* fire_control = new QGroupBox(wardogs::i18n::text(QStringLiteral("Пристрелка")));
         fire_control->setObjectName(QStringLiteral("fireControlGroup"));
+        fire_control->setAccessibleName(fire_control->title());
+        fire_control->setTitle({});
         auto* fire_layout = new QVBoxLayout(fire_control);
+        fire_layout->setContentsMargins(12, 8, 12, 8);
+        fire_layout->setSpacing(6);
+        fire_control_compact_ = new QLabel;
+        fire_control_compact_->setObjectName(QStringLiteral("fireControlCompact"));
+        fire_control_compact_->setWordWrap(true);
+        auto* fire_compact_row = new QHBoxLayout;
+        fire_compact_row->addWidget(fire_control_compact_, 1);
+        fire_layout->addLayout(fire_compact_row);
+        fire_details_toggle_ = new QToolButton;
+        fire_details_toggle_->setObjectName(QStringLiteral("fireControlDetailsToggle"));
+        fire_details_toggle_->setText(wardogs::i18n::text(QStringLiteral("Подробности поправки")));
+        fire_details_toggle_->setCheckable(true);
+        fire_details_toggle_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        fire_details_toggle_->setArrowType(Qt::RightArrow);
+        fire_compact_row->addWidget(fire_details_toggle_);
+        fire_details_ = new QWidget;
+        fire_details_->setObjectName(QStringLiteral("fireControlDetails"));
+        auto* fire_details_layout = new QVBoxLayout(fire_details_);
+        fire_details_layout->setContentsMargins(0, 4, 0, 0);
         fire_control_summary_ = new QLabel;
         fire_control_summary_->setObjectName(QStringLiteral("fireControlSummary"));
         fire_control_summary_->setWordWrap(true);
-        fire_layout->addWidget(fire_control_summary_);
+        fire_details_layout->addWidget(fire_control_summary_);
         terrain_assistance_ = new QLabel;
         terrain_assistance_->setObjectName(QStringLiteral("terrainAssistance"));
         terrain_assistance_->setWordWrap(true);
@@ -2898,7 +3227,13 @@ private:
         fire_control_reset_->setObjectName(QStringLiteral("resetFireControl"));
         fire_control_reset_->setProperty("quiet", true);
         connect(fire_control_reset_, &QPushButton::clicked, this, &MainWindow::clear_continuous_calibration);
-        fire_layout->addWidget(fire_control_reset_);
+        fire_details_layout->addWidget(fire_control_reset_);
+        fire_layout->addWidget(fire_details_);
+        fire_details_->hide();
+        connect(fire_details_toggle_, &QToolButton::toggled, this, [this](bool expanded) {
+            fire_details_->setVisible(expanded);
+            fire_details_toggle_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+        });
         work_layout->insertWidget(work_layout->indexOf(planning_button), fire_control);
         work_layout->insertWidget(work_layout->indexOf(fire_control), vehicle_result_group_);
         fire_control->hide();
@@ -2921,10 +3256,12 @@ private:
         readiness_->setObjectName(QStringLiteral("readiness"));
         readiness_->setWordWrap(true);
         readiness_layout->addWidget(readiness_);
+        readiness_layout->addWidget(quick_guide_);
+        readiness_layout->addWidget(quick_state_);
         side->addWidget(readiness_group);
         direction_plot_ = new DirectionPlot;
         side->addWidget(direction_plot_);
-        auto* history_group = new QGroupBox(wardogs::i18n::text(QStringLiteral("НЕДАВНИЕ ЦЕЛИ")));
+        auto* history_group = new QGroupBox(wardogs::i18n::text(QStringLiteral("Недавние цели")));
         history_group->setObjectName(QStringLiteral("historyGroup"));
         history_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* history_layout = new QVBoxLayout(history_group);
@@ -2939,6 +3276,10 @@ private:
         history_note->setWordWrap(true);
         history_layout->addWidget(history_note);
         side->addWidget(history_group);
+        auto* reconnect_maps = new QPushButton(wardogs::i18n::text(QStringLiteral("Подключить карты высот…")));
+        reconnect_maps->setObjectName(QStringLiteral("reconnectTerrain"));
+        connect(reconnect_maps, &QPushButton::clicked, this, [this] { import_local_terrain(); });
+        side->addWidget(reconnect_maps);
         auto* tip = new QLabel;
         tip->setObjectName(QStringLiteral("gameTip"));
         tip->setWordWrap(true);
@@ -2946,6 +3287,24 @@ private:
         side->addStretch();
         workspace_layout_->addWidget(work, 1);
         workspace_layout_->addWidget(side_panel_);
+        side_panel_->hide();
+        session_toggle_ = new QToolButton;
+        session_toggle_->setObjectName(QStringLiteral("sessionDetailsToggle"));
+        session_toggle_->setText(wardogs::i18n::text(QStringLiteral("История и направление")));
+        session_toggle_->setCheckable(true);
+        session_toggle_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        session_toggle_->setArrowType(Qt::RightArrow);
+        connect(session_toggle_, &QToolButton::toggled, this, [this](bool expanded) {
+            side_panel_->setVisible(expanded);
+            session_toggle_->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+        });
+        work_layout->removeWidget(planning_button);
+        work_layout->removeWidget(manual_toggle_);
+        auto* secondary_actions = new QHBoxLayout;
+        secondary_actions->addWidget(manual_toggle_);
+        secondary_actions->addWidget(session_toggle_);
+        secondary_actions->addWidget(planning_button);
+        work_layout->insertLayout(work_layout->count() - 1, secondary_actions);
         root->addLayout(workspace_layout_);
         status_ = new QLabel(wardogs::i18n::text(QStringLiteral("Готово. Задайте орудие по подсказке выше — дополнительных настроек не требуется.")));
         status_->setObjectName(QStringLiteral("status"));
@@ -3140,7 +3499,7 @@ private:
         const int max_width = std::max(320, available.width() - 32);
         const int max_height = std::max(240, available.height() - 48);
         setMinimumSize(std::min(640, max_width), std::min(420, max_height));
-        resize(std::min(1040, max_width), std::min(790, max_height));
+        resize(std::min(880, max_width), std::min(720, max_height));
     }
 
     void change_language(wardogs::UiLanguage value) {
@@ -3182,18 +3541,31 @@ private:
     }
 
     void update_terrain_summary(std::optional<double> height_delta = std::nullopt) {
-        confirm_map_->setEnabled(selected_game_map() != wardogs::GameMap::unselected);
+        terrain_summary_->setToolTip({});
+        // Map instructions are already the next action. Keep the full status
+        // for diagnostics/tooltips; an actual missing-height failure shows it.
+        terrain_summary_->hide();
+        confirm_map_->setEnabled(!terrain_loading_ && selected_game_map() != wardogs::GameMap::unselected);
+        import_terrain_->setEnabled(!terrain_importing_);
         confirm_map_->setVisible(!map_confirmed_);
-        import_terrain_->setVisible(terrain_discovery_.installed.size() < wardogs::official_terrain_maps().size());
+        import_terrain_->setVisible(!map_confirmed_ && !terrain_loading_ && wardogs::game_map_has_terrain(selected_game_map()));
+        if (terrain_loading_) {
+            terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Проверяю карту… Окно остаётся доступным.")));
+            terrain_selector_->setToolTip(terrain_summary_->text());
+            return;
+        }
         if (!map_confirmed_) {
             terrain_summary_->setText(selected_game_map() == wardogs::GameMap::unselected
                 ? wardogs::i18n::text(QStringLiteral("Перед расчётом выберите карту, на которой играете."))
                 : wardogs::i18n::text(QStringLiteral("Подтвердите текущую карту перед расчётом. Прошлый выбор не определяет новый матч.")));
+            terrain_selector_->setToolTip(terrain_summary_->text());
             return;
         }
         if (!terrain_map_) {
-            terrain_summary_->setText(game_map_name(current_game_map_) +
+            terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Карта подтверждена · без высот")));
+            terrain_summary_->setToolTip(game_map_name(current_game_map_) +
                 wardogs::i18n::text(QStringLiteral(". Рельеф не учтён: высоты орудия и цели считаются равными.")));
+            terrain_selector_->setToolTip(terrain_summary_->toolTip());
             return;
         }
         auto text = game_map_name(current_game_map_) +
@@ -3213,7 +3585,11 @@ private:
                     (*height_delta >= 0.0 ? QStringLiteral("+") : QString{}) +
                     value + QStringLiteral(" m");
         }
-        terrain_summary_->setText(text);
+        terrain_summary_->setToolTip(text);
+        terrain_selector_->setToolTip(text);
+        terrain_summary_->setText(vehicle_mode_
+            ? wardogs::i18n::text(QStringLiteral("Карта подтверждена · высоты подключены"))
+            : wardogs::i18n::text(QStringLiteral("Карта подтверждена · L81 без поправки высоты")));
     }
 
     std::optional<double> terrain_height(wardogs::Point point) {
@@ -3237,6 +3613,9 @@ private:
     }
 
     void on_terrain_changed() {
+        ++terrain_generation_;
+        terrain_loading_ = false;
+        enter_game_after_terrain_ = false;
         automatic_analysis_.reset();
         const bool incomplete_base = base_capture_pending_;
         const bool incomplete_target = ocr_hold_ || pending_ocr_.has_value();
@@ -3245,6 +3624,8 @@ private:
         const auto selected = selected_game_map();
         const bool different_map = current_game_map_ != wardogs::GameMap::unselected && selected != current_game_map_;
         const bool had_data = has_calibration_data();
+        terrain_had_data_ = had_data;
+        terrain_different_map_ = different_map;
         map_confirmed_ = false;
         terrain_.reset();
         terrain_map_.reset();
@@ -3270,37 +3651,28 @@ private:
         }
         clear_result(wardogs::i18n::text(QStringLiteral("Выберите и подтвердите текущую карту")));
         if (selected == wardogs::GameMap::unselected) {
+            update_terrain_summary();
             update_readiness();
             set_status(wardogs::i18n::text(QStringLiteral("Перед расчётом выберите текущую карту.")));
             return;
         }
         if (wardogs::game_map_has_terrain(selected)) {
-            try {
-                const auto key = wardogs::game_map_key(selected);
-                const auto& specs = wardogs::official_terrain_maps();
-                const auto spec = std::find_if(specs.begin(), specs.end(), [&](const auto& entry) {
-                    return QString::fromStdString(entry.map_id).toStdWString() == key;
-                });
-                if (spec == specs.end()) throw std::invalid_argument("Для выбранной карты нет описания высот");
-                const auto discovery = wardogs::discover_available_terrain_maps(
-                    wardogs::default_terrain_directory(), wardogs::user_terrain_directory(), {*spec});
-                if (discovery.installed.empty()) {
-                    QStringList errors;
-                    for (const auto& problem : discovery.problems) errors.push_back(wardogs::i18n::text(qtext(problem)));
-                    throw std::invalid_argument(utf8(errors.join(QStringLiteral("; "))));
-                }
-                const auto& installed = discovery.installed.front();
-                terrain_ = std::make_unique<wardogs::TerrainPackage>(installed.path);
-                terrain_map_ = installed;
-            } catch (const std::exception& error) {
-                update_terrain_summary();
-                terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Высоты выбранной карты недоступны. Подключите проверенные локальные данные; расчёт заблокирован.")));
-                import_terrain_->show();
-                update_readiness();
-                set_status(wardogs::i18n::text(QStringLiteral("Карта не подтверждена: ")) + error_text(error), true);
-                return;
+            terrain_loading_ = true;
+            const wardogs::TerrainTaskRequest request{terrain_generation_, wardogs::TerrainTaskKind::load_map,
+                utf8(qtext(std::wstring{wardogs::game_map_key(selected)})), std::nullopt};
+            if (!terrain_tasks_ || !terrain_tasks_->submit(request)) {
+                terrain_loading_ = false;
+                set_status(wardogs::i18n::text(QStringLiteral("Проверка карты недоступна. Повторите подтверждение.")), true);
             }
+            update_terrain_summary();
+            update_readiness();
+            return;
         }
+        finish_terrain_confirmation(had_data, different_map);
+    }
+
+    void finish_terrain_confirmation(bool had_data, bool different_map) {
+        const auto selected = current_game_map_;
         map_confirmed_ = true;
         settings_.last_game_map = selected;
         try { if (!diagnostic_) wardogs::save_settings(settings_); }
@@ -3346,28 +3718,91 @@ private:
     }
 
     void import_local_terrain() {
-        if (busy_ || selecting_) { set_status(wardogs::i18n::text(QStringLiteral("Дождитесь окончания чтения координат."))); return; }
+        if (busy_ || selecting_ || terrain_importing_) { set_status(wardogs::i18n::text(QStringLiteral("Дождитесь окончания текущего действия"))); return; }
         const auto dialog = make_terrain_folder_dialog();
         if (dialog->exec() != QDialog::Accepted || dialog->selectedFiles().isEmpty()) return;
         const auto folder = dialog->selectedFiles().front();
-        try {
-            const auto result = wardogs::install_terrain_maps(std::filesystem::path{folder.toStdWString()});
-            terrain_discovery_ = wardogs::discover_available_terrain_maps();
+        terrain_importing_ = true;
+        if (!terrain_tasks_ || !terrain_tasks_->submit({terrain_generation_, wardogs::TerrainTaskKind::import_maps,
+            {}, std::filesystem::path{folder.toStdWString()}})) {
+            terrain_importing_ = false;
+            set_status(wardogs::i18n::text(QStringLiteral("Подключение карт уже выполняется. Дождитесь завершения.")), true);
+        } else set_status(wardogs::i18n::text(QStringLiteral("Подключаю карты высот… Можно продолжать работу.")));
+        update_terrain_summary();
+    }
+
+    void start_terrain_tasks() {
+        const QPointer<MainWindow> self(this);
+        terrain_tasks_ = std::make_unique<wardogs::TerrainTaskRunner>([self](auto result) {
+            if (self) QMetaObject::invokeMethod(self, [self, result] {
+                if (self && !self->closing_) self->finish_terrain_task(result);
+            }, Qt::QueuedConnection);
+        });
+        if (!diagnostic_ && !terrain_tasks_->submit({0, wardogs::TerrainTaskKind::discovery, {}, std::nullopt}))
+            throw std::runtime_error("Не удалось начать фоновую проверку карт");
+    }
+
+    void finish_terrain_task(const wardogs::TerrainTaskRunner::Result& result) {
+        if (closing_ || !result) return;
+        if (result->request.kind == wardogs::TerrainTaskKind::discovery) {
+            if (!result->error.empty()) {
+                set_status(wardogs::i18n::text(QStringLiteral("Не удалось проверить карты: ")) +
+                    error_text(std::runtime_error(result->error)), true);
+                return;
+            }
+            terrain_discovery_ = result->discovery;
+            update_terrain_summary();
+            return;
+        }
+        if (result->request.kind == wardogs::TerrainTaskKind::import_maps) {
+            terrain_importing_ = false;
+            if (!result->error.empty()) {
+                update_terrain_summary();
+                set_status(wardogs::i18n::text(QStringLiteral("Не удалось подключить высоты: ")) +
+                    error_text(std::runtime_error(result->error)), true);
+                return;
+            }
+            terrain_discovery_ = result->discovery;
             // Unrelated imports and failed folders must not erase a useful
             // local correction. Reload only an unavailable selected map.
-            if (!map_confirmed_ && wardogs::game_map_has_terrain(selected_game_map()) &&
+            if (!map_confirmed_ && !terrain_loading_ && wardogs::game_map_has_terrain(selected_game_map()) &&
                 std::any_of(terrain_discovery_.installed.begin(), terrain_discovery_.installed.end(), [&](const auto& entry) {
                     return QString::fromStdString(entry.spec.map_id).toStdWString() == wardogs::game_map_key(selected_game_map());
                 })) on_terrain_changed();
             else update_terrain_summary();
-            if (!result.problems.empty()) {
+            if (!result->imported.problems.empty()) {
                 QStringList errors;
-                for (const auto& problem : result.problems) errors.push_back(wardogs::i18n::text(qtext(problem)));
-                set_status(wardogs::i18n::text(QStringLiteral("Подключены карты: %1. %2")).arg(result.installed.size()).arg(errors.join(QStringLiteral("; "))), true);
-            } else set_status(wardogs::i18n::text(QStringLiteral("Локальные высоты подключены · карт: %1.")).arg(result.installed.size()));
-        } catch (const std::exception& error) {
-            set_status(wardogs::i18n::text(QStringLiteral("Не удалось подключить высоты: ")) + error_text(error), true);
+                for (const auto& problem : result->imported.problems) errors.push_back(wardogs::i18n::text(qtext(problem)));
+                set_status(wardogs::i18n::text(QStringLiteral("Подключены карты: %1. %2")).arg(result->imported.installed.size()).arg(errors.join(QStringLiteral("; "))), true);
+            } else set_status(wardogs::i18n::text(QStringLiteral("Локальные высоты подключены · карт: %1.")).arg(result->imported.installed.size()));
+            return;
         }
+        // A changed selection, including switching to a map without heights,
+        // invalidates a completed read. It must never confirm a stale map.
+        if (result->request.generation != terrain_generation_ || result->request.map_id !=
+            utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))) {
+            wardogs::log_info("terrain.stale_result_discarded generation=" + std::to_string(result->request.generation));
+            return;
+        }
+        terrain_loading_ = false;
+        if (!result->error.empty() || !result->package || !result->map) {
+            enter_game_after_terrain_ = false;
+            update_terrain_summary();
+            terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Высоты выбранной карты недоступны. Подключите проверенные локальные данные; расчёт заблокирован.")));
+            terrain_summary_->show();
+            import_terrain_->show();
+            update_readiness();
+            set_status(wardogs::i18n::text(QStringLiteral("Карта не подтверждена: ")) +
+                (result->error.empty() ? wardogs::i18n::text(QStringLiteral("Проверенные высоты выбранной карты недоступны"))
+                                      : error_text(std::runtime_error(result->error))), true);
+            return;
+        }
+        terrain_ = std::move(result->package);
+        terrain_map_ = result->map;
+        std::erase_if(terrain_discovery_.installed, [&](const auto& entry) { return entry.spec.map_id == result->request.map_id; });
+        terrain_discovery_.installed.push_back(*result->map);
+        finish_terrain_confirmation(terrain_had_data_, terrain_different_map_);
+        if (std::exchange(enter_game_after_terrain_, false) && !QApplication::activeModalWidget()) enter_game_mode(false);
     }
 
     bool has_calibration_data() const {
@@ -3612,9 +4047,11 @@ private:
     void set_status(const QString& text, bool error = false) {
         if (error) wardogs::log_error("ui.error message=" + utf8(text));
         set_failure_state(error);
-        status_->setProperty("error", error);
-        status_->style()->unpolish(status_);
-        status_->style()->polish(status_);
+        if (status_->property("error").toBool() != error) {
+            status_->setProperty("error", error);
+            status_->style()->unpolish(status_);
+            status_->style()->polish(status_);
+        }
         const auto displayed = wardogs::i18n::text(text);
         status_->setText(displayed);
         if (pinned_window_) pinned_window_->set_workflow_status(displayed);
@@ -3622,7 +4059,7 @@ private:
 
     void set_failure_state(bool failed) {
         failure_state_ = failed;
-        if (app_frame_) {
+        if (app_frame_ && app_frame_->property("error").toBool() != failed) {
             app_frame_->setProperty("error", failed);
             app_frame_->style()->unpolish(app_frame_);
             app_frame_->style()->polish(app_frame_);
@@ -3750,11 +4187,13 @@ private:
                                  "3. Нажмите %1 — орудие считается из чата, область выбирать не нужно.\n"
                                  "4. Средняя кнопка по цели на карте — автоматический расчёт. Возврат: %2."))
                     .arg(qtext(settings_.base_hotkey), qtext(settings_.exit_game_mode_hotkey))
-                : wardogs::i18n::text(QStringLiteral("Выберите текущую карту. Откройте «Ручной ввод» или включите быструю игру в дополнительных настройках.")));
+                : wardogs::i18n::text(QStringLiteral("Выберите карту и задайте координаты. Захват включается в настройках → Основные → отключите «Только ручной ввод».")));
         if (quick_guide_ && vehicle_mode_ && settings_.game_integration_enabled)
             quick_guide_->setText(quick_guide_->text() + wardogs::i18n::text(QStringLiteral("\n5. %1 меняет траекторию. Поправка необязательна: наведите курсор на фактическое попадание и нажмите %2 до смены цели или траектории."))
                 .arg(qtext(settings_.ghost_arc_hotkey), qtext(settings_.impact_hotkey)));
         if (manual_toggle_ && !settings_.game_integration_enabled) manual_toggle_->setChecked(true);
+        if (auto* capture_controls = findChild<QGroupBox*>(QStringLiteral("ocrGroup")))
+            capture_controls->setVisible(manual_toggle_->isChecked() && settings_.game_integration_enabled);
         if (!settings_.game_integration_enabled) {
             if (auto* tip = findChild<QLabel*>(QStringLiteral("gameTip")))
                 tip->setText(wardogs::i18n::text(QStringLiteral("ОТДЕЛЬНЫЙ КАЛЬКУЛЯТОР\nКоординаты вводятся вручную.\nВзаимодействие с игрой включается в настройках.")));
@@ -4002,6 +4441,7 @@ private:
     }
 
     void set_vehicle_result_error(bool error) {
+        if (vehicle_result_group_->property("error").toBool() == error) return;
         vehicle_result_group_->setProperty("error", error);
         vehicle_result_group_->style()->unpolish(vehicle_result_group_);
         vehicle_result_group_->style()->polish(vehicle_result_group_);
@@ -4560,6 +5000,32 @@ private:
         }
     }
 
+    wardogs::RapidOcr& rapid_engine() {
+        // Initialization is shared with warmup; recognition still has only
+        // the existing OCR worker, guarded by the input epoch.
+        std::scoped_lock lock(rapid_initialization_);
+        if (!rapid_) rapid_ = std::make_unique<wardogs::RapidOcr>(
+            executable_directory() / L"models" / L"PP-OCRv6_rec_small.onnx");
+        return *rapid_;
+    }
+
+    void start_ocr_warmup() {
+        if (diagnostic_ || !settings_.game_integration_enabled || rapid_warmup_.joinable()) return;
+        rapid_warmup_ = std::jthread([this](std::stop_token stop) {
+            if (stop.stop_requested()) return;
+            const auto started = std::chrono::steady_clock::now();
+            try {
+                (void)rapid_engine();
+                wardogs::log_info("ocr.model_prepared elapsed_ms=" + std::to_string(
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count()));
+            } catch (const std::exception& error) {
+                // Actual capture retries initialization and shows the normal
+                // OCR error. Warmup never supplies a fallback result.
+                wardogs::log_warning(std::string("ocr.model_prepare_failed error=") + error.what());
+            }
+        });
+    }
+
     void launch_ocr_worker(wardogs::Image image, OcrMessage context,
                            std::optional<wardogs::MapOcrSearchLayout> map_layout = std::nullopt) {
         const auto action = context.action;
@@ -4586,11 +5052,10 @@ private:
             try {
                 wardogs::OcrResult result;
                 if (backend == wardogs::OcrBackend::rapid) {
-                    if (!rapid_) rapid_ = std::make_unique<wardogs::RapidOcr>(
-                        executable_directory() / L"models" / L"PP-OCRv6_rec_small.onnx");
-                    result = map_layout ? rapid_->recognize_map_neighborhood(image, *map_layout, stop)
-                                   : message.automatic_chat ? rapid_->recognize_chat(image, stop)
-                                                            : rapid_->recognize(image, stop);
+                    auto& engine = rapid_engine();
+                    result = map_layout ? engine.recognize_map_neighborhood(image, *map_layout, stop)
+                                   : message.automatic_chat ? engine.recognize_chat(image, stop)
+                                                            : engine.recognize(image, stop);
                 } else {
                     if (!windows_) windows_ = std::make_unique<wardogs::WindowsOcr>();
                     result = windows_->recognize(image, stop);
@@ -4846,6 +5311,7 @@ private:
     }
 
     void edit_settings() {
+        enter_game_after_terrain_ = false;
         wardogs::log_info("settings.dialog_opened");
         if (busy_) {
             set_status(wardogs::i18n::text(QStringLiteral("Дождитесь окончания распознавания перед изменением настроек")));
@@ -4863,6 +5329,9 @@ private:
             return;
         }
         auto candidate = dialog.settings();
+        // A queued terrain verification may finish inside dialog.exec(). This
+        // field belongs to map confirmation, not to the settings editor.
+        candidate.last_game_map = settings_.last_game_map;
         const bool adjust_ghost = dialog.adjust_ghost_requested();
         const auto previous = settings_;
         try {
@@ -4896,7 +5365,9 @@ private:
                     [this](int opacity) { set_ghost_opacity(opacity); });
             }
             if (worker_.joinable()) worker_.join();
-            rapid_.reset(); windows_.reset();
+            // None of these preferences changes the OCR models. Keep their
+            // sessions instead of reloading them after every settings save.
+            start_ocr_warmup();
             update_engine_summary(); update_action_labels(); update_region_summary(); update_readiness();
             wardogs::log_info("settings.saved");
             const auto saved_notice = ocr_hold_
@@ -5129,7 +5600,7 @@ QScrollBar:vertical { background:transparent; width:9px; margin:0; }
 QScrollBar::handle:vertical { background:#334459; border-radius:4px; min-height:24px; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
 
-QLabel#brandTitle { color:#edf4ff; font-family:"Bahnschrift"; font-size:31px; font-weight:700; letter-spacing:3px; }
+QLabel#brandTitle { color:#edf4ff; font-family:"Bahnschrift"; font-size:23px; font-weight:700; letter-spacing:2px; }
 QLabel#brandSubtitle { color:#8fa1ba; font-size:10px; letter-spacing:1px; }
 QLabel#versionBadge { color:#63d8c5; background:#14292b; border:1px solid #224247; border-radius:8px; padding:6px 10px; font-size:10px; }
 QWidget { font-family:"Segoe UI"; }
@@ -5165,6 +5636,19 @@ QSpinBox { background:#0c1420; color:#e8eef7; border:1px solid #2b3b50; border-r
 QMenu { background:#111b28; border:1px solid #34445a; padding:6px; }
 QMenu::item { padding:8px 22px; border-radius:5px; }
 QMenu::item:selected { background:#244b4b; }
+QGroupBox#terrainControls,QGroupBox#quickWorkflow,QGroupBox#fireControlGroup { margin-top:0; padding-top:0; }
+QLabel[workflowStep="true"] { background:#162536; color:#8fa1ba; border-radius:8px; padding:6px 10px; font-size:12px; }
+QLabel[workflowStep="true"][complete="true"] { background:#15322f; color:#81e7d7; }
+QLabel#nextStep { color:#edf4ff; font-size:15px; padding:6px 2px 2px; }
+QLabel#fireControlCompact { color:#edf4ff; font-size:14px; }
+QLabel#terrainAssistance { color:#a9b9ca; font-size:12px; }
+QToolButton { color:#b5c5dc; background:#152234; border:1px solid #2b3b50; border-radius:8px; padding:8px 10px; }
+QToolButton:hover,QToolButton:checked { color:#81e7d7; border-color:#326c65; }
+QLabel[secondaryMetric="true"] { color:#8fa1ba; font-size:16px; }
+QLabel[auxiliarySection="true"] { color:#b5c5dc; font-size:13px; font-weight:600; }
+QWidget[auxiliaryDetails="true"] { background:#0f1926; border-radius:8px; }
+QTextBrowser { background:#111b28; border:0; padding:12px; color:#dbe5ef; }
+QGroupBox::title { font-size:12px; font-weight:600; }
 )";
 
 }  // namespace
@@ -5198,12 +5682,15 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("vehicle-ui"), QStringLiteral("vehicle-pinned-ui"),
                             QStringLiteral("calibration-ui"), QStringLiteral("recognition"),
                             QStringLiteral("recognition-bottom"), QStringLiteral("tutorial-bottom"),
+                            QStringLiteral("tutorial-keys"), QStringLiteral("tutorial-help"), QStringLiteral("workspace-ui"),
+                            QStringLiteral("first-start-ui"), QStringLiteral("workspace-sidebar-ui"),
+                            QStringLiteral("standalone-ui"),
                             QStringLiteral("pinned-menu-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),
                             QStringLiteral("folder-ui"), QStringLiteral("error-ui"),
                             QStringLiteral("planning-ui"), QStringLiteral("planning-positions-ui"),
-                            QStringLiteral("planning-times-ui"), QStringLiteral("planning-profiles-ui"),
+                            QStringLiteral("planning-times-ui"), QStringLiteral("planning-profiles-ui"), QStringLiteral("planning-details-ui"),
                             QStringLiteral("fire-control-ui")}) {
         const auto flag = QStringLiteral("--") + mode + QStringLiteral("-snapshot");
         QString path = argument_value(flag);
@@ -5316,6 +5803,7 @@ int run_application(int argc, char* argv[]) {
             });
         }
         const int result = app.exec();
+        window.stop_background_tasks();
         wardogs::log_info("application.exit code=" + std::to_string(result));
         const bool logging_complete = wardogs::flush_session_log();
         wardogs::shutdown_session_log();

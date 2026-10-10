@@ -1,4 +1,4 @@
-# WARDOGS Fire Control 2.8.0 — source
+# WARDOGS Fire Control — source
 
 [Русский](README.md) · [Project overview and downloads](../README.en.md)
 
@@ -8,13 +8,15 @@ Russian is the default. The **RU / EN** header selector changes the interface im
 
 ## Using the application
 
-Version 2.8.0 checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
+The application checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
 
 1. Confirm the current map. Training-ground and unknown-map selections use an explicit mode without heights.
 2. Open the map with **M**, select the gun through **right-click → Mark Coordinates**, then press **Alt+X**. You do not need to send the coordinates to chat.
 3. Point at a target and press the **middle mouse button**. The application reads separate X/Y labels near the cursor and displays range, direction and MIL.
 4. For SPH-2, select the low or high arc. Optional **Alt+I** records an actual impact for a local correction; initial test shots are not required.
-5. **Alt+C** opens the main window. Manual input, ambiguous OCR review, history, copying, the mini card and sight overlay are available in the interface.
+5. **Alt+C** opens the main window. **Manual input** expands coordinates and additional captures; **History and direction** expands current-session targets and direction. Persistent points, target shifts and terrain are under **Positions and flight**. Ambiguous OCR review appears separately.
+
+Settings are split into **General / Shortcuts / Sight / Recognition**. The custom coordinate pattern, ranging details and assumed-model settings expand on request; the normal workflow does not require them. [Quick instructions](docs/QUICKSTART-EN.md).
 
 If shortcuts conflict, the UI shows the combinations actually registered. Weak or incomplete pairs require review. A new unaccepted gun capture blocks aiming from the old position. Moving the gun or changing the map clears dependent corrections.
 

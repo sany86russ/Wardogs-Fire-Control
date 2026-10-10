@@ -2,6 +2,18 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.13.0 — prepared: clearer interface and more responsive operation
+
+**Update 2.13.0 is prepared; the release has not been published. Validation and native UI screenshots are available in [PR #11](https://github.com/sany86russ/Wardogs-Fire-Control/pull/11).**
+
+- The main window guides **Map → Gun → Target** and shows the next action. Aiming values are more prominent; manual input, history with direction and the complete correction report expand when needed.
+- Settings are split into **General / Shortcuts / Sight / Recognition**. Short help and instructions explain the normal workflow; additional parameter explanations move to tooltips. **Positions and flight** shows a concise result first, with full details and model settings available through disclosure controls.
+- Elevation-pack verification and import run in the background. An unconfirmed map remains unavailable for calculation until verification finishes. The OCR model is also prepared in the background after startup.
+- In a local paired measurement, OCR input-tensor preparation time fell by approximately **69%** and coordinate-mask preparation time by **82%**, with identical preprocessing results. These are individual image-processing stages; the same speedup is not promised for complete OCR or in-game capture.
+- Ordinary planning calculations no longer build the terrain profile twice, and the mini card avoids redundant style updates.
+
+**Calculation accuracy is unchanged:** L81/SPH-2 tables, the height model, coordinate acceptance and ranging rules are preserved. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
+
 ## 2.12.0 — consistent commands and robust ranging · October 10, 2026
 
 - Cards, the ghost sight, clipboard, planning and impact capture share the same displayed command: integer MIL and azimuth rounded to 0.1°. Sight-table range follows that MIL. Feedback no longer learns from hidden fractional settings the player did not set.

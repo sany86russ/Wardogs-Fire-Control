@@ -21,6 +21,7 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -50,14 +51,42 @@ QFormLayout* form_for(QGroupBox* group) {
 
 QVBoxLayout* tab_page(QTabWidget* tabs, const QString& name) {
     auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("settingsPageScroll"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    scroll->viewport()->setObjectName(QStringLiteral("settingsPageViewport"));
+    scroll->viewport()->setAttribute(Qt::WA_StyledBackground, true);
     auto* page = new QWidget;
+    page->setObjectName(QStringLiteral("settingsPage"));
+    page->setAttribute(Qt::WA_StyledBackground, true);
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(4, 14, 4, 4);
     layout->setSpacing(16);
     scroll->setWidget(page);
     tabs->addTab(scroll, name);
+    return layout;
+}
+
+QVBoxLayout* details_section(QVBoxLayout* page, const QString& title,
+                            const QString& object_name) {
+    auto* toggle = new QToolButton;
+    toggle->setObjectName(object_name);
+    toggle->setText(title);
+    toggle->setCheckable(true);
+    toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    toggle->setArrowType(Qt::RightArrow);
+    toggle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* content = new QWidget;
+    auto* layout = new QVBoxLayout(content);
+    layout->setContentsMargins(0, 4, 0, 0);
+    layout->setSpacing(10);
+    content->hide();
+    QObject::connect(toggle, &QToolButton::toggled, content, [toggle, content](bool open) {
+        toggle->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+        content->setVisible(open);
+    });
+    page->addWidget(toggle);
+    page->addWidget(content);
     return layout;
 }
 
@@ -78,6 +107,9 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
       pinned_card_(settings.pinned_card), ghost_reticle_(settings.ghost_reticle),
       original_settings_(settings) {
     configure_frameless_window(this);
+    setStyleSheet(QStringLiteral(
+        "QWidget#settingsContent,QScrollArea#settingsPageScroll,"
+        "QWidget#settingsPageViewport,QWidget#settingsPage { background:#0b1018; border:0; }"));
     setWindowTitle(wardogs::i18n::text(QStringLiteral("Настройки · WARDOGS")));
     setModal(true);
     setMinimumSize(440, 380);
@@ -89,16 +121,18 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     outer->setSpacing(0);
     outer->addWidget(new WindowTitleBar(this));
     auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("settingsContent"));
+    content->setAttribute(Qt::WA_StyledBackground, true);
     auto* root = new QVBoxLayout(content);
     root->setContentsMargins(24, 18, 24, 18);
     root->setSpacing(12);
-    auto* title = new QLabel(wardogs::i18n::text(QStringLiteral("Быстрый запуск")));
+    auto* title = new QLabel(wardogs::i18n::text(QStringLiteral("Настройки")));
     title->setObjectName(QStringLiteral("dialogTitle"));
     title->setWordWrap(true);
     root->addWidget(title);
-    root->addWidget(explanation(wardogs::i18n::text(QStringLiteral(
+    title->setToolTip(wardogs::i18n::text(QStringLiteral(
         "Приложение готово к работе после запуска. "
-        "Изменения ниже применятся после сохранения."))));
+        "Изменения ниже применятся после сохранения.")));
     auto* tabs = new QTabWidget;
     tabs->setObjectName(QStringLiteral("settingsTabs"));
     root->addWidget(tabs, 1);
@@ -109,11 +143,13 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     auto* workflow_layout = new QVBoxLayout(workflow);
     workflow_layout->setContentsMargins(16, 18, 16, 16);
     auto* workflow_text = explanation(wardogs::i18n::text(QStringLiteral(
-        "1. В игре: M → правая кнопка → Mark Coordinates для позиции орудия.\n"
-        "2. %1 — считать позицию орудия.\n"
-        "3. Средняя кнопка на карте — цель из подсказки отметки и расчёт."))
+        "1. %1 — орудие из чата.\n"
+        "2. Средняя кнопка по цели — наводка."))
         .arg(qtext(settings.base_hotkey)));
     workflow_text->setObjectName(QStringLiteral("quickWorkflowSteps"));
+    workflow_text->setToolTip(wardogs::i18n::text(QStringLiteral(
+        "В игре: M → правая кнопка по орудию → Mark Coordinates. "
+        "Координаты появятся в поле чата; отправлять сообщение не нужно.")));
     workflow_layout->addWidget(workflow_text);
     quick_page->addWidget(workflow);
     auto* updates = new QGroupBox(wardogs::i18n::text(QStringLiteral("Обновления")));
@@ -124,24 +160,23 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     check_updates_on_start_->setToolTip(wardogs::i18n::text(QStringLiteral("Новая версия устанавливается только после нажатия «Обновить». Расчёты и OCR работают локально.")));
     update_layout->addWidget(check_updates_on_start_);
     quick_page->addWidget(updates);
-    auto* advanced_page = tab_page(tabs, wardogs::i18n::text(QStringLiteral("Дополнительно")));
-    advanced_page->addWidget(explanation(wardogs::i18n::text(QStringLiteral(
-        "Эти параметры нужны для своего способа работы. "
-        "Обычно достаточно стандартных настроек."))));
+    auto* keys_page = tab_page(tabs, wardogs::i18n::text(QStringLiteral("Клавиши")));
+    auto* reticle_page = tab_page(tabs, wardogs::i18n::text(QStringLiteral("Прицел")));
+    auto* ocr_page = tab_page(tabs, wardogs::i18n::text(QStringLiteral("Распознавание")));
     auto* integration = new QGroupBox(wardogs::i18n::text(QStringLiteral("Режим работы")));
     auto* integration_form = form_for(integration);
-    standalone_mode_ = new QCheckBox(wardogs::i18n::text(QStringLiteral("Отдельный калькулятор · только ручной ввод")));
+    standalone_mode_ = new QCheckBox(wardogs::i18n::text(QStringLiteral("Только ручной ввод")));
     standalone_mode_->setObjectName(QStringLiteral("standaloneMode"));
     standalone_mode_->setChecked(!settings.game_integration_enabled);
     integration_form->addRow(standalone_mode_);
-    integration_form->addRow(explanation(wardogs::i18n::text(QStringLiteral(
+    standalone_mode_->setToolTip(wardogs::i18n::text(QStringLiteral(
         "В этом режиме глобальные клавиши, захват экрана и игровые окна выключены. "
-        "Выбор сохраняется между запусками."))));
+        "Выбор сохраняется между запусками.")));
     middle_mouse_enabled_ = new QCheckBox(wardogs::i18n::text(QStringLiteral("Считать цель средней кнопкой мыши")));
     middle_mouse_enabled_->setObjectName(QStringLiteral("middleMouseEnabled"));
     middle_mouse_enabled_->setChecked(settings.middle_mouse_enabled);
     integration_form->addRow(middle_mouse_enabled_);
-    advanced_page->addWidget(integration);
+    quick_page->addWidget(integration);
     auto* actions = new QGroupBox(wardogs::i18n::text(QStringLiteral("Горячие клавиши")));
     auto* shortcuts = form_for(actions);
     region_key_ = add_hotkey(shortcuts, wardogs::i18n::text(QStringLiteral("Выбрать область координат")),
@@ -161,11 +196,12 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     ghost_arc_key_->setToolTip(wardogs::i18n::text(QStringLiteral("Выбирает траекторию SPH-2 для прицела, карточки и записи попаданий")));
     exit_game_mode_key_ = add_hotkey(shortcuts, wardogs::i18n::text(QStringLiteral("Вернуться из игрового режима")),
                                     settings.exit_game_mode_hotkey, QStringLiteral("exitGameModeHotkey"));
-    shortcuts->addRow(explanation(wardogs::i18n::text(QStringLiteral(
+    actions->setToolTip(wardogs::i18n::text(QStringLiteral(
         "Если сочетание занято другой программой, при сохранении подбирается "
         "свободное с той же клавишей и дополнительным Ctrl или Shift. "
-        "Новое сочетание появится на кнопке действия и сохранится в настройках."))));
-    advanced_page->addWidget(actions);
+        "Новое сочетание появится на кнопке действия и сохранится в настройках.")));
+    keys_page->addWidget(actions);
+    keys_page->addStretch();
     auto* mouse_group = new QGroupBox(wardogs::i18n::text(QStringLiteral("Отметка на карте")));
     auto* mouse_form = form_for(mouse_group);
     mouse_capture_delay_ = new QSpinBox;
@@ -175,14 +211,10 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     mouse_capture_delay_->setSuffix(wardogs::i18n::text(QStringLiteral(" мс")));
     mouse_capture_delay_->setValue(settings.mouse_capture_delay_ms);
     mouse_capture_delay_->setToolTip(wardogs::i18n::text(QStringLiteral(
-        "Первое чтение выполняется сразу при нажатии средней кнопки. "
-        "Если оно не удалось, выполняются до двух повторов с паузой 80–350 мс. "
-        "Значения вне этого диапазона ограничиваются только на время повторного чтения.")));
-    mouse_form->addRow(wardogs::i18n::text(QStringLiteral("Пауза перед повторным чтением")), mouse_capture_delay_);
-    mouse_form->addRow(explanation(wardogs::i18n::text(QStringLiteral(
-        "Первое чтение — сразу при нажатии средней кнопки. "
-        "При неудаче калькулятор повторит чтение до двух раз; пауза ограничена 80–350 мс."))));
-    quick_page->addWidget(mouse_group);
+        "Ожидание подписи X/Y после щелчка. При недостаточной уверенности программа "
+        "делает отдельные повторные снимки; прежняя наводка скрыта до завершения чтения.")));
+    mouse_form->addRow(wardogs::i18n::text(QStringLiteral("Пауза появления отметки")), mouse_capture_delay_);
+    ocr_page->addWidget(mouse_group);
     const auto update_integration = [this, actions, mouse_group] {
         const bool enabled = !standalone_mode_->isChecked();
         actions->setEnabled(enabled);
@@ -197,12 +229,11 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
             return;
         }
         const auto target_step = middle_mouse_enabled_->isChecked()
-            ? wardogs::i18n::text(QStringLiteral("Средняя кнопка на карте — цель из подсказки отметки и расчёт."))
-            : wardogs::i18n::text(QStringLiteral("%1 — считать цель и выполнить расчёт."))
+            ? wardogs::i18n::text(QStringLiteral("Средняя кнопка по цели — наводка."))
+            : wardogs::i18n::text(QStringLiteral("%1 — цель и наводка."))
                   .arg(qtext(hotkey_text(target_key_)));
         workflow_text->setText(wardogs::i18n::text(QStringLiteral(
-            "1. В игре: M → правая кнопка → Mark Coordinates для позиции орудия.\n"
-            "2. %1 — считать позицию орудия.\n3. %2"))
+            "1. %1 — орудие из чата.\n2. %2"))
             .arg(qtext(hotkey_text(base_key_)), target_step));
     };
     connect(standalone_mode_, &QCheckBox::toggled, this, update_workflow_);
@@ -212,11 +243,10 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     update_workflow_();
     quick_page->addStretch();
 
-    auto* reticle_page = advanced_page;
-    reticle_page->addWidget(explanation(wardogs::i18n::text(QStringLiteral(
-        "Прозрачная шкала поверх игры помогает выставить азимут и угол. "
-        "В обычном режиме прицел пропускает нажатия мыши."))));
     auto* reticle_group = new QGroupBox(wardogs::i18n::text(QStringLiteral("Размер и выравнивание")));
+    reticle_group->setToolTip(wardogs::i18n::text(QStringLiteral(
+        "Прозрачная шкала поверх игры помогает выставить азимут и угол. "
+        "В обычном режиме прицел пропускает нажатия мыши.")));
     auto* reticle_form = form_for(reticle_group);
     ghost_preset_ = new QComboBox;
     ghost_preset_->setObjectName(QStringLiteral("ghostReticlePreset"));
@@ -281,6 +311,7 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     adjust_ghost->setToolTip(wardogs::i18n::text(QStringLiteral("Перетаскивайте края рамки; пропорции прицела — 4:3")));
     reticle_form->addRow(adjust_ghost);
     reticle_page->addWidget(reticle_group);
+    reticle_page->addStretch();
     adjust_ghost->setEnabled(settings.game_integration_enabled);
     connect(standalone_mode_, &QCheckBox::toggled, adjust_ghost,
         [adjust_ghost](bool standalone) { adjust_ghost->setEnabled(!standalone); });
@@ -302,7 +333,6 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
         }
     });
 
-    auto* ocr_page = advanced_page;
     auto* engine_group = new QGroupBox(wardogs::i18n::text(QStringLiteral("Распознавание координат")));
     auto* engine_form = form_for(engine_group);
     backend_ = new QComboBox;
@@ -318,29 +348,28 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     automatic_chat_region_->setObjectName(QStringLiteral("automaticChatRegion"));
     automatic_chat_region_->setChecked(settings.automatic_chat_region);
     engine_form->addRow(automatic_chat_region_);
-    engine_form->addRow(explanation(wardogs::i18n::text(QStringLiteral(
+    automatic_chat_region_->setToolTip(wardogs::i18n::text(QStringLiteral(
         "Alt+X всегда находит орудие в поле чата автоматически. "
         "Средняя кнопка всегда читает X/Y возле курсора на карте. "
         "Эта настройка выбирает источник только для дополнительных захватов цели и попадания; "
-        "своя область не нужна для быстрой игры."))));
-    engine_form->addRow(explanation(wardogs::i18n::text(QStringLiteral(
+        "своя область не нужна для быстрой игры.")));
+    engine_group->setToolTip(wardogs::i18n::text(QStringLiteral(
         "Автоматическое чтение чата и карты использует локальный RapidOCR. "
         "Движок выше применяется только к своей области экрана. "
-        "Windows OCR доступен при установленном английском языковом пакете."))));
+        "Windows OCR доступен при установленном английском языковом пакете.")));
     ocr_page->addWidget(engine_group);
-    auto* advanced = new QGroupBox(wardogs::i18n::text(QStringLiteral("Шаблон координат · для опытных пользователей")));
-    auto* advanced_layout = new QVBoxLayout(advanced);
-    advanced_layout->setContentsMargins(16, 18, 16, 16);
-    advanced_layout->setSpacing(10);
-    advanced_layout->addWidget(explanation(wardogs::i18n::text(QStringLiteral(
-        "Две группы захвата должны содержать X и Y. "
-        "Меняйте шаблон только для другого формата текста координат. "
-        "Сложные повторы групп, альтернативы и обратные ссылки отклоняются, чтобы поиск не зависал."))));
+    auto* advanced_layout = details_section(ocr_page,
+        wardogs::i18n::text(QStringLiteral("Свой шаблон координат")),
+        QStringLiteral("coordinatePatternDetails"));
     pattern_ = new QPlainTextEdit(qtext(
         wardogs::normalize_ocr_coordinate_pattern(settings.coordinate_pattern)));
     pattern_->setObjectName(QStringLiteral("coordinatePattern"));
     pattern_->setMinimumHeight(112);
     pattern_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Шаблон координат X и Y")));
+    pattern_->setToolTip(wardogs::i18n::text(QStringLiteral(
+        "Две группы захвата должны содержать X и Y. "
+        "Меняйте шаблон только для другого формата текста координат. "
+        "Сложные повторы групп, альтернативы и обратные ссылки отклоняются, чтобы поиск не зависал.")));
     advanced_layout->addWidget(pattern_);
     auto* reset_pattern = new QPushButton(wardogs::i18n::text(QStringLiteral("Восстановить стандартный шаблон WARDOGS")));
     reset_pattern->setObjectName(QStringLiteral("resetCoordinatePattern"));
@@ -348,7 +377,6 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
         pattern_->setPlainText(qtext(std::wstring{wardogs::default_ocr_coordinate_pattern}));
     });
     advanced_layout->addWidget(reset_pattern);
-    ocr_page->addWidget(advanced);
     ocr_page->addStretch();
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);

@@ -1,4 +1,5 @@
 #include "wardogs/windows_ocr.hpp"
+#include "wardogs/ocr_preprocessing.hpp"
 #include "wardogs/logger.hpp"
 
 #include <Windows.h>
@@ -82,27 +83,7 @@ winrt::Windows::Graphics::Imaging::SoftwareBitmap software_bitmap(
     byte* bytes = nullptr;
     winrt::check_hresult(
         buffer.as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
-    // Scale/mask directly into the WinRT buffer: no full-size temporary BGR
-    // image or second upscaled copy, with exactly the previous nearest pixels.
-    for (int y = 0; y < height; ++y) {
-        if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
-        const auto source_row = static_cast<std::size_t>((y / scale) * image.width * 3);
-        for (int x = 0; x < width; ++x) {
-            const auto input = source_row + static_cast<std::size_t>((x / scale) * 3);
-            const auto output = static_cast<std::size_t>((y * width + x) * 4);
-            if (high_contrast) {
-                const int blue = image.bgr[input];
-                const int green = image.bgr[input + 1];
-                const int red = image.bgr[input + 2];
-                const int chroma = std::max({blue, green, red}) - std::min({blue, green, red});
-                const byte value = chroma >= 40 && green > red && green > blue ? 0 : 255;
-                bytes[output] = bytes[output + 1] = bytes[output + 2] = value;
-            } else {
-                std::copy_n(image.bgr.data() + input, 3, bytes + output);
-            }
-            bytes[output + 3] = 255;
-        }
-    }
+    detail::prepare_windows_ocr_pixels(image, scale, high_contrast, {bytes, byte_count}, stop);
     return SoftwareBitmap::CreateCopyFromBuffer(buffer, BitmapPixelFormat::Bgra8,
                                                  width, height,
                                                  BitmapAlphaMode::Ignore);
@@ -111,6 +92,44 @@ winrt::Windows::Graphics::Imaging::SoftwareBitmap software_bitmap(
 }  // namespace
 
 namespace detail {
+
+void prepare_windows_ocr_pixels(const Image& image, int scale, bool high_contrast,
+                               std::span<std::uint8_t> bgra, std::stop_token stop) {
+    validate_image(image);
+    // The provider chooses ceil(96 / height), hence 1..96. Validate this pure
+    // boundary independently so a bad scale cannot overflow or overrun a span.
+    if (scale < 1 || scale > 96 ||
+        static_cast<std::size_t>(image.width) * image.height * scale * scale > 16'000'000)
+        throw std::invalid_argument("Неверный масштаб изображения Windows OCR");
+    const auto stride = static_cast<std::size_t>(image.width) * scale * 4;
+    if (bgra.size() != stride * image.height * scale)
+        throw std::invalid_argument("Неверный размер буфера изображения Windows OCR");
+    // Convert/mask each source pixel only once and copy the repeated nearest-
+    // neighbour rows. No temporary image and no extra provider recognition.
+    for (int y = 0; y < image.height; ++y) {
+        if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
+        const auto* source = image.bgr.data() + static_cast<std::size_t>(y) * image.width * 3;
+        auto* row = bgra.data() + static_cast<std::size_t>(y) * scale * stride;
+        for (int x = 0; x < image.width; ++x) {
+            auto* output = row + static_cast<std::size_t>(x) * scale * 4;
+            if (high_contrast) {
+                const int blue = source[x * 3], green = source[x * 3 + 1], red = source[x * 3 + 2];
+                const int chroma = std::max({blue, green, red}) - std::min({blue, green, red});
+                const auto value = static_cast<std::uint8_t>(chroma >= 40 && green > red && green > blue ? 0 : 255);
+                output[0] = output[1] = output[2] = value;
+            } else {
+                std::copy_n(source + x * 3, 3, output);
+            }
+            output[3] = 255;
+            for (int repeat = 1; repeat < scale; ++repeat)
+                std::copy_n(output, 4, output + repeat * 4);
+        }
+        for (int repeat = 1; repeat < scale; ++repeat) {
+            if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
+            std::copy_n(row, stride, row + repeat * stride);
+        }
+    }
+}
 
 // Process-wide, including reconstructed WindowsOcr instances. A cancelled
 // provider may retain its callback/bitmap for an arbitrarily long time; its

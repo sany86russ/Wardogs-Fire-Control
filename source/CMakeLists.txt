@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.12.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.13.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -53,6 +53,20 @@ target_link_libraries(wardogs_terrain PRIVATE Qt6::Core wardogs_zstd bcrypt)
 if(MSVC)
     target_compile_options(wardogs_terrain PRIVATE /W4 /permissive- /utf-8)
 endif()
+
+add_library(wardogs_terrain_tasks src/terrain_tasks.cpp)
+target_include_directories(wardogs_terrain_tasks PUBLIC include)
+target_link_libraries(wardogs_terrain_tasks PUBLIC wardogs_terrain wardogs_core Qt6::Core)
+target_compile_options(wardogs_terrain_tasks PRIVATE /W4 /permissive- /utf-8)
+
+add_executable(wardogs_calculation_benchmark tools/calculation_benchmark.cpp)
+target_link_libraries(wardogs_calculation_benchmark PRIVATE wardogs_core wardogs_terrain Qt6::Core)
+target_compile_options(wardogs_calculation_benchmark PRIVATE /W4 /permissive- /utf-8)
+
+add_executable(ocr_preprocessing_benchmark tools/ocr_preprocessing_benchmark.cpp src/windows_ocr.cpp)
+target_link_libraries(ocr_preprocessing_benchmark PRIVATE wardogs_core windowsapp)
+target_compile_definitions(ocr_preprocessing_benchmark PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(ocr_preprocessing_benchmark PRIVATE /W4 /permissive- /utf-8)
 
 add_library(wardogs_core
     src/calculator.cpp
@@ -116,6 +130,7 @@ if(WIN32)
         "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
     )
     target_include_directories(WarDogsDistanceCalculator PRIVATE include)
+    target_link_libraries(WarDogsDistanceCalculator PRIVATE wardogs_terrain_tasks)
     target_compile_definitions(WarDogsDistanceCalculator PRIVATE
         UNICODE _UNICODE NOMINMAX WARDOGS_VERSION="${PROJECT_VERSION}"
     )
@@ -210,6 +225,12 @@ install(FILES
 )
 
 enable_testing()
+
+add_executable(wardogs_terrain_tasks_tests tests/terrain_tasks_tests.cpp)
+target_link_libraries(wardogs_terrain_tasks_tests PRIVATE wardogs_terrain_tasks)
+target_compile_options(wardogs_terrain_tasks_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_terrain_tasks_tests COMMAND wardogs_terrain_tasks_tests)
+set_tests_properties(wardogs_terrain_tasks_tests PROPERTIES TIMEOUT 15)
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)

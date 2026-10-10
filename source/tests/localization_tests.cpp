@@ -299,6 +299,10 @@ void test_real_dialogs_and_solution_state() {
     auto* preset = dialog.findChild<QComboBox*>(QStringLiteral("ghostReticlePreset"));
     check(tabs && pattern && mode && preset, "real settings dialog exposes expected controls");
     if (!tabs || !pattern || !mode || !preset) return;
+    check(tabs->count() == 4 && tabs->tabText(0) == QStringLiteral("General") &&
+              tabs->tabText(1) == QStringLiteral("Shortcuts") && tabs->tabText(2) == QStringLiteral("Sight") &&
+              tabs->tabText(3) == QStringLiteral("Recognition"),
+          "all four focused settings pages have English captions");
     const auto original_pattern = pattern->toPlainText();
     const auto original_preset = preset->currentData();
     tabs->setCurrentIndex(1);

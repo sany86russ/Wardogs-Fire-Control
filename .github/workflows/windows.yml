@@ -62,6 +62,8 @@ jobs:
         run: ./source/build.ps1 -Configuration Release -ParallelJobs 2 -Package -SkipArchive
       - name: Check RU and EN catalogues
         run: python source/tools/check_localization.py
+      - name: Verify simplified UX, help and settings at native DPI
+        run: python source/tests/ux_snapshots.py --include-compact-2
       - name: Verify unified ranging and four sight metrics on the isolated runner
         run: python source/tests/fire_control_snapshots.py
       - name: Verify offline accuracy excludes real diagnostic application events

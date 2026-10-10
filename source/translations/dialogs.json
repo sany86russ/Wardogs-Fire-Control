@@ -678,5 +678,53 @@
   {
     "ru": "Завершите захват координат перед установкой обновления.",
     "en": "Finish capturing coordinates before installing the update."
+  },
+  {
+    "ru": "Клавиши",
+    "en": "Shortcuts"
+  },
+  {
+    "ru": "Распознавание",
+    "en": "Recognition"
+  },
+  {
+    "ru": "Только ручной ввод",
+    "en": "Manual input only"
+  },
+  {
+    "ru": "Свой шаблон координат",
+    "en": "Custom coordinate pattern"
+  },
+  {
+    "ru": "1. %1 — орудие из чата.\n2. Средняя кнопка по цели — наводка.",
+    "en": "1. %1 — gun from chat.\n2. Middle-click the target — aim."
+  },
+  {
+    "ru": "В игре: M → правая кнопка по орудию → Mark Coordinates. Координаты появятся в поле чата; отправлять сообщение не нужно.",
+    "en": "In game: M → right-click the gun → Mark Coordinates. The coordinates appear in the chat input; you do not need to send a message."
+  },
+  {
+    "ru": "Средняя кнопка по цели — наводка.",
+    "en": "Middle-click the target — aim."
+  },
+  {
+    "ru": "%1 — цель и наводка.",
+    "en": "%1 — target and aim."
+  },
+  {
+    "ru": "1. %1 — орудие из чата.\n2. %2",
+    "en": "1. %1 — gun from chat.\n2. %2"
+  },
+  {
+    "ru": "Перетащите карточку или её края.",
+    "en": "Drag the card or its edges."
+  },
+  {
+    "ru": "Пауза появления отметки",
+    "en": "Marker appearance delay"
+  },
+  {
+    "ru": "Ожидание подписи X/Y после щелчка. При недостаточной уверенности программа делает отдельные повторные снимки; прежняя наводка скрыта до завершения чтения.",
+    "en": "Wait for the X/Y label after clicking. If confidence is insufficient, the application captures separate retry frames; previous aim stays hidden until reading is resolved."
   }
 ]

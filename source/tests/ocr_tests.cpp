@@ -1,5 +1,7 @@
 #include "wardogs/core.hpp"
 #include "wardogs/ocr.hpp"
+#include "wardogs/ocr_preprocessing.hpp"
+#include "ocr_preprocessing_reference.hpp"
 
 #include <Windows.h>
 
@@ -7,6 +9,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -17,11 +20,6 @@
 #include <stop_token>
 #include <thread>
 #include <vector>
-
-namespace wardogs::detail {
-void prepare_ocr_tensor(const Image& image, std::vector<float>& tensor, int& tensor_width,
-                        int crop_top, int crop_bottom, std::stop_token stop);
-}
 
 namespace {
 int failures = 0;
@@ -41,6 +39,22 @@ void rejects(const std::function<void()>& operation, const char* message) {
 
 void check_resampling_boundaries() {
     using namespace wardogs;
+    for (const auto size : std::array<std::pair<int, int>, 10>{{
+             {1, 1}, {2, 2}, {7, 19}, {226, 47}, {320, 48},
+             {512, 97}, {3600, 48}, {4096, 48}, {3, 100}, {16384, 256}}}) {
+        const auto varied = ocr_preprocessing_reference::pixels(size.first, size.second);
+        for (const int crop : {0, size.second > 2 ? 1 : 0}) {
+            if (48.0 * size.first / (size.second - 2 * crop) > 4096) continue;
+            std::vector<float> reference, actual;
+            int reference_width = 0, actual_width = 0;
+            ocr_preprocessing_reference::tensor(varied, reference, reference_width, crop, crop);
+            actual.assign(reference.size(), 17.0F);
+            detail::prepare_ocr_tensor(varied, actual, actual_width, crop, crop, {});
+            check(reference_width == actual_width && reference.size() == actual.size() &&
+                      std::memcmp(reference.data(), actual.data(), reference.size() * sizeof(float)) == 0,
+                  "optimized bilinear tensor is bit-identical across enlargement, shrinkage, crop and width limits");
+        }
+    }
     // Different BGR corners make an unintended upper/left-neighbour blend
     // observable independently from neural recognition or text geometry.
     const Image corners{2, 2, {0, 40, 80, 255, 90, 100,

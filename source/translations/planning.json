@@ -750,5 +750,53 @@
   {
     "ru": "\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.",
     "en": "\nPreview: %1 MIL · bearing %2°; without Alt+I correction. This is not active aiming."
+  },
+  {
+    "ru": "Рельеф и оценочная дуга",
+    "en": "Terrain and estimated arc"
+  },
+  {
+    "ru": "Подробности расчёта",
+    "en": "Calculation details"
+  },
+  {
+    "ru": "Параметры модели",
+    "en": "Model settings"
+  },
+  {
+    "ru": "Последние точки сохраняются автоматически. Дайте имя, чтобы сохранить избранное.",
+    "en": "Recent points are saved automatically. Add a name to keep a favourite."
+  },
+  {
+    "ru": "Введите свой замер от выстрела до попадания. Alt+I время не измеряет.",
+    "en": "Enter your own shot-to-impact time. Alt+I does not measure time."
+  },
+  {
+    "ru": " · текущая наводка: %1 MIL / %2°",
+    "en": " · current aim: %1 MIL / %2°"
+  },
+  {
+    "ru": " · предварительный расчёт",
+    "en": " · preview calculation"
+  },
+  {
+    "ru": " · наводка недоступна",
+    "en": " · aim unavailable"
+  },
+  {
+    "ru": "\nВремя: %1 с · %2",
+    "en": "\nTime: %1 s · %2"
+  },
+  {
+    "ru": "собственные замеры",
+    "en": "own measurements"
+  },
+  {
+    "ru": "предположенная модель",
+    "en": "assumed model"
+  },
+  {
+    "ru": "\nВремя полёта неизвестно",
+    "en": "\nFlight time unknown"
   }
 ]

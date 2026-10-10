@@ -31,6 +31,7 @@
 #include <QTableWidget>
 #include <QTextBrowser>
 #include <QTimer>
+#include <QToolButton>
 #include <QUuid>
 #include <QVBoxLayout>
 
@@ -74,6 +75,28 @@ QVBoxLayout* page(QTabWidget* tabs, const QString& title) {
     layout->setSpacing(12);
     scroll->setWidget(content);
     tabs->addTab(scroll, title);
+    return layout;
+}
+QVBoxLayout* details(QVBoxLayout* page, const QString& title, const QString& name) {
+    auto* toggle = new QToolButton;
+    toggle->setObjectName(name);
+    toggle->setText(title);
+    toggle->setCheckable(true);
+    toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    toggle->setArrowType(Qt::RightArrow);
+    toggle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* content = new QWidget;
+    content->setProperty("auxiliaryDetails", true);
+    auto* layout = new QVBoxLayout(content);
+    layout->setContentsMargins(0, 4, 0, 0);
+    layout->setSpacing(10);
+    content->hide();
+    QObject::connect(toggle, &QToolButton::toggled, content, [toggle, content](bool open) {
+        toggle->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+        content->setVisible(open);
+    });
+    page->addWidget(toggle);
+    page->addWidget(content);
     return layout;
 }
 QDoubleSpinBox* number(const QString& name, double minimum, double maximum, int decimals) {
@@ -250,7 +273,7 @@ struct PlanningDialog::State {
     std::vector<ListedMission> shown_missions;
     std::vector<Observation> observations;
     std::optional<wardogs::FiringAnalysis> analysis;
-    QLabel *coordinates{}, *status{}, *result{}, *clearance{}, *profile_info{};
+    QLabel *coordinates{}, *status{}, *summary{}, *result{}, *clearance{}, *profile_info{};
     TerrainProfileWidget* plot{};
     QComboBox *arc{}, *step{};
     QCheckBox* assume{};
@@ -470,7 +493,7 @@ QHeaderView::section,QTableCornerButton::section {
 }
 )"));
     configure_frameless_window(this);
-    setWindowTitle(ui_text("Дополнительные инструменты · WARDOGS"));
+    setWindowTitle(ui_text("Планирование · WARDOGS"));
     setModal(true);
     setMinimumSize(440, 380);
     const auto available = screen()->availableGeometry().size();
@@ -483,8 +506,9 @@ QHeaderView::section,QTableCornerButton::section {
     root->setContentsMargins(18, 12, 18, 12);
     s.coordinates = note({});
     s.coordinates->setObjectName(QStringLiteral("planningCoordinates"));
+    s.coordinates->setProperty("auxiliarySection", true);
     root->addWidget(s.coordinates);
-    root->addWidget(note(ui_text("Для обычной стрельбы достаточно выбрать цель и отметить попадание Alt+I. Здесь — перенос цели, история позиций и необязательные измерения.")));
+    s.coordinates->setToolTip(ui_text("Для обычной стрельбы достаточно выбрать цель и отметить попадание Alt+I. Здесь — перенос цели, история позиций и необязательные измерения."));
     auto* tabs = new QTabWidget;
     tabs->setObjectName(QStringLiteral("planningTabs"));
     root->addWidget(tabs, 1);
@@ -519,7 +543,7 @@ QHeaderView::section,QTableCornerButton::section {
         });
     }
     analysis_page->addWidget(shifts);
-    analysis_page->addWidget(note(ui_text("Лево/право задаются от орудия к цели. Ближе/дальше смещают саму цель; это команда корректировщика, а не калибровка по попаданию Alt+I.")));
+    shifts->setToolTip(ui_text("Лево/право задаются от орудия к цели. Ближе/дальше смещают саму цель; это команда корректировщика, а не калибровка по попаданию Alt+I."));
     auto* choices = new QHBoxLayout;
     s.arc = new QComboBox;
     s.arc->setObjectName(QStringLiteral("planningArc"));
@@ -529,21 +553,33 @@ QHeaderView::section,QTableCornerButton::section {
     choices->addWidget(s.arc);
     choices->addStretch();
     analysis_page->addLayout(choices);
-    s.result = note({});
-    s.result->setObjectName(QStringLiteral("flightTimeResult"));
-    analysis_page->addWidget(s.result);
+    s.summary = note({});
+    s.summary->setObjectName(QStringLiteral("planningSummary"));
+    s.summary->setProperty("auxiliarySection", true);
+    analysis_page->addWidget(s.summary);
+    s.clearance = note({});
+    s.clearance->setObjectName(QStringLiteral("terrainClearance"));
+    analysis_page->addWidget(s.clearance);
     s.plot = new TerrainProfileWidget;
     s.plot->setObjectName(QStringLiteral("terrainProfile"));
     s.plot->setMinimumHeight(230);
     analysis_page->addWidget(s.plot);
-    analysis_page->addWidget(note(ui_text("График — геометрическая оценка по цели; фактический путь после поправки Alt+I не измерен.")));
-    analysis_page->addWidget(note(ui_text("Зелёный — поверхность земли, оранжевый — оценочная дуга. Пробелы означают отсутствие данных. Дома, крыши, мосты, деревья и высота ствола в файле рельефа не представлены.")));
-    s.clearance = note({});
-    s.clearance->setObjectName(QStringLiteral("terrainClearance"));
-    analysis_page->addWidget(s.clearance);
+    auto* graph_caption = note(ui_text("Рельеф и оценочная дуга"));
+    graph_caption->setObjectName(QStringLiteral("muted"));
+    graph_caption->setToolTip(ui_text("График — геометрическая оценка по цели; фактический путь после поправки Alt+I не измерен.") + QStringLiteral("\n") +
+        ui_text("Зелёный — поверхность земли, оранжевый — оценочная дуга. Пробелы означают отсутствие данных. Дома, крыши, мосты, деревья и высота ствола в файле рельефа не представлены."));
+    s.plot->setToolTip(graph_caption->toolTip());
+    analysis_page->addWidget(graph_caption);
+    auto* result_details = details(analysis_page, ui_text("Подробности расчёта"),
+        QStringLiteral("planningResultDetails"));
+    s.result = note({});
+    s.result->setObjectName(QStringLiteral("flightTimeResult"));
+    result_details->addWidget(s.result);
+    auto* model_details = details(analysis_page, ui_text("Параметры модели"),
+        QStringLiteral("planningModelDetails"));
     s.assume = new QCheckBox(ui_text("Включить предположение о скорости и гравитации"));
     s.assume->setObjectName(QStringLiteral("assumeFlightModel"));
-    analysis_page->addWidget(s.assume);
+    model_details->addWidget(s.assume);
     auto* model = new QFormLayout;
     model->setRowWrapPolicy(QFormLayout::WrapLongRows);
     s.gravity = number(QStringLiteral("assumedGravity"), .001, 1000, 5);
@@ -552,12 +588,15 @@ QHeaderView::section,QTableCornerButton::section {
     s.speed->setSpecialValueText(ui_text("Не задана"));
     model->addRow(ui_text("Предполагаемая g, м/с²"), s.gravity);
     model->addRow(ui_text("Скорость L81, м/с"), s.speed);
-    analysis_page->addLayout(model);
-    analysis_page->addWidget(note(ui_text("9,80665 м/с² — выбранное земное предположение, не установленная гравитация WARDOGS. SPH-2: v = √(2629·g); L81: скорость задайте сами. Модель без сопротивления воздуха не меняет табличный MIL и не подтверждает попадание.")));
+    model_details->addLayout(model);
+    model_details->addWidget(note(ui_text("9,80665 м/с² — выбранное земное предположение, не установленная гравитация WARDOGS. SPH-2: v = √(2629·g); L81: скорость задайте сами. Модель без сопротивления воздуха не меняет табличный MIL и не подтверждает попадание.")));
     analysis_page->addStretch();
 
     auto* missions_page = page(tabs, ui_text("Позиции и цели"));
-    missions_page->addWidget(note(ui_text("Последние позиции и цели сохраняются автоматически в истории. Именованные записи создаются вручную. Для восстановления подтвердите карту и орудие; прежние поправки не восстанавливаются.")));
+    auto* history_note = note(ui_text("Последние точки сохраняются автоматически. Дайте имя, чтобы сохранить избранное."));
+    history_note->setObjectName(QStringLiteral("muted"));
+    history_note->setToolTip(ui_text("Последние позиции и цели сохраняются автоматически в истории. Именованные записи создаются вручную. Для восстановления подтвердите карту и орудие; прежние поправки не восстанавливаются."));
+    missions_page->addWidget(history_note);
     s.name = new QLineEdit;
     s.name->setObjectName(QStringLiteral("missionName"));
     s.name->setMaxLength(static_cast<int>(wardogs::maximum_fire_mission_name_length));
@@ -579,6 +618,7 @@ QHeaderView::section,QTableCornerButton::section {
     auto* actions = new QHBoxLayout;
     s.restore = new QPushButton(ui_text("Восстановить выбранное"));
     s.restore->setObjectName(QStringLiteral("restoreFireMission"));
+    s.restore->setProperty("primary", true);
     s.rename = new QPushButton(ui_text("Переименовать"));
     s.rename->setObjectName(QStringLiteral("renameFireMission"));
     s.erase = new QPushButton(ui_text("Удалить"));
@@ -624,8 +664,10 @@ QHeaderView::section,QTableCornerButton::section {
     }); });
 
     auto* time_page = page(tabs, ui_text("Измерения времени"));
-    time_page->addWidget(note(ui_text("Alt+I отмечает координаты попадания и не измеряет время полёта: момент выстрела неизвестен. Время ниже — только ваш отдельный замер.")));
-    time_page->addWidget(note(ui_text("Измерьте время от выстрела до попадания. Запись относится к текущей цели, орудию, траектории, перепаду высот и версии игры. Между измеренными дальностями используется интерполяция, за пределами — время неизвестно. При смене боеприпаса используйте отдельную метку версии/профиля.")));
+    auto* timing_note = note(ui_text("Введите свой замер от выстрела до попадания. Alt+I время не измеряет."));
+    timing_note->setObjectName(QStringLiteral("muted"));
+    timing_note->setToolTip(ui_text("Измерьте время от выстрела до попадания. Запись относится к текущей цели, орудию, траектории, перепаду высот и версии игры. Между измеренными дальностями используется интерполяция, за пределами — время неизвестно. При смене боеприпаса используйте отдельную метку версии/профиля."));
+    time_page->addWidget(timing_note);
     auto* timing_form = new QFormLayout;
     timing_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     s.version = new QLineEdit;
@@ -647,6 +689,7 @@ QHeaderView::section,QTableCornerButton::section {
     time_page->addLayout(timing_form);
     s.record = new QPushButton(ui_text("Записать время для текущей цели"));
     s.record->setObjectName(QStringLiteral("recordFlightTime"));
+    s.record->setProperty("primary", true);
     time_page->addWidget(s.record);
     s.times = new QTableWidget(0, 5);
     s.times->setObjectName(QStringLiteral("flightMeasurements"));
@@ -749,10 +792,11 @@ void PlanningDialog::refresh() {
     if (l81) { QSignalBlocker block(s.arc); s.arc->setCurrentIndex(1); }
     s.gravity->setEnabled(s.assume->isChecked());
     s.speed->setEnabled(s.assume->isChecked() && l81);
-    s.coordinates->setText(QStringLiteral("%1 · %2\n%3\n%4")
+    s.coordinates->setText(QStringLiteral("%1 · %2")
         .arg(QString::fromStdWString(std::wstring(wardogs::game_map_key(s.context.map))),
-             l81 ? QStringLiteral("L81") : QStringLiteral("SPH-2"),
-             s.context.base ? ui_text("Орудие: %1").arg(point_text(*s.context.base)) : ui_text("Орудие не задано"),
+             l81 ? QStringLiteral("L81") : QStringLiteral("SPH-2")));
+    s.coordinates->setToolTip(QStringLiteral("%1\n%2")
+        .arg(s.context.base ? ui_text("Орудие: %1").arg(point_text(*s.context.base)) : ui_text("Орудие не задано"),
              s.context.target ? ui_text("Цель: %1").arg(point_text(*s.context.target)) : ui_text("Цель не задана")));
     s.profile_info->setText(l81
         ? ui_text("L81 · 71 точка · 132–684 м · 850–150 MIL\nИсточник: Apollyon, таблица получена 03.10.2026. Строки 80–131 м и выше 684 м не входят в заявленный рабочий диапазон. MIL — команда прицела; её связь с физическим углом не подтверждена. Штатная высотная модель и время полёта неизвестны.")
@@ -766,6 +810,7 @@ void PlanningDialog::refresh() {
     s.plot->set_samples({});
     s.clearance->setText(ui_text("Профиль рельефа не рассчитан"));
     s.result->setText(ui_text("Время полёта неизвестно"));
+    s.summary->setText(ui_text("Задайте орудие и цель"));
     s.attempt([&] { s.load_missions(); });
     s.attempt([&] { s.refresh_times(); });
     if (!s.ready()) {
@@ -796,9 +841,13 @@ void PlanningDialog::refresh() {
         }
         auto first = wardogs::analyze_firing(request);
         if (first.height_delta_m) request.flight_profile = s.time_profile(*first.height_delta_m, first.distance_m);
-        s.analysis = wardogs::analyze_firing(request);
+        // The first analysis already contains the complete terrain profile.
+        // Recompute only when measured timing changes the request; ordinary
+        // planning otherwise needlessly reads and samples the same map twice.
+        s.analysis = request.flight_profile ? wardogs::analyze_firing(request) : std::move(first);
         const auto& result = *s.analysis;
         QString summary = ui_text("До цели %1 м").arg(result.distance_m, 0, 'f', 2);
+        QString concise = ui_text("До цели %1 м").arg(result.distance_m, 0, 'f', 0);
         if (!l81 && s.context.active_solution && s.context.active_arc &&
             s.context.active_solution->arc == *s.context.active_arc &&
             s.selected_arc() == *s.context.active_arc) {
@@ -806,13 +855,19 @@ void PlanningDialog::refresh() {
             summary += ui_text("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°")
                 .arg(command.mil, 0, 'f', 0).arg(command.bearing_deg, 0, 'f', 1);
             summary += ui_text("\nПо таблице ≈ %1 м").arg(std::round(command.table_distance_m), 0, 'f', 0);
+            concise += ui_text(" · текущая наводка: %1 MIL / %2°")
+                .arg(command.mil, 0, 'f', 0).arg(command.bearing_deg, 0, 'f', 1);
         } else if (result.nominal_mil) {
+            if (!l81) concise += ui_text(" · предварительный расчёт");
             summary += l81
                 ? ui_text("\nУстановить %1 MIL · азимут %2°")
                     .arg(*result.nominal_mil, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2)
                 : ui_text("\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.")
                     .arg(*result.nominal_mil, 0, 'f', 2).arg(result.bearing_deg, 0, 'f', 2);
-        } else summary += ui_text("\nТабличная наводка недоступна");
+        } else {
+            summary += ui_text("\nТабличная наводка недоступна");
+            concise += ui_text(" · наводка недоступна");
+        }
         if (result.flight_time) {
             const auto& time = *result.flight_time;
             const bool measured = time.source.basis == wardogs::EstimateBasis::user_measurement ||
@@ -820,10 +875,15 @@ void PlanningDialog::refresh() {
             summary += ui_text("\nВремя полёта: %1 с · %2").arg(time.seconds, 0, 'f', 3).arg(
                 measured ? (time.source.basis == wardogs::EstimateBasis::user_measurement
                     ? ui_text("собственный замер") : ui_text("интерполяция собственных замеров")) : ui_text("оценка предположенной модели"));
+            concise += ui_text("\nВремя: %1 с · %2").arg(time.seconds, 0, 'f', 1).arg(
+                measured ? ui_text("собственные замеры") : ui_text("предположенная модель"));
             if (time.uncertainty_s) summary += ui_text(" · ±%1 с").arg(*time.uncertainty_s, 0, 'f', 3);
             if (measured) summary += ui_text("\nВерсия / профиль: %1").arg(QString::fromStdString(time.source.game_version)) +
                 ui_text("\nИсточник замера: %1").arg(QString::fromStdString(time.source.source));
-        } else summary += ui_text("\nВремя полёта неизвестно: добавьте замеры или явно включите модель.");
+        } else {
+            summary += ui_text("\nВремя полёта неизвестно: добавьте замеры или явно включите модель.");
+            concise += ui_text("\nВремя полёта неизвестно");
+        }
         if (l81 && s.assume->isChecked() && s.speed->value() <= 0)
             summary += ui_text("\nДля модели L81 задайте скорость снаряда.");
         if (result.trajectory)
@@ -831,6 +891,8 @@ void PlanningDialog::refresh() {
                 .arg(result.trajectory->apex_height_above_muzzle_m, 0, 'f', 1)
                 .arg(result.trajectory->apex_distance_m, 0, 'f', 1);
         s.result->setText(summary);
+        s.summary->setText(concise);
+        s.summary->setToolTip(summary);
         std::vector<ProfilePoint> samples;
         if (result.trajectory) {
             for (const auto& sample : result.trajectory->samples)
