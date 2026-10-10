@@ -4,6 +4,8 @@
 
 The updater is available starting with **2.8.0**. It uses public stable releases of [sany86russ/Wardogs-Fire-Control](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
 
+The current release is **2.12.0**: [changes EN/RU](releases/v2.12.0.md) · [complete portable package](https://github.com/sany86russ/Wardogs-Fire-Control/releases/download/v2.12.0/WardogsFireControl-v2.12.0-win-x64.zip). Rounding feedback and robust SPH-2 series updates require no new settings. L81 and retained local data are preserved; the [10 m accuracy criterion](../source/docs/SPH2-VALIDATION-EN.md) needs separate field validation.
+
 ## Using the updater
 
 1. The app checks for a new release in the background at startup. You can disable startup checks in Settings.
@@ -16,7 +18,7 @@ Finish your current calculation before updating. Coordinates, history and sessio
 
 ## First upgrade from an older version
 
-Versions **2.7.0 and earlier** cannot update themselves. Download `WardogsFireControl-v2.8.0-win-x64.zip` from Assets once and extract the **entire** archive into a separate folder. Launch the new package. Settings and heights are restored from your Windows profile.
+Versions **2.7.0 and earlier** cannot update themselves. Download `WardogsFireControl-v2.12.0-win-x64.zip` from Assets once and extract the **entire** archive into a separate folder. Launch the new package. Settings and heights are restored from your Windows profile.
 
 ## Requirements and verification
 

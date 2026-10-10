@@ -2,14 +2,15 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
-## 2.12.0 — candidate: consistent commands and robust ranging · October 10, 2026
+## 2.12.0 — consistent commands and robust ranging · October 10, 2026
 
 - Cards, the ghost sight, clipboard, planning and impact capture share the same displayed command: integer MIL and azimuth rounded to 0.1°. Sight-table range follows that MIL. Feedback no longer learns from hidden fractional settings the player did not set.
 - The first valid impact still applies the full local correction immediately. Three or more effective observations refine the centre and suppress isolated outliers without extra settings. Local evidence, provisional status and correction-estimate spread are visible.
 - Logs link the displayed command and observation with stable identifiers, retain the full calculated values and the next displayed command, and distinguish these from an actual in-game shot or sight reading.
 - An offline log analyser measures the **within 10 m** criterion: recorded impact rate, centre bias, scatter and an exact statistical bound. Diagnostic data and duplicates are excluded. This does not certify 99% of in-game shots without a complete independent field protocol.
+- Logging improvements prepared in 2.11.1 are included: accepted coordinates, OCR confirmations/cancellations, weapon/arc changes, immediate recording of main actions and recording-failure notifications. The historical 2.11.1 entry remains below.
 
-L81/SPH-2 tables and the height model are preserved. This candidate is not published or installed automatically. [Calculations, sources and validation](SPH2-VALIDATION-EN.md).
+L81/SPH-2 tables and the height model are preserved. [Detailed 2.12.0 release EN/RU](../../docs/releases/v2.12.0.md) · [Calculations, sources and validation](SPH2-VALIDATION-EN.md). Download and installation through the updater require a user action.
 
 ## 2.11.1 — candidate: complete battle diagnostics · October 10, 2026
 
