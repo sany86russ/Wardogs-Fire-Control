@@ -17,6 +17,7 @@
 #include <QDoubleSpinBox>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QFontMetrics>
 #include <QHoverEvent>
 #include <QImage>
@@ -31,6 +32,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTemporaryFile>
 #include <QToolButton>
 #include <QPushButton>
 #include <QPlainTextEdit>
@@ -446,23 +448,77 @@ void check_pinned_preferences_reconstruction() {
     check(commits == 0 && original.flush_preferences() && commits == 0,
           "programmatic placement and layout do not overwrite a persisted user placement");
 
-    const auto gesture = [](PinnedResultWindow& card, QPoint local, QPoint delta) {
+    const auto gesture = [](PinnedResultWindow& card, QPoint local, QPoint delta, bool resize) {
+        const QRect before = card.geometry();
         const QPoint start = card.mapToGlobal(local);
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(local), QPointF(start),
-                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-        QMouseEvent motion(QEvent::MouseMove, QPointF(local + delta), QPointF(start + delta),
-                           Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(local + delta), QPointF(start + delta),
-                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-        QApplication::sendEvent(&card, &press);
-        QApplication::sendEvent(&card, &motion);
-        QApplication::sendEvent(&card, &release);
+        const QPoint finish = start + delta;
+        // Qt 6's constructors update the pointing device's shared event point.
+        // Construct and deliver each event before creating the next one, as a
+        // real pointer does; preconstructing the batch corrupts its press point.
+        bool press_accepted{}, motion_accepted{}, release_accepted{};
+        {
+            QMouseEvent press(QEvent::MouseButtonPress, QPointF(local), QPointF(start),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &press);
+            press_accepted = press.isAccepted();
+            check(press.globalPosition().toPoint() == start && card.geometry() == before,
+                  "the actual gesture press retains its starting pointer and canvas before motion");
+        }
+        {
+            QMouseEvent motion(QEvent::MouseMove, QPointF(card.mapFromGlobal(finish)), QPointF(finish),
+                               Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &motion);
+            motion_accepted = motion.isAccepted();
+            check(motion.globalPosition().toPoint() == finish,
+                  "the actual gesture motion retains its own final global pointer coordinate");
+        }
+        const QRect after_motion = card.geometry();
+        {
+            QMouseEvent release(QEvent::MouseButtonRelease, QPointF(card.mapFromGlobal(finish)), QPointF(finish),
+                                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(&card, &release);
+            release_accepted = release.isAccepted();
+        }
         QApplication::processEvents();
+        const QRect expected = resize
+            ? QRect(before.topLeft(), before.size() + QSize(delta.x(), delta.y()))
+            : before.translated(delta);
+        if (!press_accepted || !motion_accepted || !release_accepted ||
+            after_motion != expected || card.geometry() != expected) {
+            const auto describe = [](const QRect& rect) {
+                std::cerr << rect.x() << ',' << rect.y() << ',' << rect.width() << ',' << rect.height();
+            };
+            std::cerr << "Mini-card " << (resize ? "resize" : "drag") << " gesture: before=";
+            describe(before);
+            std::cerr << " motion=";
+            describe(after_motion);
+            std::cerr << " released=";
+            describe(card.geometry());
+            std::cerr << " expected=";
+            describe(expected);
+            std::cerr << " accepted=" << press_accepted << ',' << motion_accepted << ',' << release_accepted << '\n';
+        }
+        check(press_accepted && motion_accepted && release_accepted,
+              "the unlocked card accepts each press, held-button motion and release of a real gesture");
+        check(after_motion == expected && card.geometry() == expected,
+              "each actual user gesture changes exactly its intended position or bottom-right canvas size");
     };
-    gesture(original, QPoint(original.width() / 2, original.height() / 2), QPoint(24, 18));
-    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(28, 14));
-    check(original.flush_preferences() && commits > 0 && saved.placement && saved.mode_sizes[0],
+    gesture(original, QPoint(original.width() / 2, original.height() / 2), QPoint(24, 18), false);
+    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(28, 14), true);
+    const bool flushed = original.flush_preferences();
+    if (!flushed || commits == 0 || !saved.placement || !saved.mode_sizes[0])
+        std::cerr << "Mini-card placement flush: screen='" << screen->name().toStdString()
+                  << "' available=" << available.x() << ',' << available.y() << ','
+                  << available.width() << ',' << available.height() << " geometry="
+                  << original.x() << ',' << original.y() << ',' << original.width() << ',' << original.height()
+                  << " flush=" << flushed << " commits=" << commits
+                  << " placement=" << bool(saved.placement) << " mortar_size=" << bool(saved.mode_sizes[0]) << '\n';
+    check(flushed, "a completed valid mini-card gesture can flush its pending settings without a save error");
+    check(commits > 0 && saved.placement && saved.mode_sizes[0],
           "dragging and resizing flush an actual user placement and mortar canvas before exit");
+    check(wardogs::valid_pinned_card_placement(*saved.placement) &&
+              wardogs::valid_pinned_card_size(*saved.mode_sizes[0]),
+          "a completed gesture persists a valid named screen placement and weapon canvas");
     const QRect moved_geometry = original.geometry();
     check(saved.placement->rect == wardogs::PinnedCardRect{moved_geometry.x(), moved_geometry.y(),
                                                          moved_geometry.width(), moved_geometry.height()},
@@ -477,7 +533,7 @@ void check_pinned_preferences_reconstruction() {
     original.set_mode(true);
     original.set_vehicle_values(low, high);
     original.set_selected_arc(wardogs::Arc::high);
-    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(24, 18));
+    gesture(original, QPoint(original.width() - 2, original.height() - 2), QPoint(24, 18), true);
     check(original.flush_preferences() && saved.mode_sizes[0] && saved.mode_sizes[1],
           "user geometry stores both weapon canvases without conflating their content heights");
     const QSize vehicle_canvas = original.size();
@@ -524,7 +580,25 @@ void check_pinned_preferences_reconstruction() {
 
 int main(int argc, char* argv[]) {
     const bool native_geometry = argc == 2 && std::string_view(argv[1]) == "--solution-geometry-native";
-    qputenv("QT_QPA_PLATFORM", native_geometry ? "windows" : "offscreen");
+    // Qt 6.8's default offscreen screen has no name. Give this isolated
+    // fixture a real backend identity while retaining all default geometry,
+    // DPI and frame behavior, so persistence uses the same validation as Windows.
+    // A relative basename also avoids ':' splitting a Windows drive in QPA args.
+    QTemporaryFile offscreen_config(QStringLiteral("wardogs-offscreen-XXXXXX.json"));
+    if (native_geometry) {
+        qputenv("QT_QPA_PLATFORM", "windows");
+    } else {
+        check(offscreen_config.open(), "the isolated offscreen fixture can create its temporary backend configuration");
+        const QByteArray config = R"({"synchronousWindowSystemEvents":false,"windowFrameMargins":true,
+            "screens":[{"name":"pinned-fixture-screen","x":0,"y":0,"width":800,"height":800,
+            "logicalDpi":96,"logicalBaseDpi":96,"dpr":1.0}]})";
+        check(offscreen_config.write(config) == config.size() && offscreen_config.flush(),
+              "the isolated offscreen fixture writes its complete named-screen configuration");
+        const QByteArray backend = QByteArray("offscreen:configfile=") +
+            QFileInfo(offscreen_config.fileName()).fileName().toUtf8();
+        offscreen_config.close();
+        check(qputenv("QT_QPA_PLATFORM", backend), "the isolated fixture selects the configured offscreen backend");
+    }
     // The offscreen backend otherwise uses its fixed-width fallback glyphs,
     // unlike the Windows backend used by the application. Measure the same
     // installed fonts so minimum-width assertions reflect the actual UI.
@@ -535,6 +609,11 @@ int main(int argc, char* argv[]) {
     qputenv("QT_QPA_FONTDIR", (QString::fromWCharArray(windows_directory) +
                               QStringLiteral("\\Fonts")).toUtf8());
     QApplication app(argc, argv);
+    if (!native_geometry)
+        check(QGuiApplication::primaryScreen() &&
+                  QGuiApplication::primaryScreen()->name() == QStringLiteral("pinned-fixture-screen") &&
+                  QGuiApplication::primaryScreen()->geometry() == QRect(0, 0, 800, 800),
+              "the real offscreen backend applies only the fixture's screen identity to its default canvas");
     if (native_geometry) {
         native_solution_geometry_tests();
         check_pinned_passive_geometry();
