@@ -51,9 +51,14 @@ QFormLayout* form_for(QGroupBox* group) {
 
 QVBoxLayout* tab_page(QTabWidget* tabs, const QString& name) {
     auto* scroll = new QScrollArea;
+    scroll->setObjectName(QStringLiteral("settingsPageScroll"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    scroll->viewport()->setObjectName(QStringLiteral("settingsPageViewport"));
+    scroll->viewport()->setAttribute(Qt::WA_StyledBackground, true);
     auto* page = new QWidget;
+    page->setObjectName(QStringLiteral("settingsPage"));
+    page->setAttribute(Qt::WA_StyledBackground, true);
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(4, 14, 4, 4);
     layout->setSpacing(16);
@@ -102,6 +107,9 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
       pinned_card_(settings.pinned_card), ghost_reticle_(settings.ghost_reticle),
       original_settings_(settings) {
     configure_frameless_window(this);
+    setStyleSheet(QStringLiteral(
+        "QWidget#settingsContent,QScrollArea#settingsPageScroll,"
+        "QWidget#settingsPageViewport,QWidget#settingsPage { background:#0b1018; border:0; }"));
     setWindowTitle(wardogs::i18n::text(QStringLiteral("Настройки · WARDOGS")));
     setModal(true);
     setMinimumSize(440, 380);
@@ -113,6 +121,8 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     outer->setSpacing(0);
     outer->addWidget(new WindowTitleBar(this));
     auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("settingsContent"));
+    content->setAttribute(Qt::WA_StyledBackground, true);
     auto* root = new QVBoxLayout(content);
     root->setContentsMargins(24, 18, 24, 18);
     root->setSpacing(12);

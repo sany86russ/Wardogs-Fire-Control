@@ -745,10 +745,17 @@ public:
         // Content changes can post a second layout request to the outer footer.
         // Settle that request before rendering the diagnostic window.
         QApplication::processEvents();
-        if (mode == QStringLiteral("workspace-sidebar")) {
-            // Weapon switching posts a content-fit request. Apply the narrow
-            // diagnostic canvas only after that ordinary request has settled.
-            resize(640, 720);
+        if (mode == QStringLiteral("workspace") ||
+            mode == QStringLiteral("workspace-sidebar") || mode == QStringLiteral("standalone") ||
+            mode == QStringLiteral("compact") || mode == QStringLiteral("first-start")) {
+            // Scale factors change the runner's logical desktop size. Hold
+            // the requested diagnostic viewport constant across actual DPIs,
+            // after ordinary screen fitting has finished. This affects only
+            // snapshots; the real application still fits the user's display.
+            const bool narrow = mode == QStringLiteral("workspace-sidebar") ||
+                mode == QStringLiteral("compact") || mode == QStringLiteral("first-start");
+            setFixedSize(narrow ? 640 : 880,
+                mode == QStringLiteral("compact") || mode == QStringLiteral("first-start") ? 500 : 720);
             QApplication::processEvents();
             QApplication::processEvents();
         }
@@ -918,6 +925,63 @@ public:
             check("help_is_split_into_start_keys_and_troubleshooting", tabs && tabs->count() == 3 &&
                 keys && keys->toPlainText().contains(qtext(settings_.base_hotkey)));
             check("opening_help_cancels_pending_game_entry", !enter_game_after_terrain_);
+        }
+        {
+            const auto original_settings = settings_;
+            const auto original_base = base_;
+            const auto original_target = target_;
+            const auto original_input_epoch = input_epoch_;
+            const auto original_base_input = base_input_->text();
+            const auto original_target_input = target_input_->text();
+            settings_.middle_mouse_enabled = false;
+            settings_.target_hotkey = L"Ctrl+Alt+T";
+            settings_.game_integration_enabled = true;
+            {
+                std::unique_ptr<QDialog> help(make_help_dialog(false));
+                auto* start = help->findChild<QTextBrowser*>(QStringLiteral("helpText"));
+                auto* keys = help->findChild<QTextBrowser*>(QStringLiteral("helpKeys"));
+                check("help_without_middle_mouse_uses_current_target_key", start && keys &&
+                      start->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      start->toPlainText().contains(QStringLiteral("Mark Coordinates")) &&
+                      keys->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      keys->toPlainText().contains(wardogs::i18n::text(QStringLiteral("Выключено"))));
+            }
+            settings_.game_integration_enabled = false;
+            {
+                std::unique_ptr<QDialog> help(make_help_dialog(false));
+                auto* start = help->findChild<QTextBrowser*>(QStringLiteral("helpText"));
+                auto* keys = help->findChild<QTextBrowser*>(QStringLiteral("helpKeys"));
+                const auto capture_disabled = wardogs::i18n::text(QStringLiteral(
+                    "Игровой захват, глобальные клавиши и окна поверх игры выключены."));
+                const auto capture_setup = wardogs::i18n::text(QStringLiteral(
+                    "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."));
+                check("standalone_help_starts_with_manual_input_and_exact_capture_setting", start && keys &&
+                      start->toPlainText().contains(capture_disabled) &&
+                      start->toPlainText().contains(wardogs::i18n::text(QStringLiteral("Ввод вручную"))) &&
+                      start->toPlainText().contains(QStringLiteral("12.34 56.78")) &&
+                      start->toPlainText().contains(capture_setup) &&
+                      !start->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                      keys->toPlainText().contains(capture_disabled));
+                if (start && keys) {
+                    const auto other_language = wardogs::i18n::language() == wardogs::UiLanguage::russian
+                        ? wardogs::UiLanguage::english : wardogs::UiLanguage::russian;
+                    wardogs::i18n::set_language(other_language);
+                    check("standalone_help_html_switches_language_without_losing_bound_parameters",
+                          start->toPlainText().contains(wardogs::i18n::text(QStringLiteral(
+                              "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."))) &&
+                          keys->toPlainText().contains(qtext(settings_.target_hotkey)) &&
+                          keys->toPlainText().contains(wardogs::i18n::text(QStringLiteral(
+                              "Игровой захват, глобальные клавиши и окна поверх игры выключены."))));
+                    wardogs::i18n::set_language(original_settings.language);
+                }
+            }
+            settings_ = original_settings;
+            check("help_profile_examples_preserve_session_and_entered_coordinates",
+                  base_ == original_base && target_ == original_target && input_epoch_ == original_input_epoch &&
+                  base_input_->text() == original_base_input && target_input_->text() == original_target_input &&
+                  settings_.middle_mouse_enabled == original_settings.middle_mouse_enabled &&
+                  settings_.game_integration_enabled == original_settings.game_integration_enabled &&
+                  settings_.target_hotkey == original_settings.target_hotkey);
         }
         check("diagnostic_previews_do_not_construct_network_updates", !updates_ &&
               !findChild<QPushButton*>(QStringLiteral("checkUpdatesButton"))->isEnabled());
@@ -2649,6 +2713,17 @@ private:
             "body { color:#dbe5ef; font-size:14px; } h2 { color:#edf4ff; font-size:24px; } "
             "h3 { color:#63d8c5; font-size:17px; margin-top:20px; } p { margin-top:8px; margin-bottom:14px; } "
             "a { color:#63d8c5; } td { padding:10px; }"));
+        const auto capture_setup = wardogs::i18n::text(QStringLiteral(
+            "Для автоматического захвата: Настройки → Основные → отключите «Только ручной ввод»."));
+        const auto capture_disabled = wardogs::i18n::text(QStringLiteral(
+            "Игровой захват, глобальные клавиши и окна поверх игры выключены."));
+        const auto target_step = settings_.middle_mouse_enabled
+            ? wardogs::i18n::text(QStringLiteral("Нажмите <b>среднюю кнопку мыши</b> у цели на карте. Держите курсор на месте до расчёта."))
+            : settings_.automatic_chat_region
+                ? wardogs::i18n::text(QStringLiteral("В игре: <b>M → ПКМ у цели → Mark Coordinates → %1</b>. Средняя кнопка выключена."))
+                      .arg(qtext(settings_.target_hotkey))
+                : wardogs::i18n::text(QStringLiteral("Покажите X/Y цели в своей области и нажмите <b>%1</b>. Если область ещё не выбрана, выделите строку координат по запросу. Средняя кнопка выключена."))
+                      .arg(qtext(settings_.target_hotkey));
         const QString content = notices
             ? wardogs::i18n::text(QStringLiteral("<h2>Лицензии и источники</h2><p>Основной код: Rico217 / Ricoz217, MIT.<br>Доработка и интерфейс: SoNiX.</p>"
                 "<p>Qt 6: LGPL v3 / GPL v3. ONNX Runtime: MIT. PaddleOCR: Apache 2.0. Zstandard: BSD / GPL v2.</p>"
@@ -2656,14 +2731,20 @@ private:
                 "<p>Рельеф: данные сообщества Apollyon, уведомление TERRAIN_DATA_NOTICE.md. Они не перелицензируются MIT.</p>"
                 "<p>Неофициальный инструмент для игры WARDOGS. Не связан с BULKHEAD.</p>"
                 "<p><a href='https://github.com/Ricoz217/WarDogs_Distance_Calculator'>Исходный проект</a></p>"))
-            : wardogs::i18n::text(QStringLiteral("<h2>Первый расчёт</h2>"
-                "<p>Для автоматического захвата включите взаимодействие с игрой в настройках. Для ручного расчёта оно не требуется.</p>"
+            : !settings_.game_integration_enabled
+                ? wardogs::i18n::text(QStringLiteral("<h2>Первый расчёт вручную</h2><p>%1</p>"
+                    "<h3>1 · Карта и орудие</h3><p>Выберите и подтвердите карту, затем выберите L81 или SPH-2 кнопкой орудия.</p>"
+                    "<h3>2 · Координаты</h3><p>Раскройте <b>Ввод вручную</b>. Введите позицию орудия и нажмите <b>Задать</b>. Затем введите цель и нажмите <b>Enter</b> или <b>Рассчитать</b>.<br>Пример пары X/Y: <b>12.34 56.78</b>.</p>"
+                    "<h3>3 · Наводка</h3><p>Установите показанные <b>азимут и MIL</b> в игре. Для SPH-2 используйте выбранную траекторию, отмеченную галочкой.</p>"
+                    "<p>%2</p>"))
+                      .arg(capture_disabled, capture_setup)
+                : wardogs::i18n::text(QStringLiteral("<h2>Первый расчёт</h2><p>%6</p>"
                 "<h3>1 · Карта и орудие</h3><p>Выберите карту текущего матча, подтвердите её и выберите L81 или SPH-2 кнопкой орудия.</p>"
                 "<h3>2 · Позиция орудия</h3><p>В игре: <b>M → ПКМ у орудия → Mark Coordinates → %1</b>.<br>Координаты читаются из поля чата. Отправлять сообщение не нужно.</p>"
-                "<h3>3 · Цель и наводка</h3><p>Нажмите <b>среднюю кнопку мыши</b> у цели на карте. Держите курсор на месте до расчёта.<br>Установите показанные <b>азимут и MIL</b> в игре. Возврат к окну: <b>%2</b>.</p>"
+                "<h3>3 · Цель и наводка</h3><p>%5<br>Установите показанные <b>азимут и MIL</b> в игре. Возврат к окну: <b>%2</b>.</p>"
                 "<p><b>SPH-2:</b> %3 меняет траекторию. После выстрела %4 на точке попадания уточняет наводку. Это необязательно; цель остаётся прежней.</p>"))
                 .arg(qtext(settings_.base_hotkey), qtext(settings_.exit_game_mode_hotkey),
-                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.impact_hotkey));
+                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.impact_hotkey), target_step, capture_setup);
         wardogs::i18n::bind_html(browser, content);
         if (notices) layout->addWidget(browser, 1);
         else {
@@ -2674,30 +2755,37 @@ private:
             keys->setObjectName(QStringLiteral("helpKeys"));
             keys->document()->setDefaultStyleSheet(browser->document()->defaultStyleSheet());
             wardogs::i18n::bind_html(keys, wardogs::i18n::text(QStringLiteral(
-                "<h2>Клавиши текущего профиля</h2><table width='100%' cellspacing='5' cellpadding='10'>"
+                "<h2>Клавиши текущего профиля</h2><p>%8</p><table width='100%' cellspacing='5' cellpadding='10'>"
                 "<tr bgcolor='#152234'><td>Позиция орудия</td><td><b>%1</b></td></tr>"
-                "<tr bgcolor='#152234'><td>Цель из чата</td><td><b>%2</b></td></tr>"
-                "<tr bgcolor='#152234'><td>Цель на карте</td><td><b>Средняя кнопка мыши</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Захват цели</td><td><b>%2</b></td></tr>"
+                "<tr bgcolor='#152234'><td>Цель на карте</td><td><b>%7</b></td></tr>"
                 "<tr bgcolor='#152234'><td>Попадание SPH-2</td><td><b>%3</b></td></tr>"
                 "<tr bgcolor='#152234'><td>Траектория SPH-2</td><td><b>%4</b></td></tr>"
                 "<tr bgcolor='#152234'><td>Вернуться к расчёту</td><td><b>%5</b></td></tr>"
                 "<tr bgcolor='#152234'><td>Разблокировать карточку</td><td><b>%6</b></td></tr></table>"
-                "<p>Сочетания меняются в настройках → Клавиши. Захват работает, когда окно WARDOGS находится на переднем плане.</p>"))
+                "<p>Сочетания меняются в настройках → Клавиши.</p>"))
                 .arg(qtext(settings_.base_hotkey), qtext(settings_.target_hotkey), qtext(settings_.impact_hotkey),
-                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey)));
+                     qtext(settings_.ghost_arc_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey),
+                     settings_.game_integration_enabled && settings_.middle_mouse_enabled
+                         ? wardogs::i18n::text(QStringLiteral("Средняя кнопка мыши"))
+                         : wardogs::i18n::text(QStringLiteral("Выключено")),
+                     settings_.game_integration_enabled
+                         ? wardogs::i18n::text(QStringLiteral("Захват работает, когда окно WARDOGS находится на переднем плане."))
+                         : capture_disabled));
             tabs->addTab(keys, wardogs::i18n::text(QStringLiteral("Клавиши")));
             auto* troubleshooting = new QTextBrowser;
             troubleshooting->setObjectName(QStringLiteral("helpTroubleshooting"));
             troubleshooting->document()->setDefaultStyleSheet(browser->document()->defaultStyleSheet());
             wardogs::i18n::bind_html(troubleshooting, wardogs::i18n::text(QStringLiteral(
-                "<h2>Если не работает</h2>"
+                "<h2>Если не работает</h2><p>%4</p>"
                 "<h3>Координаты не прочитаны</h3><p>Покажите целиком X и Y, уберите перекрывающие подписи и повторите захват. Сомнительное чтение скрывает старую наводку до проверки.</p>"
                 "<h3>Захват возле курсора не помогает</h3><p>На карте: ПКМ у цели → Mark Coordinates → %1. Либо раскройте «Ввод вручную»: вставьте пару X/Y и нажмите Enter. Формат: <b>12.34 56.78</b>.</p>"
                 "<h3>Карта не подтверждается</h3><p>Подключите проверенные локальные пакеты через «Подключить карты высот…». Для стрельбища выберите режим без высот. Название карты программа сама не определяет.</p>"
                 "<h3>Карточка не видна поверх игры</h3><p>Попробуйте оконный режим без рамки. Возврат к расчёту: %2. Блокировка карточки снимается через %3.</p>"
                 "<h3>Как читать результат</h3><p>«До цели» — расстояние на карте. Азимут и MIL — значения для установки в игре. «По таблице ≈» — вторичная оценка дальности этой команды. Высоты SPH-2 и профиль земли приближённые; здания не проверяются. L81 использует игровую таблицу без высотной поправки.</p>"
                 "<p>После перемещения орудия задайте его позицию заново. Попадание записывайте до смены цели или траектории. Расчёт не отслеживает выстрел автоматически.</p>"))
-                .arg(qtext(settings_.target_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey)));
+                .arg(qtext(settings_.target_hotkey), qtext(settings_.exit_game_mode_hotkey), qtext(settings_.pinned_card.unlock_hotkey),
+                     settings_.game_integration_enabled ? capture_setup : capture_disabled + QStringLiteral(" ") + capture_setup));
             tabs->addTab(troubleshooting, wardogs::i18n::text(QStringLiteral("Если не работает")));
             layout->addWidget(tabs, 1);
         }
@@ -2734,8 +2822,8 @@ private:
         content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         auto* root = new QVBoxLayout(content);
         root->setSizeConstraint(QLayout::SetMinimumSize);
-        root->setContentsMargins(24, 20, 24, 20);
-        root->setSpacing(17);
+        root->setContentsMargins(20, 12, 20, 12);
+        root->setSpacing(10);
 
         auto* heading = new QHBoxLayout;
         auto* brand = new QVBoxLayout;
@@ -2745,9 +2833,11 @@ private:
         subtitle->setObjectName(QStringLiteral("brandSubtitle"));
         brand->addWidget(title);
         brand->addWidget(subtitle);
+        subtitle->hide();
         heading->addLayout(brand, 1);
         auto* badge = new QLabel(QStringLiteral("v") + QStringLiteral(WARDOGS_VERSION));
         badge->setObjectName(QStringLiteral("versionBadge"));
+        badge->setFixedHeight(32);
         heading->addWidget(badge);
         language_selector_ = new QComboBox;
         language_selector_->setObjectName(QStringLiteral("languageSelector"));
@@ -2835,12 +2925,14 @@ private:
         auto* work_layout = new QVBoxLayout(work);
         work_layout->setSizeConstraint(QLayout::SetMinimumSize);
         work_layout->setContentsMargins(0, 0, 0, 0);
-        work_layout->setSpacing(15);
+        work_layout->setSpacing(10);
 
         auto* quick = new QGroupBox(wardogs::i18n::text(QStringLiteral("Следующий шаг")));
         quick->setObjectName(QStringLiteral("quickWorkflow"));
+        quick->setTitle({});
         auto* quick_layout = new QVBoxLayout(quick);
-        quick_layout->setContentsMargins(16, 23, 16, 15);
+        quick_layout->setContentsMargins(12, 10, 12, 10);
+        quick_layout->setSpacing(6);
         quick_guide_ = new QLabel;
         quick_guide_->setObjectName(QStringLiteral("quickGuide"));
         quick_guide_->setWordWrap(true);
@@ -3058,8 +3150,9 @@ private:
 
         terrain_group_ = new QGroupBox(wardogs::i18n::text(QStringLiteral("Карта")));
         terrain_group_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+        terrain_group_->setTitle({});
         auto* terrain_layout = new QVBoxLayout(terrain_group_);
-        terrain_layout->setContentsMargins(16, 23, 16, 13);
+        terrain_layout->setContentsMargins(12, 8, 12, 8);
         terrain_selector_ = new QComboBox;
         terrain_selector_->setObjectName(QStringLiteral("gameMapSelector"));
         for (const auto map : {wardogs::GameMap::unselected, wardogs::GameMap::bakurani,
@@ -3103,14 +3196,16 @@ private:
         fire_control_compact_ = new QLabel;
         fire_control_compact_->setObjectName(QStringLiteral("fireControlCompact"));
         fire_control_compact_->setWordWrap(true);
-        fire_layout->addWidget(fire_control_compact_);
+        auto* fire_compact_row = new QHBoxLayout;
+        fire_compact_row->addWidget(fire_control_compact_, 1);
+        fire_layout->addLayout(fire_compact_row);
         fire_details_toggle_ = new QToolButton;
         fire_details_toggle_->setObjectName(QStringLiteral("fireControlDetailsToggle"));
         fire_details_toggle_->setText(wardogs::i18n::text(QStringLiteral("Подробности поправки")));
         fire_details_toggle_->setCheckable(true);
         fire_details_toggle_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         fire_details_toggle_->setArrowType(Qt::RightArrow);
-        fire_layout->addWidget(fire_details_toggle_);
+        fire_compact_row->addWidget(fire_details_toggle_);
         fire_details_ = new QWidget;
         fire_details_->setObjectName(QStringLiteral("fireControlDetails"));
         auto* fire_details_layout = new QVBoxLayout(fire_details_);
@@ -3441,6 +3536,10 @@ private:
     }
 
     void update_terrain_summary(std::optional<double> height_delta = std::nullopt) {
+        terrain_summary_->setToolTip({});
+        // Map instructions are already the next action. Keep the full status
+        // for diagnostics/tooltips; an actual missing-height failure shows it.
+        terrain_summary_->hide();
         confirm_map_->setEnabled(!terrain_loading_ && selected_game_map() != wardogs::GameMap::unselected);
         import_terrain_->setEnabled(!terrain_importing_);
         confirm_map_->setVisible(!map_confirmed_);
@@ -3681,6 +3780,7 @@ private:
             enter_game_after_terrain_ = false;
             update_terrain_summary();
             terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Высоты выбранной карты недоступны. Подключите проверенные локальные данные; расчёт заблокирован.")));
+            terrain_summary_->show();
             import_terrain_->show();
             update_readiness();
             set_status(wardogs::i18n::text(QStringLiteral("Карта не подтверждена: ")) +
@@ -5491,7 +5591,7 @@ QScrollBar:vertical { background:transparent; width:9px; margin:0; }
 QScrollBar::handle:vertical { background:#334459; border-radius:4px; min-height:24px; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
 
-QLabel#brandTitle { color:#edf4ff; font-family:"Bahnschrift"; font-size:31px; font-weight:700; letter-spacing:3px; }
+QLabel#brandTitle { color:#edf4ff; font-family:"Bahnschrift"; font-size:23px; font-weight:700; letter-spacing:2px; }
 QLabel#brandSubtitle { color:#8fa1ba; font-size:10px; letter-spacing:1px; }
 QLabel#versionBadge { color:#63d8c5; background:#14292b; border:1px solid #224247; border-radius:8px; padding:6px 10px; font-size:10px; }
 QWidget { font-family:"Segoe UI"; }
