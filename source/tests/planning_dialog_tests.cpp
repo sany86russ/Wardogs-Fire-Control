@@ -640,7 +640,7 @@ void shared_command_and_history_tests(const QString& language) {
     harness.context.preferred_arc = wardogs::Arc::high;
     harness.context.target = wardogs::Point{0, 20};
     harness.context.active_arc = wardogs::Arc::high;
-    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::high, 7.75, 1.0, 1000.0};
+    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::high, 7.75, 1.0, 1000.49};
     wardogs::FireMissionRepository named(native_path(storage.path()) / L"fire-missions.json");
     wardogs::FireMissionRepository recent(native_path(storage.path()) / L"recent-fire-missions.json");
     const auto named_point = named.create(wardogs::GameMap::training, wardogs::FireMissionWeapon::sph2,
@@ -659,28 +659,32 @@ void shared_command_and_history_tests(const QString& language) {
     settle();
     auto* result = child<QLabel>(dialog, "flightTimeResult");
     auto* arc = child<QComboBox>(dialog, "planningArc");
-    const auto active_marker = translated("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°")
-        .section(QStringLiteral("%1"), 0, 0);
+    const auto active_format = translated("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°");
+    const auto active_marker = active_format.section(QStringLiteral("%1"), 0, 0);
+    const auto high_command_text = active_format.arg(QStringLiteral("1000"), QStringLiteral("7.8"));
+    const auto low_command_text = active_format.arg(QStringLiteral("280"), QStringLiteral("9.3"));
     const auto preview_marker = translated("\nПредварительный расчёт: %1 MIL · азимут %2°; без поправки Alt+I. Это не активная наводка.")
         .section(QStringLiteral("%1"), 0, 0);
-    check(arc->currentIndex() == 1 && result->text().contains(active_marker) &&
-              result->text().contains(QStringLiteral("1000.00")) && result->text().contains(QStringLiteral("7.75")) &&
-              result->text().contains(QStringLiteral("2147")) && !result->text().contains(preview_marker),
-          "planning shows the active corrected high-arc command and inverse MIL, never a competing nominal MIL");
+    check(arc->currentIndex() == 1 && result->text().contains(high_command_text) &&
+              result->text().contains(translated("\nПо таблице ≈ %1 м").arg(QStringLiteral("2147"))) &&
+              !result->text().contains(QStringLiteral("1000.49")) && !result->text().contains(preview_marker) &&
+              harness.context.active_solution->mil == 1000.49 && harness.context.active_solution->bearing_deg == 7.75,
+          "planning shows the card's integer high-arc MIL and one-decimal azimuth with the commanded table range, preserving the precise source");
     arc->setCurrentIndex(0);
     settle();
     check(result->text().contains(preview_marker) && !result->text().contains(active_marker) &&
-              !result->text().contains(QStringLiteral("1000.00")) && harness.applied.empty(),
+              !result->text().contains(high_command_text) && harness.applied.empty(),
           "another arc is an explicitly inactive preview and cannot change the player's active command");
-    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::low, 9.25, 9999.0, 280.0};
+    harness.context.active_solution = wardogs::CorrectedSolution{wardogs::Arc::low, 9.25, 9999.0, 280.49};
     harness.context.active_arc = wardogs::Arc::low;
     dialog.refresh();
-    check(result->text().contains(active_marker) && result->text().contains(QStringLiteral("280.00")) &&
-              result->text().contains(QStringLiteral("9.25")) && result->text().contains(QStringLiteral("2223")),
-          "a refreshed Alt+I command replaces stale values and recomputes the visible table equivalent");
+    check(result->text().contains(low_command_text) && !result->text().contains(high_command_text) &&
+              result->text().contains(translated("\nПо таблице ≈ %1 м").arg(QStringLiteral("2223"))) &&
+              !result->text().contains(QStringLiteral("280.49")),
+          "a refreshed Alt+I command replaces stale values with the card's integer MIL, azimuth and commanded table range");
     harness.context.solution_held = true;
     dialog.refresh();
-    check(!result->text().contains(active_marker) && !result->text().contains(QStringLiteral("280.00")),
+    check(!result->text().contains(active_marker) && !result->text().contains(low_command_text),
           "an unresolved coordinate capture hides prior active guidance in the supplemental dialog");
     harness.context.solution_held = false;
     harness.context.active_solution->arc = wardogs::Arc::high;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.11.1 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.12.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -210,6 +210,20 @@ install(FILES
 )
 
 enable_testing()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME wardogs_shot_accuracy_tests
+        COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+            -s "${CMAKE_CURRENT_SOURCE_DIR}/tests" -p test_shot_accuracy.py -v)
+endif()
+
+add_executable(wardogs_presentation_tests tests/presentation_tests.cpp)
+target_link_libraries(wardogs_presentation_tests PRIVATE wardogs_core)
+if(MSVC)
+    target_compile_options(wardogs_presentation_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME wardogs_presentation_tests COMMAND wardogs_presentation_tests)
 
 add_executable(wardogs_impact_feedback_tests tests/impact_feedback_tests.cpp)
 target_link_libraries(wardogs_impact_feedback_tests PRIVATE wardogs_core)

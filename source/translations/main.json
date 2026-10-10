@@ -1314,5 +1314,21 @@
   {
     "ru": "Размер или положение окна игры изменились. Повторите захват этой точки.",
     "en": "The game window size or position changed. Capture this point again."
+  },
+  {
+    "ru": "\nРядом с целью: %1 наблюдений · учтено: %2.",
+    "en": "\nNear the target: %1 observations · used: %2."
+  },
+  {
+    "ru": "\nПоправка предварительная: нужна серия согласованных попаданий.",
+    "en": "\nThe correction is provisional: a consistent series of impacts is needed."
+  },
+  {
+    "ru": "\nПоправка уточнена по серии попаданий.",
+    "en": "\nThe correction has been refined using a series of impacts."
+  },
+  {
+    "ru": "\nРазброс оценок поправки ≈%1 м; это не вероятность попадания.",
+    "en": "\nCorrection estimates spread by about %1 m; this is not a hit probability."
   }
 ]

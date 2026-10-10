@@ -45,6 +45,16 @@ struct ObservationAssessment {
     // bearing/MIL scores; this score does not scale both corrections to zero.
     double confidence{};
     std::size_t observation_count{};
+    // Evidence near this requested target, on this arc only. History outside
+    // the local kernel is not counted as corroboration for a new target.
+    std::size_t local_observation_count{};
+    std::size_t accepted_observation_count{};
+    bool provisional{true};
+    bool scatter_available{};
+    // Weighted RMS spread of the retained absolute correction estimates,
+    // projected to metres at this range using the sight table's local slope.
+    // This describes observed consistency, not a hit radius or probability.
+    double empirical_scatter_m{};
 };
 
 class ContinuousCalibration {
@@ -60,6 +70,8 @@ public:
     ObservationAssessment add_landing(
         FiringSnapshot firing, Point impact,
         double impact_height_delta_m = 0.0);
+    [[nodiscard]] ObservationAssessment assess(
+        Point target, Arc arc, double height_delta_m = 0.0) const;
     void clear();
     [[nodiscard]] std::size_t sample_count() const noexcept;
     [[nodiscard]] const PlatformCalibration& global_calibration() const noexcept;
@@ -85,6 +97,10 @@ private:
         Vector3 local_direction;
         Vector3 world_direction;
     };
+    struct LocalEstimate {
+        std::pair<double, double> correction;
+        ObservationAssessment assessment;
+    };
 
     [[nodiscard]] double confidence(
         std::size_t index, std::span<const WeightedNeighbor> neighbors) const;
@@ -93,6 +109,8 @@ private:
     [[nodiscard]] double proximity(const Sample& sample, Point target, double bearing_deg,
                                    double range_m, double height_delta_m) const;
     [[nodiscard]] std::pair<double, double> correction(
+        Point target, Arc arc, double height_delta_m) const;
+    [[nodiscard]] LocalEstimate local_estimate(
         Point target, Arc arc, double height_delta_m) const;
     void refresh_offsets();
     void refit_global_calibration(std::span<const std::size_t> target_groups);

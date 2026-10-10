@@ -1,4 +1,5 @@
 #include "wardogs/ghost_reticle.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -119,6 +120,30 @@ int main() {
     check(near(mark_400->position,
                wardogs::ghost_center_y + (400.0 - 403.25) * 17.6),
           "fractional MIL is represented by continuous ruler translation");
+
+    const auto low_command = wardogs::displayed_firing_command(359.96, 399.49, Arc::low);
+    bool commanded_north_centered = false;
+    for (const auto& tick : wardogs::ghost_bearing_ticks(low_command.bearing_deg)) {
+        if (tick.value == 0)
+            commanded_north_centered = near(tick.position, wardogs::ghost_center_x);
+    }
+    check(commanded_north_centered,
+          "rounded north command places the zero azimuth mark exactly at the ghost center");
+    bool commanded_400_found = false;
+    for (const auto& tick : wardogs::ghost_mil_ticks(low_command.mil)) {
+        if (tick.value == 400)
+            commanded_400_found = near(tick.position, wardogs::ghost_center_y + 17.6);
+    }
+    check(commanded_400_found,
+          "399 MIL card command places the 400 MIL ruler mark one integer step from the center");
+    const auto high_command = wardogs::displayed_firing_command(36.86, 1149.51, Arc::high);
+    bool commanded_1150_centered = false;
+    for (const auto& tick : wardogs::ghost_mil_ticks(high_command.mil)) {
+        if (tick.value == 1150)
+            commanded_1150_centered = near(tick.position, wardogs::ghost_center_y);
+    }
+    check(commanded_1150_centered,
+          "rounded high-arc command places its labelled integer MIL at the ruler center");
 
     const auto mortar_mil = wardogs::ghost_mortar_mil_ticks(725.0);
     const wardogs::GhostTick* mortar_700 = nullptr;

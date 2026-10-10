@@ -2,6 +2,7 @@
 #include "localization.hpp"
 
 #include "wardogs/core.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <QHBoxLayout>
 #include <QEvent>
@@ -162,10 +163,10 @@ void VehicleSolutionWidget::set_solution(
         throw std::invalid_argument("Дальность до цели должна быть конечной и неотрицательной");
     if (solution.arc != arc_ || !std::isfinite(solution.bearing_deg))
         throw std::invalid_argument("Некорректная траектория или азимут наводки");
-    const double equivalent_distance = wardogs::sph2_distance_for_mil(solution.mil, arc_);
+    const auto command = wardogs::displayed_firing_command(solution);
     solution_ready_ = true;
     distance_is_target_ = target_distance_m.has_value();
-    const auto table_distance = QString::number(std::round(equivalent_distance));
+    const auto table_distance = QString::number(std::round(command.table_distance_m));
     table_distance_->setText(wardogs::i18n::text(QStringLiteral("≈ %1 м")).arg(table_distance));
     table_distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Табличная дальность для наводки ≈ %1 м — оценка модели. "
                                            "Она может отличаться от расстояния до цели и игровой шкалы. "
@@ -185,8 +186,8 @@ void VehicleSolutionWidget::set_solution(
         distance_->setText(QStringLiteral("—"));
         distance_->setToolTip(wardogs::i18n::text(QStringLiteral("Горизонтальная дальность до цели не передана. Табличная оценка показана отдельно.")));
     }
-    bearing_->setText(QString::fromStdWString(wardogs::format_bearing(solution.bearing_deg)));
-    mil_->setText(QStringLiteral("%1 MIL").arg(std::round(solution.mil)));
+    bearing_->setText(QString::fromStdWString(wardogs::format_bearing(command.bearing_deg)));
+    mil_->setText(QStringLiteral("%1 MIL").arg(command.mil));
     mil_->setToolTip(wardogs::i18n::text(QStringLiteral("Игровая наводка SPH-2 в MIL из таблицы орудия с поправками. MIL здесь не означает расстояние в милях.")));
     set_unavailable_state(false);
 }

@@ -6,6 +6,7 @@
 #include "vehicle_solution_widget.hpp"
 #include "localization.hpp"
 #include "window_title_bar.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <Windows.h>
 
@@ -534,6 +535,30 @@ int main(int argc, char* argv[]) {
         }
     }
     check(has_ghost_pixels, "bearing and MIL scales are drawn procedurally");
+    const auto rendered_ghost = [&ghost] {
+        QImage image(ghost.size(), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        ghost.render(&image);
+        return image;
+    };
+    for (const auto arc : {wardogs::Arc::low, wardogs::Arc::high}) {
+        const wardogs::CorrectedSolution precise{arc, 359.96, 1.0,
+            arc == wardogs::Arc::low ? 399.49 : 1149.51};
+        ghost.set_solution(precise);
+        const auto precise_render = rendered_ghost();
+        const auto command = wardogs::displayed_firing_command(precise);
+        ghost.set_solution(wardogs::CorrectedSolution{
+            arc, command.bearing_deg, command.table_distance_m, command.mil});
+        check(rendered_ghost() == precise_render,
+              "both ghost trajectories render exactly the integer MIL and north azimuth shown by the card");
+        check(precise.bearing_deg == 359.96 && precise.reticle_distance_m == 1.0 &&
+                  precise.mil == (arc == wardogs::Arc::low ? 399.49 : 1149.51),
+              "ghost command rendering does not mutate the full-precision caller solution");
+        ghost.set_solution(wardogs::CorrectedSolution{
+            arc, command.bearing_deg, 1.0, command.mil + 1.0});
+        check(rendered_ghost() != precise_render,
+              "changing the commanded MIL by one moves the ghost ruler rather than retaining stale pixels");
+    }
     ghost.set_mortar_solution(215.0, 500.0);
     QImage mortar_render(ghost.size(), QImage::Format_ARGB32_Premultiplied);
     mortar_render.fill(Qt::transparent);
@@ -624,6 +649,25 @@ int main(int argc, char* argv[]) {
               frame_result == 0,
           "custom chrome owns non-client sizing after a window is shown again");
 
+    {
+        VehicleSolutionWidget quantized(wardogs::Arc::low);
+        const wardogs::CorrectedSolution precise{wardogs::Arc::low, 359.96, 9999.0, 399.49};
+        quantized.set_solution(precise, 2221.0);
+        check(quantized.mil_text() == QStringLiteral("399 MIL") &&
+                  quantized.bearing_text() == QStringLiteral("0.0° N") &&
+                  quantized.table_distance_text() == QStringLiteral("≈ 2470 м") &&
+                  quantized.distance_text() == QStringLiteral("2221 м"),
+              "the card reports the integer MIL command and its 2469.5 metre table range, separately from target distance");
+        check(precise.mil == 399.49 && precise.bearing_deg == 359.96 &&
+                  precise.reticle_distance_m == 9999.0,
+              "rendering a firing command preserves the precise calculation supplied by its caller");
+        bool unsupported_rounding_rejected = false;
+        try { quantized.set_solution({wardogs::Arc::low, 0.0, 1181.0, 19.9}, 2000.0); }
+        catch (const std::invalid_argument&) { unsupported_rounding_rejected = true; }
+        check(unsupported_rounding_rejected && quantized.mil_text() == QStringLiteral("399 MIL") &&
+                  quantized.table_distance_text() == QStringLiteral("≈ 2470 м"),
+              "card validation rejects an unsupported raw MIL before rounding without replacing valid guidance");
+    }
     VehicleSolutionWidget full(wardogs::Arc::low);
     full.set_unavailable(QStringLiteral("3100 m"), QStringLiteral("203.0° SW"));
     check(full.unavailable(), "unavailable result stores warning state");

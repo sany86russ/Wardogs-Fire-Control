@@ -1,6 +1,7 @@
 #include "planning_dialog.hpp"
 #include "localization.hpp"
 #include "window_title_bar.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -801,13 +802,10 @@ void PlanningDialog::refresh() {
         if (!l81 && s.context.active_solution && s.context.active_arc &&
             s.context.active_solution->arc == *s.context.active_arc &&
             s.selected_arc() == *s.context.active_arc) {
-            const auto& command = *s.context.active_solution;
-            if (!std::isfinite(command.bearing_deg))
-                throw std::invalid_argument("Некорректная траектория или азимут наводки");
-            const auto equivalent = wardogs::sph2_distance_for_mil(command.mil, command.arc);
+            const auto command = wardogs::displayed_firing_command(*s.context.active_solution);
             summary += ui_text("\nАктивная наводка с учётом Alt+I: установить %1 MIL · азимут %2°")
-                .arg(command.mil, 0, 'f', 2).arg(command.bearing_deg, 0, 'f', 2);
-            summary += ui_text("\nПо таблице ≈ %1 м").arg(equivalent, 0, 'f', 0);
+                .arg(command.mil, 0, 'f', 0).arg(command.bearing_deg, 0, 'f', 1);
+            summary += ui_text("\nПо таблице ≈ %1 м").arg(std::round(command.table_distance_m), 0, 'f', 0);
         } else if (result.nominal_mil) {
             summary += l81
                 ? ui_text("\nУстановить %1 MIL · азимут %2°")
