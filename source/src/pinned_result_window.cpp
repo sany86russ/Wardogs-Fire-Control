@@ -668,6 +668,26 @@ void PinnedResultWindow::fit_unlock_editor_height() const {
     // Give the actual child its required room, including any larger font/style.
     unlock_hotkey_->setMinimumHeight(std::max({40, editor->minimumSizeHint().height(),
                                                editor->sizeHint().height()}));
+    if (auto* inner_layout = unlock_hotkey_->layout()) {
+        inner_layout->invalidate();
+        inner_layout->activate();
+    }
+    unlock_hotkey_->updateGeometry();
+    // Hidden construction can leave the wrapper's cached hint at the old
+    // editor height. Refresh it synchronously before sizing the outer popup.
+    if (auto* row = unlock_hotkey_->parentWidget()) {
+        if (auto* row_layout = row->layout()) {
+            row_layout->invalidate();
+            row_layout->activate();
+            row->setMinimumHeight(row_layout->totalMinimumSize().height());
+        }
+        row->updateGeometry();
+    }
+    if (auto* popup_layout = context_menu_->layout()) {
+        popup_layout->invalidate();
+        popup_layout->activate();
+    }
+    context_menu_->updateGeometry();
 }
 
 void PinnedResultWindow::configure_unlock_hotkey(const std::wstring& hotkey) {
