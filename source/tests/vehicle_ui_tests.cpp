@@ -1321,6 +1321,7 @@ int main(int argc, char* argv[]) {
     QContextMenuEvent menu_event(QContextMenuEvent::Mouse, QPoint(10, 10),
                                  QPoint(10, 10));
     QApplication::sendEvent(&pinned, &menu_event);
+    QApplication::processEvents();
     auto* menu = pinned.findChild<QWidget*>(QStringLiteral("pinnedContextMenu"));
     const auto* lock_button =
         pinned.findChild<QToolButton*>(QStringLiteral("pinnedLockButton"));
@@ -1330,18 +1331,27 @@ int main(int argc, char* argv[]) {
         QStringLiteral("pinnedUnlockHotkey"));
     auto* ghost_row = pinned.findChild<QWidget*>(
         QStringLiteral("pinnedGhostRow"));
-    auto* unlock_row = pinned.findChild<QWidget*>(
-        QStringLiteral("pinnedUnlockRow"));
+    auto* unlock_label = pinned.findChild<QLabel*>(
+        QStringLiteral("pinnedUnlockLabel"));
+    auto* interaction_hint = pinned.findChild<QLabel*>(
+        QStringLiteral("pinnedInteractionHint"));
+    auto* return_button = pinned.findChild<QPushButton*>(
+        QStringLiteral("pinnedReturnButton"));
     auto* ghost_button = pinned.findChild<QToolButton*>(
         QStringLiteral("ghostReticleToggle"));
     auto* ghost_slider = pinned.findChild<QSlider*>(
         QStringLiteral("ghostReticleOpacitySlider"));
-    check(menu && lock_button && opacity_slider && ghost_row && unlock_row &&
-              ghost_button && ghost_slider && unlock_hotkey,
+    check(menu && lock_button && opacity_slider && ghost_row && unlock_label &&
+              ghost_button && ghost_slider && unlock_hotkey && interaction_hint && return_button,
           "right click exposes card, ghost-reticle, and unlock controls");
-    check(ghost_row && unlock_row && ghost_row->geometry().top() <
-                                      unlock_row->geometry().top(),
-          "ghost reticle controls are inserted above the bottom unlock row");
+    const auto separated = [menu](const QWidget* first, const QWidget* second) {
+        if (!menu || !first || !second) return false;
+        return first->mapTo(menu, QPoint{}).y() + first->height() + 4 <=
+            second->mapTo(menu, QPoint{}).y();
+    };
+    check(separated(ghost_row, unlock_label) && separated(unlock_label, unlock_hotkey) &&
+              separated(unlock_hotkey, interaction_hint) && separated(interaction_hint, return_button),
+          "ghost, unlock label, actual editor, interaction hint and return have separate readable rows");
     check(menu && qobject_cast<QMenu*>(menu) == nullptr &&
               menu->windowType() == Qt::Popup,
           "side controls use the same translucent QWidget approach as the card");

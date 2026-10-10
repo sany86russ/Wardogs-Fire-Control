@@ -477,28 +477,23 @@ void PinnedResultWindow::build_context_menu() {
     ghost_layout->addWidget(ghost_opacity_slider_);
     layout->addWidget(ghost_row);
 
-    auto* hotkey_row = new QWidget(context_menu_);
-    hotkey_row->setObjectName(QStringLiteral("pinnedUnlockRow"));
-    auto* hotkey_layout = new QVBoxLayout(hotkey_row);
-    hotkey_layout->setContentsMargins(0, 1, 0, 0);
-    hotkey_layout->setSpacing(4);
-    auto* hotkey_label = new QLabel(wardogs::i18n::text(QStringLiteral("Разблокировать")), hotkey_row);
+    auto* hotkey_label = new QLabel(wardogs::i18n::text(QStringLiteral("Разблокировать")), context_menu_);
     hotkey_label->setObjectName(QStringLiteral("pinnedUnlockLabel"));
-    hotkey_layout->addWidget(hotkey_label);
+    layout->addWidget(hotkey_label);
     unlock_hotkey_ = new QKeySequenceEdit(
         QKeySequence(QString::fromStdWString(preferences_.unlock_hotkey)),
-        hotkey_row);
+        context_menu_);
     unlock_hotkey_->setObjectName(QStringLiteral("pinnedUnlockHotkey"));
     unlock_hotkey_->setMaximumSequenceLength(1);
     unlock_hotkey_->setMinimumWidth(140);
     unlock_hotkey_->setMaximumWidth(280);
     unlock_hotkey_->setToolTip(wardogs::i18n::text(QStringLiteral("Сочетание работает даже при заблокированной карточке")));
     unlock_hotkey_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Горячая клавиша разблокировки")));
-    hotkey_layout->addWidget(unlock_hotkey_, 1);
-    layout->addWidget(hotkey_row);
+    layout->addWidget(unlock_hotkey_);
     auto* interaction_hint = new QLabel(wardogs::i18n::text(QStringLiteral(
         "Перетащите карточку или её края.")));
-    interaction_hint->setObjectName(QStringLiteral("muted"));
+    interaction_hint->setObjectName(QStringLiteral("pinnedInteractionHint"));
+    interaction_hint->setStyleSheet(QStringLiteral("color:#8190a3;"));
     interaction_hint->setWordWrap(true);
     interaction_hint->setMaximumWidth(280);
     interaction_hint->setToolTip(wardogs::i18n::text(QStringLiteral(
@@ -673,16 +668,8 @@ void PinnedResultWindow::fit_unlock_editor_height() const {
         inner_layout->activate();
     }
     unlock_hotkey_->updateGeometry();
-    // Hidden construction can leave the wrapper's cached hint at the old
-    // editor height. Refresh it synchronously before sizing the outer popup.
-    if (auto* row = unlock_hotkey_->parentWidget()) {
-        if (auto* row_layout = row->layout()) {
-            row_layout->invalidate();
-            row_layout->activate();
-            row->setMinimumHeight(row_layout->totalMinimumSize().height());
-        }
-        row->updateGeometry();
-    }
+    // Both the caption and editor are direct popup items, so the outer layout
+    // measures the real editor minimum without a wrapping row's cached hint.
     if (auto* popup_layout = context_menu_->layout()) {
         popup_layout->invalidate();
         popup_layout->activate();

@@ -183,8 +183,25 @@ def verify_snapshot(path, language, scale, mode):
                 x, y = int(left * dpr + .5), int(top * dpr + .5)
                 right, bottom = int(visible_right * dpr + .5), int(visible_bottom * dpr + .5)
                 surface('actual unlock shortcut text pixels', (x, y, right - x, bottom - y), foreground=20)
-        for widget in named('pinnedUnlockLabel'):
+        unlock_labels = named('pinnedUnlockLabel')
+        for widget in unlock_labels:
             widget_surface('pinnedUnlockLabel', widget, label=True, text=True)
+        hints = named('pinnedInteractionHint')
+        for widget in hints:
+            widget_surface('pinnedInteractionHint', widget, label=True, text=True)
+        rows = (('ghost controls', named('pinnedGhostRow')),
+                ('unlock caption', unlock_labels), ('unlock editor', parents),
+                ('interaction hint', hints), ('return button', named('pinnedReturnButton')))
+        for (first_name, first), (next_name, following) in zip(rows, rows[1:]):
+            if len(first) != 1 or len(following) != 1:
+                continue  # named() already records missing or duplicate controls.
+            first_bounds, next_bounds = first[0].get('snapshot_rect'), following[0].get('snapshot_rect')
+            if not all(isinstance(bounds, dict) and all(type(bounds.get(key)) is int
+                    for key in ('x', 'y', 'width', 'height')) for bounds in (first_bounds, next_bounds)):
+                errors.append(f'{first_name}/{next_name}: missing actual sibling geometry')
+                continue
+            check(next_bounds['y'] >= first_bounds['y'] + first_bounds['height'] + 4,
+                  f'{first_name}/{next_name}: actual menu rows must have at least 4 DIP of clear space')
         for widget in named('pinnedLockButton'):
             check(widget.get('checked') is False and widget.get('enabled') is True,
                   'Unlocked popup must expose an enabled lock action')
