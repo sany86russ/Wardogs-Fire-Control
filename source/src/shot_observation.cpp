@@ -106,7 +106,7 @@ void ShotObservationSession::invalidate_sight(std::uint64_t now_ms) {
 void ShotObservationSession::invalidate_correlation(
     std::uint64_t now_ms, std::optional<std::uint64_t> physical_pressed_at_ms) {
     if (!advance_time(now_ms)) throw std::invalid_argument("Correlation invalidation time regressed");
-    if (!active_) return;
+    if (!active_ || !hud_seen_) return;
     if (physical_pressed_at_ms &&
         (*physical_pressed_at_ms < context_started_at_ms_ || *physical_pressed_at_ms > now_ms)) return;
     expire(now_ms);
@@ -453,7 +453,11 @@ ShotEvidenceUpdate ShotObservationSession::observe_discharge(
     else {
         last_frame_id_ = frame.id;
         last_capture_ms_ = frame.timestamp_ms;
-        hud_seen_ = true;
+        // A shell counter alone never activates actual-sight correlation.
+        // Preserve the existing unverified correction path until a complete
+        // accepted sight has been seen. In particular, pre-sight counter
+        // changes cannot create a baseline or retroactive ambiguous shot.
+        if (!hud_seen_) return result;
         result.provenance = ShotEvidenceProvenance::hud_only;
         if (auto correlated = correlate_discharge(frame, now_ms)) result = *correlated;
         // A partial reload reading cannot become a fresh aiming frame.
@@ -635,6 +639,10 @@ std::size_t ShotObservationSession::outstanding_shots() const noexcept {
 
 std::uint64_t ShotObservationSession::epoch() const noexcept {
     return epoch_;
+}
+
+bool ShotObservationSession::has_stable_sight() const noexcept {
+    return active_ && stable_.has_value() && stable_first_frame_id_ != 0 && !correlation_invalidated_;
 }
 
 }  // namespace wardogs

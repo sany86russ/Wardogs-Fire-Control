@@ -24,7 +24,7 @@ void token(SphHudFrame& frame, std::wstring text, ImageRect bounds, float score 
     reading.confidence = score;
     reading.minimum_confidence = score;
     reading.line_count = 1;
-    frame.tokens.push_back({std::move(reading), bounds, true});
+    frame.tokens.push_back({std::move(reading), bounds, true, SphHudTokenBoundsSource::ocr_word});
 }
 
 SphHudFrame fixture() {
@@ -194,6 +194,41 @@ int main() {
     auto rotated = frame; named(rotated, L"990 mils").geometry_verified = false;
     check(read_sph_hud(rotated).refusal == SphHudRefusal::invalid_frame,
           "untransformed rotated OCR word bounds cannot contribute to interpolation");
+    auto crop_bounds = frame;
+    named(crop_bounds, L"240").bounds_source = SphHudTokenBoundsSource::recognition_region;
+    check(read_sph_hud(crop_bounds).refusal == SphHudRefusal::invalid_frame,
+          "a compass recognition crop is not an independently observed word box");
+    crop_bounds = frame;
+    named(crop_bounds, L"240").bounds_source = SphHudTokenBoundsSource::unverified;
+    check(read_sph_hud(crop_bounds).refusal == SphHudRefusal::invalid_frame,
+          "legacy unspecified compass box provenance cannot establish an absolute anchor");
+    auto shifted_phase = frame;
+    shifted_phase.layout.compass.labels.right += 21;
+    for (auto& value : shifted_phase.tokens) {
+        if (value.bounds.top != 188) continue;
+        value.bounds.left += 21; value.bounds.right += 21;
+    }
+    check(read_sph_hud(shifted_phase).refusal == SphHudRefusal::ambiguous_compass_labels,
+          "Steam-style labels shifted about 20.7 native pixels cannot inherit major-tick values");
+    check(read_sph_hud(scaled(shifted_phase, 1.5)).refusal == SphHudRefusal::ambiguous_compass_labels,
+          "the compass phase refusal preserves its physical bound at 1920x1080");
+    auto wide_box = frame;
+    wide_box.layout.compass.labels.right = 820;
+    named(wide_box, L"285").bounds = {769, 188, 809, 196};
+    check(read_sph_hud(wide_box).refusal == SphHudRefusal::ambiguous_compass_labels,
+          "wide numeric boxes cannot relax the compass word-to-tick bound");
+    auto small_offset = frame;
+    for (auto& value : small_offset.tokens) {
+        if (value.bounds.top != 188) continue;
+        ++value.bounds.left; ++value.bounds.right;
+    }
+    const auto offset_reading = read_sph_hud(small_offset);
+    check(offset_reading.accepted() && offset_reading.compass &&
+          close(offset_reading.compass->labels.front().anchor_offset_px, 1.0) &&
+          close(offset_reading.pose->bearing_deg, first.pose->bearing_deg) &&
+          close(offset_reading.pose->bearing_uncertainty_deg,
+                first.pose->bearing_uncertainty_deg + std::abs(first.compass->units_per_pixel)),
+          "a small observed label offset remains evidence and enlarges absolute bearing uncertainty");
     auto wrap = frame;
     for (unsigned i = 0; i < 6; ++i)
         named(wrap, std::to_wstring(210 + i * 15)).reading.text = std::to_wstring((330 + i * 15) % 360);

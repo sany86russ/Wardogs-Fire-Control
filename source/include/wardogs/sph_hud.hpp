@@ -10,12 +10,21 @@
 
 namespace wardogs {
 
+enum class SphHudTokenBoundsSource {
+    unverified,
+    recognition_region,
+    ocr_word,
+};
+
 // Word bounds and every layout point use the original captured image pixels.
 // Resizing for OCR must be reversed by the provider before building a frame.
+// A recognition crop is not an observed glyph box. Compass labels require
+// actual unrotated OCR word bounds to verify their measured tick association.
 struct SphHudToken {
     OcrResult reading;
     ImageRect bounds{};
     bool geometry_verified{};
+    SphHudTokenBoundsSource bounds_source{SphHudTokenBoundsSource::unverified};
 };
 
 struct SphHudTick {
@@ -98,6 +107,7 @@ struct SphHudLabelEvidence {
     ImageRect bounds{};
     Point tick;
     std::wstring text;
+    double anchor_offset_px{};
 };
 
 struct SphHudScaleReading {

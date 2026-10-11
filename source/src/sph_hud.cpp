@@ -169,7 +169,8 @@ SphHudRefusal collect_labels(const SphHudFrame& frame, const SphHudScaleLayout& 
                 ? SphHudRefusal::ambiguous_range_labels : SphHudRefusal::ambiguous_compass_labels;
             continue;
         }
-        if (!token.geometry_verified) return SphHudRefusal::invalid_frame;
+        if (!token.geometry_verified || (kind == ScaleKind::compass &&
+            token.bounds_source != SphHudTokenBoundsSource::ocr_word)) return SphHudRefusal::invalid_frame;
         if (!unit_matches(*parsed, kind) || (kind == ScaleKind::compass &&
             (parsed->value < 0.0 || parsed->value > 360.0)) ||
             (kind == ScaleKind::range && parsed->value <= 0.0)) return kind == ScaleKind::mil
@@ -189,7 +190,13 @@ SphHudRefusal collect_labels(const SphHudFrame& frame, const SphHudScaleLayout& 
             if (distance < closest) { second = closest; closest = distance; chosen = &tick; }
             else second = std::min(second, distance);
         }
-        if (!chosen || closest > std::max(2.0, extent * 0.75) + frame.layout.tick_uncertainty_px ||
+        // Compass text can move to a different phase of the visible ruler.
+        // Wide recognition crops cannot establish its absolute anchor. Keep
+        // the word-to-major-tick bound independent of glyph/crop width.
+        const double maximum_offset = kind == ScaleKind::compass
+            ? 3.0 * frame.client_height / 720.0
+            : std::max(2.0, extent * 0.75) + frame.layout.tick_uncertainty_px;
+        if (!chosen || closest > maximum_offset ||
             second - closest <= frame.layout.tick_uncertainty_px * 2.0) return kind == ScaleKind::mil
                 ? SphHudRefusal::ambiguous_mil_labels : kind == ScaleKind::range
                 ? SphHudRefusal::ambiguous_range_labels : SphHudRefusal::ambiguous_compass_labels;
@@ -198,7 +205,8 @@ SphHudRefusal collect_labels(const SphHudFrame& frame, const SphHudScaleLayout& 
         })) return kind == ScaleKind::mil ? SphHudRefusal::ambiguous_mil_labels
             : kind == ScaleKind::range ? SphHudRefusal::ambiguous_range_labels
             : SphHudRefusal::ambiguous_compass_labels;
-        reading.labels.push_back({parsed->value, token.bounds, chosen->position, token.reading.text});
+        reading.labels.push_back({parsed->value, token.bounds, chosen->position, token.reading.text,
+                                  kind == ScaleKind::compass ? closest : 0.0});
     }
     std::sort(reading.labels.begin(), reading.labels.end(), [vertical](const auto& first, const auto& second) {
         return (vertical ? first.tick.y : first.tick.x) < (vertical ? second.tick.y : second.tick.x);
@@ -243,6 +251,12 @@ SphHudRefusal interpolate(SphHudScaleReading& reading, ScaleKind kind, double co
     const auto inconsistent = kind == ScaleKind::mil ? SphHudRefusal::inconsistent_mil_scale
         : kind == ScaleKind::range ? SphHudRefusal::inconsistent_range_scale
         : SphHudRefusal::inconsistent_compass_scale;
+    if (kind == ScaleKind::compass) {
+        double maximum_anchor_offset{};
+        for (const auto& label : reading.labels)
+            maximum_anchor_offset = std::max(maximum_anchor_offset, label.anchor_offset_px);
+        pixel_uncertainty += maximum_anchor_offset;
+    }
     std::vector<double> values;
     values.reserve(reading.labels.size());
     for (const auto& label : reading.labels) values.push_back(label.value);

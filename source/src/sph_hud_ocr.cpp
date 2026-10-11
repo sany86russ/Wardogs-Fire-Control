@@ -1,6 +1,7 @@
 #include "wardogs/sph_hud_ocr.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 
@@ -30,17 +31,52 @@ Image instrument_crop(const Image& image, ImageRect rect, bool numeric_recogniti
 }
 
 void read_region(SphHudFrame& frame, const Image& image, WindowsOcr& ocr,
-                 ImageRect rect, std::stop_token stop, RapidOcr* recognition = nullptr) {
+                 ImageRect rect, std::stop_token stop, RapidOcr* recognition = nullptr,
+                 bool numeric = false) {
     if (stop.stop_requested()) throw std::runtime_error("HUD recognition canceled");
     if (rect.right <= rect.left || rect.bottom <= rect.top) return;
-    const auto cropped = instrument_crop(image, rect, recognition != nullptr);
+    const auto cropped = instrument_crop(image, rect, recognition != nullptr || numeric);
     auto raw = recognition ? recognition->recognize(cropped, stop) : ocr.recognize(cropped, stop);
     // The geometry is the independently detected isolated label crop, not a
     // rotated Windows word rectangle. Keep disagreement for the strict parser.
     // The generic high-contrast provider extracts green map/chat text. HUD
     // labels are neutral white/gray, so that mask erases them and doubles OCR
     // work. Preserve the ordinary provider result for these isolated crops.
-    if (!raw.text.empty()) frame.tokens.push_back({std::move(raw), rect, true});
+    if (!raw.text.empty()) frame.tokens.push_back({std::move(raw), rect, true,
+                                                 SphHudTokenBoundsSource::recognition_region});
+}
+
+void read_compass_words(SphHudFrame& frame, const Image& image, WindowsOcr& ocr,
+                        ImageRect rect, std::stop_token stop) {
+    if (stop.stop_requested()) throw std::runtime_error("HUD recognition canceled");
+    const auto cropped = instrument_crop(image, rect, true);
+    const auto raw = ocr.recognize(cropped, stop);
+    // A recognition-only model locates no glyphs. A crop centred on a ruler
+    // stroke must never stand in for the position of the printed number: real
+    // HUD frames show different phases between labels and long strokes.
+    if (!raw.word_geometry_verified || raw.words.empty()) {
+        if (!raw.text.empty()) frame.tokens.push_back({raw, rect, false,
+                                                      SphHudTokenBoundsSource::recognition_region});
+        return;
+    }
+    const auto scale = static_cast<double>(cropped.width) / (rect.right - rect.left);
+    for (const auto& word : raw.words) {
+        if (word.text.empty()) continue;
+        const ImageRect bounds{
+            rect.left + static_cast<int>(std::floor(word.bounds.left / scale)),
+            rect.top + static_cast<int>(std::floor(word.bounds.top / scale)),
+            rect.left + static_cast<int>(std::ceil(word.bounds.right / scale)),
+            rect.top + static_cast<int>(std::ceil(word.bounds.bottom / scale))};
+        if (bounds.left < rect.left || bounds.top < rect.top || bounds.right > rect.right ||
+            bounds.bottom > rect.bottom || bounds.right <= bounds.left || bounds.bottom <= bounds.top)
+            continue;
+        OcrResult reading;
+        reading.text = word.text;
+        reading.line_count = 1;
+        reading.word_geometry_verified = true;
+        reading.text_angle_deg = raw.text_angle_deg;
+        frame.tokens.push_back({std::move(reading), bounds, true, SphHudTokenBoundsSource::ocr_word});
+    }
 }
 
 }  // namespace
@@ -61,12 +97,15 @@ SphHudFrame recognize_sph_hud_frame(const Image& image, WindowsOcr& ocr,
     if (!layout) layout = extract_sph_hud_supplemental_layout(image);
     if (!layout) return frame;
     frame.layout = *layout;
-    for (const auto* scale : {&layout->mil_scale, &layout->range_scale, &layout->compass}) {
+    for (const auto* scale : {&layout->mil_scale, &layout->range_scale}) {
         read_region(frame, image, ocr, scale->header, stop);
         for (const auto region : scale->label_regions) read_region(frame, image, ocr, region, stop, recognition);
     }
-    for (const auto region : {layout->asl, layout->stabilization, layout->ammunition, layout->weapon})
+    if (layout->source == SphHudLayoutSource::optic_pixel_geometry)
+        read_compass_words(frame, image, ocr, layout->compass.labels, stop);
+    for (const auto region : {layout->asl, layout->stabilization, layout->weapon})
         if (region) read_region(frame, image, ocr, *region, stop);
+    if (layout->ammunition) read_region(frame, image, ocr, *layout->ammunition, stop, nullptr, true);
     return frame;
 }
 

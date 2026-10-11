@@ -221,6 +221,8 @@ public:
                                              std::uint64_t now_ms);
     [[nodiscard]] std::size_t outstanding_shots() const noexcept;
     [[nodiscard]] std::uint64_t epoch() const noexcept;
+    // Readiness still requires the caller to check capture age and context.
+    [[nodiscard]] bool has_stable_sight() const noexcept;
 
 private:
     struct PendingShot {

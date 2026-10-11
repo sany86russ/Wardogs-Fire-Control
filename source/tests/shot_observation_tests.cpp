@@ -544,8 +544,102 @@ void reload_without_aiming_pose() {
     second.id = 2;
     second.timestamp_ms = 200;
     (void)partial_only.session.observe_discharge(second, 200);
-    check(partial_only.session.fire_intent(partial_only.query(), 250, 250).reason == Reason::awaiting_stable_hud,
-          "two ammo-only frames cannot stand in for an actual stable HUD sight");
+    check(partial_only.session.fire_intent(partial_only.query(), 250, 250).reason == Reason::no_hud_evidence &&
+          partial_only.session.reserve_impact(partial_only.query(), 260).provenance == Provenance::unverified_legacy,
+          "two ammo-only frames cannot arm actual-sight correlation or disable unverified legacy correction");
+}
+
+void partial_hud_before_first_full_sight() {
+    Fixture fixture;
+    const auto partial = [&](std::uint64_t time, int ammo, wardogs::ShotCameraPhase camera) {
+        wardogs::DischargeFrameEvidence value;
+        value.id = ++fixture.frame_id;
+        value.timestamp_ms = time;
+        value.epoch = fixture.session.epoch();
+        value.context = fixture.context;
+        value.foreground_verified = true;
+        value.ammo = ammo;
+        value.ammo_channel = "synthetic-shell-counter";
+        value.shot_camera = camera;
+        return value;
+    };
+    const auto first = partial(100, 5, wardogs::ShotCameraPhase::idle);
+    const auto metadata = fixture.session.observe_discharge(first, 100);
+    check(metadata.reason == Reason::accepted_frame && metadata.provenance == Provenance::unverified_legacy &&
+          !metadata.intent && !metadata.shot && !fixture.session.has_stable_sight(),
+          "a readable shell counter without any full sight remains metadata with unverified legacy provenance");
+    check(fixture.session.observe_discharge(first, 110).reason == Reason::duplicate_frame,
+          "partial-only metadata still retains distinct capture identity");
+    const auto unarmed_press = fixture.session.fire_intent(fixture.query(), 150, 150);
+    check(unarmed_press.reason == Reason::no_hud_evidence && !unarmed_press.intent,
+          "a physical press before any full sight cannot freeze a counterfeit firing snapshot");
+    const auto decrement = fixture.session.observe_discharge(partial(200, 4, wardogs::ShotCameraPhase::firing), 200);
+    check(decrement.reason == Reason::accepted_frame && decrement.provenance == Provenance::unverified_legacy &&
+          !decrement.shot && fixture.session.outstanding_shots() == 0,
+          "pre-sight ammunition and camera changes do not create an unassociated tracked discharge");
+    fixture.session.invalidate_correlation(250, 150);
+    fixture.session.invalidate_sight(260);
+    const auto legacy = fixture.session.reserve_impact(fixture.query(), 270);
+    check(legacy.reason == Reason::no_hud_evidence && legacy.provenance == Provenance::unverified_legacy &&
+          !legacy.association_unique && !legacy.reservation,
+          "lost input and missing sight before arming preserve the existing unverified impact workflow");
+    const auto late_legacy = fixture.session.reserve_impact(fixture.query(), 120501);
+    check(late_legacy.reason == Reason::no_hud_evidence && late_legacy.provenance == Provenance::unverified_legacy,
+          "expiry of pre-sight metadata cannot become a tracked expired shot or quarantine");
+
+    check(fixture.read(120600, 3).reason == Reason::awaiting_stable_hud && !fixture.session.has_stable_sight(),
+          "the first full sight starts a fresh baseline rather than comparing against an earlier partial count");
+    const auto armed = fixture.session.reserve_impact(fixture.query(), 120610);
+    check(armed.reason == Reason::no_observed_discharge && armed.provenance == Provenance::hud_only &&
+          !armed.reservation,
+          "one accepted full sight already makes actual-shot association strict without inventing a stable pair");
+    check(fixture.read(120700, 3).reason == Reason::accepted_frame && fixture.session.has_stable_sight(),
+          "a second distinct full sight supplies a fresh usable pre-press pair after partial-only metadata");
+    const auto intent = fixture.session.fire_intent(fixture.query(), 120750, 120750);
+    check(intent.intent.has_value(), "a new press can freeze the newly established full sight");
+    check(fixture.session.observe_discharge(partial(120800, 2, wardogs::ShotCameraPhase::unavailable), 120800).reason ==
+          Reason::awaiting_discharge_confirmation,
+          "a later reload-hidden decrement confirms only the newly frozen full-sight intent");
+    const auto confirmed = fixture.session.observe_discharge(
+        partial(120900, 2, wardogs::ShotCameraPhase::unavailable), 120900);
+    check(confirmed.shot && confirmed.shot->first_sight_frame_id == 3 &&
+          confirmed.shot->last_sight_frame_id == 4 && confirmed.shot->pressed_at_ms == 120750 &&
+          confirmed.shot->firing.bearing_deg == 10.0 && confirmed.shot->firing.mil == 900.0 &&
+          !confirmed.shot->physical_shot_verified,
+          "the accepted shot retains only post-arming actual sight with explicitly limited discharge proof");
+    const auto association = fixture.session.reserve_impact(fixture.query(), 120950);
+    check(association.association_unique && association.reservation,
+          "pre-sight metadata and lost input cannot poison a later genuinely associated shot");
+    fixture.session.invalidate_sight(120960);
+    check(!fixture.session.has_stable_sight() &&
+          fixture.session.validate_reservation(reservation_id(association), fixture.query(), 120970) ==
+              Reason::unique_association,
+          "loss of live sight disables new readiness while preserving a frozen actual-shot lease");
+}
+
+void first_full_sight_keeps_strict_correlation() {
+    Fixture fixture;
+    (void)fixture.read(100, 5);
+    fixture.session.invalidate_sight(110);
+    wardogs::DischargeFrameEvidence partial;
+    partial.id = ++fixture.frame_id;
+    partial.timestamp_ms = 200;
+    partial.epoch = fixture.session.epoch();
+    partial.context = fixture.context;
+    partial.foreground_verified = true;
+    partial.ammo = 4;
+    partial.ammo_channel = "synthetic-shell-counter";
+    check(fixture.session.observe_discharge(partial, 200).reason == Reason::correlation_ambiguous,
+          "a passive decrement after even one accepted full sight remains strict unassociated evidence");
+    fixture.session.invalidate_correlation(210, 150);
+    const auto refused = fixture.session.reserve_impact(fixture.query(), 220);
+    check(refused.reason == Reason::correlation_ambiguous && refused.provenance == Provenance::hud_only &&
+          !refused.association_unique && !refused.reservation && !fixture.session.has_stable_sight(),
+          "partial loss and lost input after arming cannot silently restore legacy correction");
+    fixture.session.begin_context(fixture.context, 2, 230);
+    const auto reset = fixture.session.reserve_impact(fixture.query(), 240);
+    check(reset.reason == Reason::no_hud_evidence && reset.provenance == Provenance::unverified_legacy,
+          "only an explicit new context resets full-sight arming and its quarantine");
 }
 
 void body_markers_and_bounds() {
@@ -629,6 +723,8 @@ int main() {
     absolute_reading_intervals();
     uncertain_counter_and_camera();
     reload_without_aiming_pose();
+    partial_hud_before_first_full_sight();
+    first_full_sight_keeps_strict_correlation();
     body_markers_and_bounds();
     if (failures != 0) return 1;
     std::cout << "Shot observation tests passed\n";
