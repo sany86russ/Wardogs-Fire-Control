@@ -2218,6 +2218,12 @@ public:
         reset_continuous_calibration(); show_result(*target_);
         // Explicit synthetic diagnostic evidence checks UI integration only.
         // It is not a captured game reading or a field accuracy measurement.
+        // Recover through the ordinary accepted-target user path after the
+        // preceding intentionally rejected correction, retaining error gates.
+        accept_manual_target(*target_, "test_alignment_target");
+        check("SPH2_mini_alignment_fixture_has_accepted_target_and_no_prior_error",
+            !failure_state_ && !ocr_hold_ && current_shot_context() && high_result_ &&
+            effective_vehicle_arc() == wardogs::Arc::high);
         enter_pinned_mode();
         const auto alignment_geometry = pinned_window_->geometry();
         const auto alignment_command = wardogs::displayed_firing_command(*high_result_);
