@@ -636,6 +636,10 @@ public:
         wardogs::i18n::watch(this);
         start_terrain_tasks();
         start_ocr_warmup();
+        hud_freshness_timer_ = new QTimer(this);
+        hud_freshness_timer_->setSingleShot(true);
+        hud_freshness_timer_->setTimerType(Qt::PreciseTimer);
+        connect(hud_freshness_timer_, &QTimer::timeout, this, [this] { refresh_hud_freshness(); });
         if (!diagnostic_) {
             hud_timer_ = new QTimer(this);
             hud_timer_->setInterval(300);
@@ -663,6 +667,7 @@ public:
         if (pinned_window_) pinned_window_->flush_preferences();
         closing_ = true;
         if (hud_timer_) hud_timer_->stop();
+        if (hud_freshness_timer_) hud_freshness_timer_->stop();
         if (hud_worker_.joinable()) { hud_worker_.request_stop(); hud_worker_.join(); }
         if (terrain_tasks_) terrain_tasks_->stop();
         if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
@@ -2241,6 +2246,7 @@ public:
             hud_reading_ = reading; hud_reading_at_ms_ = captured;
             hud_reading_target_ = target_; hud_reading_epoch_ = hud_epoch_;
             sync_pinned_status();
+            arm_hud_freshness_timer();
         };
         const auto aim_snapshot = [&](const char* name) {
             const auto directory = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("Testing/aim-alignment"));
@@ -2278,6 +2284,14 @@ public:
         check("SPH2_mini_old_context_cannot_keep_a_green_ready_border",
             current_aim_alignment().state == wardogs::AimAlignmentState::unknown && aim_label &&
             aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        seed_alignment(0.0, 0.0);
+        const bool freshness_guard_armed = hud_freshness_timer_->isActive() &&
+            hud_freshness_timer_->remainingTime() <= 100 && !hud_busy_;
+        hud_reading_at_ms_ = GetTickCount64() - 1001;
+        refresh_hud_freshness();
+        check("SPH2_mini_expiry_guard_clears_green_without_waiting_for_OCR_poll",
+            freshness_guard_armed && !hud_reading_ && !hud_freshness_timer_->isActive() &&
+            !hud_busy_ && aim_label && aim_label->property("aimAlignment") == QStringLiteral("unknown"));
         clear_hud_reading();
         exit_game_mode();
         reset_continuous_calibration(); show_result(*target_);
@@ -3010,6 +3024,7 @@ private:
     std::unique_ptr<wardogs::WindowsOcr> hud_ocr_;
     std::unique_ptr<wardogs::RapidOcr> hud_rapid_;
     QTimer* hud_timer_{};
+    QTimer* hud_freshness_timer_{};
     bool hud_busy_{};
     wardogs::ShotObservationSession observed_shots_;
     std::optional<wardogs::ShotEvidenceContext> hud_context_;
@@ -4851,11 +4866,35 @@ private:
     }
 
     void clear_hud_reading() {
+        if (hud_freshness_timer_) hud_freshness_timer_->stop();
         hud_reading_.reset();
         hud_reading_target_.reset();
         hud_reading_epoch_ = 0;
         if (fire_control_compact_) fire_control_compact_->setToolTip({});
         sync_pinned_status();
+    }
+
+    void arm_hud_freshness_timer() {
+        if (!hud_freshness_timer_ || !hud_reading_ || closing_) return;
+        const auto now = GetTickCount64();
+        const auto age = now >= hud_reading_at_ms_ ? now - hud_reading_at_ms_ : 1001ULL;
+        const auto remaining = age <= 1000 ? 1001 - age : 1ULL;
+        // This guard reads no pixels and starts no OCR. Check focus at most
+        // every 100 ms, and wake at the exact sight-expiry deadline.
+        hud_freshness_timer_->start(static_cast<int>(std::min(100ULL, remaining)));
+    }
+
+    void refresh_hud_freshness() {
+        if (!hud_reading_) return;
+        const auto alignment = current_aim_alignment();
+        if (alignment.reason == wardogs::AimAlignmentReason::invalid_context ||
+            alignment.reason == wardogs::AimAlignmentReason::future_capture ||
+            alignment.reason == wardogs::AimAlignmentReason::stale_capture) {
+            observed_shots_.invalidate_sight(GetTickCount64());
+            clear_hud_reading();
+            return;
+        }
+        arm_hud_freshness_timer();
     }
 
     void reset_hud_observation() {
@@ -5091,6 +5130,7 @@ private:
                     .arg(pose.bearing_deg, 0, 'f', 2).arg(pose.sight_mil, 0, 'f', 2);
                 if (self->fire_control_compact_) self->fire_control_compact_->setToolTip(status);
                 self->sync_pinned_status();
+                self->arm_hud_freshness_timer();
             }, Qt::QueuedConnection);
         });
     }
