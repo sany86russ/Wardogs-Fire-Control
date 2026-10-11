@@ -51,18 +51,22 @@ The border compares a fresh observed sight with the calculator's current rounded
 
 | Colour | Condition |
 | --- | --- |
-| Green | Two agreeing frames and known enabled stabilization; difference including absolute OCR uncertainty is at most 0.2 degrees and 1 MIL |
+| Green | Two agreeing frames and known enabled stabilization; the actual reading interval intersects the current command's rounding cell (0.1 degree and one MIL) |
 | Orange | A reliably read smaller difference, or known disabled stabilization |
 | Red | Even after allowing for OCR uncertainty, difference exceeds 1 degree or 10 MIL |
 | Neutral | No complete sight, unknown stabilization or uncertainty, a frame older than one second, changed context, paused application, or lost game focus |
 
 A label repeats the colour state. Its tooltip shows bearing and MIL adjustments toward the command; positive values mean an increase from the current reading. Border updates do not change the card's dimensions or position. Changing the target, map, or arc clears an old green state.
 
+Green means the command is compatible with the sight reading within the measured uncertainty shown in the tooltip. Uncertainty is not subtracted or reduced; a frame with more than one degree or one MIL of uncertainty receives no colour assessment. The rounding allowance is half the displayed step: 0.05 degree and 0.5 MIL. This does not establish readiness for a precise hit. Pixel-localisation uncertainty on the real ruler exceeds 0.2 degree even when central values match perfectly; a worst-error requirement of 0.2 degree would make green unreachable.
+
 Inner-compass labels require verified individual OCR-word coordinates and alignment with the corresponding major tick within 3 pixels at a 720-pixel client height. Recognition-region geometry is never presented as word position. The top navigation ruler cannot replace the inner compass. Labels with a different phase relative to the ticks cause refusal.
 
 When Windows OCR finds no words in the full strip, a bounded dark-neutral component search locates candidates in the original pixels. Each candidate is read with two padding variants; text and word coordinates must agree. More than 12 candidates, clipped glyphs or inconsistent readings cause refusal. This path does not infer numbers from ticks or relax ruler validation. A separate timer expires visual indication independently of the next OCR operation; it reads no pixels.
 
 ## Evidence limits
+
+The final offline replay of 16 retained original game images (18 console probes) produced no complete accepted AZ+MIL sight. Some fields can be read, but other labels are occluded, use a different layout or lack a verified tick association. Colour examples come from explicitly synthetic UI tests. They do not establish the complete reader path on the current game; that stage remains unfinished.
 
 The log separates `sight_verified`, `discharge_observed`, and `physical_shot_verified`. For this HUD/counter association the last flag remains `0`: the application does not authenticate a physical shot, the identity of a selected impact, or a hit probability. Earlier `displayed_unverified` records do not prove that the player entered the displayed command or establish “99% within 10 metres.”
 

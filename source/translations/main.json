@@ -1636,8 +1636,12 @@
     "en": "Sight: unavailable"
   },
   {
-    "ru": "Наводка совпадает",
-    "en": "Aim matches"
+    "ru": "Прицел согласован",
+    "en": "Sight agrees"
+  },
+  {
+    "ru": "Команда в пределах погрешности чтения и округления",
+    "en": "Command within reading uncertainty and rounding"
   },
   {
     "ru": "Наводка не совпадает",

@@ -56,7 +56,6 @@ AimAlignment evaluate_aim_alignment(const AimAlignmentInput& input) noexcept {
     }
     const double bearing_error = std::abs(*result.bearing_delta_deg);
     const double mil_error = std::abs(*result.mil_delta);
-    const double maximum_bearing_error = std::min(180.0, bearing_error + *input.bearing_uncertainty_deg);
     const double maximum_mil_error = mil_error + *input.mil_uncertainty;
     if (!std::isfinite(maximum_mil_error)) {
         result.reason = AimAlignmentReason::invalid_uncertainty;
@@ -78,7 +77,14 @@ AimAlignment evaluate_aim_alignment(const AimAlignmentInput& input) noexcept {
     } else if (!*input.stabilized) {
         result.state = AimAlignmentState::close;
         result.reason = AimAlignmentReason::unstabilized;
-    } else if (maximum_bearing_error <= 0.2 && maximum_mil_error <= 1.0) {
+    } else if (bearing_error <= *input.bearing_uncertainty_deg + 0.05 + 1e-10 &&
+               mil_error <= *input.mil_uncertainty + 0.5 + 1e-10) {
+        // Agreement means intersection of the absolute reading interval with
+        // the displayed command's rounding cell (0.1 degree / one MIL).
+        // It never reduces the reader's uncertainty or claims a hit bound.
+        // A 0.2-degree worst-error requirement is below the actual ruler's
+        // pixel-localisation floor and cannot be met by the real extractor.
+        // The tiny epsilon only accommodates circular subtraction roundoff.
         result.state = AimAlignmentState::aligned;
         result.reason = AimAlignmentReason::aligned;
     } else {

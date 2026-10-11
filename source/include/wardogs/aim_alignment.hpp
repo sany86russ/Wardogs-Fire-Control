@@ -5,7 +5,8 @@
 
 namespace wardogs {
 
-// Agreement with a displayed numeric command, never a hit prediction.
+// Compatibility of an absolute reading interval with the displayed numeric
+// command's rounding cell (0.1 degree / one MIL), never a hit prediction.
 enum class AimAlignmentState { unknown, aligned, close, misaligned };
 
 enum class AimAlignmentReason {

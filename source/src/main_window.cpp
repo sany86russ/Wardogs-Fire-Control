@@ -2240,14 +2240,16 @@ public:
                 alignment_command.bearing_deg + bearing_delta, alignment_command.mil + mil_delta,
                 target_height_delta(*target_)};
             frame.stabilized = true; frame.ammo = 40; frame.ammo_channel = "synthetic_shell";
-            frame.bearing_uncertainty_deg = 0.05; frame.mil_uncertainty = 0.2;
+            // Still synthetic: exercise interval agreement with the actual
+            // reader's resolution floor, not invented 0.05-degree precision.
+            frame.bearing_uncertainty_deg = 0.6; frame.mil_uncertainty = 0.2;
             (void)observed_shots_.observe(frame, frame.timestamp_ms);
             frame.id = 2; frame.timestamp_ms = captured;
             (void)observed_shots_.observe(frame, captured);
             wardogs::SphHudReading reading;
             reading.refusal = wardogs::SphHudRefusal::none;
             reading.pose = wardogs::SphHudPose{frame.firing_snapshot.mil,
-                frame.firing_snapshot.bearing_deg, 0.2, 0.05, {0.5, 0.5}};
+                frame.firing_snapshot.bearing_deg, 0.2, 0.6, {0.5, 0.5}};
             reading.stabilized = true;
             hud_reading_ = reading; hud_reading_at_ms_ = captured;
             hud_reading_target_ = target_; hud_reading_epoch_ = hud_epoch_;
@@ -2268,6 +2270,8 @@ public:
         check("SPH2_mini_green_requires_fresh_stable_stabilized_actual_sight",
             current_aim_alignment().state == wardogs::AimAlignmentState::aligned && aim_label &&
             aim_label->property("aimAlignment") == QStringLiteral("aligned") &&
+            aim_label->toolTip().contains(wardogs::i18n::text(
+                QStringLiteral("Команда в пределах погрешности чтения и округления"))) &&
             !aim_label->text().isEmpty() && !aim_label->toolTip().isEmpty() && aim_snapshot("aligned"));
         seed_alignment(0.4, 2.0);
         check("SPH2_mini_orange_shows_small_actual_command_difference",
@@ -5908,7 +5912,7 @@ private:
         const auto alignment = current_aim_alignment();
         QString label = wardogs::i18n::text(QStringLiteral("Прицел: нет данных"));
         if (alignment.state == wardogs::AimAlignmentState::aligned)
-            label = wardogs::i18n::text(QStringLiteral("Наводка совпадает"));
+            label = wardogs::i18n::text(QStringLiteral("Прицел согласован"));
         else if (alignment.state == wardogs::AimAlignmentState::misaligned)
             label = wardogs::i18n::text(QStringLiteral("Наводка не совпадает"));
         else if (alignment.state == wardogs::AimAlignmentState::close)
@@ -5921,6 +5925,8 @@ private:
         else if (alignment.reason == wardogs::AimAlignmentReason::stale_capture)
             label = wardogs::i18n::text(QStringLiteral("Обновляем прицел"));
         QString details = wardogs::i18n::text(QStringLiteral("Сравнение с текущей командой · не прогноз попадания"));
+        if (alignment.state == wardogs::AimAlignmentState::aligned)
+            details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("Команда в пределах погрешности чтения и округления"));
         if (alignment.bearing_delta_deg && alignment.mil_delta) {
             const auto signed_value = [](double value, int decimals) {
                 const auto result = QString::number(value, 'f', decimals);

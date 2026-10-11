@@ -57,14 +57,32 @@ int main() {
     input = readable();
     input.bearing_uncertainty_deg = 0.2;
     input.mil_uncertainty = 1.0;
-    check(evaluate(input).state == State::aligned, "green includes exact worst-error bounds");
-    input.bearing_uncertainty_deg = 0.2001;
-    check(evaluate(input).state == State::close, "uncertainty alone can prevent green despite matching central values");
+    check(evaluate(input).state == State::aligned, "matching command is compatible with its absolute reading interval");
+    input.bearing_uncertainty_deg = 0.586;
+    check(evaluate(input).state == State::aligned,
+          "a real ruler uncertainty floor can confirm interval compatibility without inventing precision");
+    input.actual_bearing_deg = 0.636;
+    check(evaluate(input).state == State::aligned,
+          "AZ reading interval touching the command rounding cell is compatible");
+    input.actual_bearing_deg = 0.636001;
+    check(evaluate(input).state == State::close,
+          "AZ interval outside the command rounding cell is orange");
     input = readable();
     input.actual_mil = 900.75;
-    check(evaluate(input).state == State::aligned, "MIL deviation plus interval exactly one remains green");
-    input.mil_uncertainty = 0.251;
-    check(evaluate(input).state == State::close, "green uses the whole MIL interval rather than its centre");
+    check(evaluate(input).state == State::aligned,
+          "MIL reading interval touching the whole-MIL command rounding cell is compatible");
+    input.actual_mil = 900.750001;
+    check(evaluate(input).state == State::close, "MIL interval outside the rounding cell is orange");
+    input = readable();
+    input.bearing_uncertainty_deg = 1.0;
+    input.mil_uncertainty = 1.0;
+    input.actual_bearing_deg = 1.05;
+    input.actual_mil = 901.5;
+    check(evaluate(input).state == State::aligned,
+          "reader interval caps are preserved and compatibility is not a worst-error or hit guarantee");
+    input.bearing_uncertainty_deg = 1.000001;
+    check(evaluate(input).state == State::unknown,
+          "a wider interval cannot be used to force compatibility beyond the reader cap");
 
     input = readable();
     input.actual_bearing_deg = 2.0;
