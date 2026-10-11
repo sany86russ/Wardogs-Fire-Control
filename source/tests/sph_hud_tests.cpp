@@ -400,6 +400,22 @@ int main() {
     check(!extract_sph_hud_supplemental_layout(no_base),
           "a tapered stroke without its aligned cartridge base is not a shell channel");
     check(!extract_sph_hud_layout(Image{1280, 720, {}}), "invalid image storage never reaches pixel sampling");
+    check(sph_hud_poll_delay_ms(300, 300, true) == 300,
+          "300-ms full reading replaces the prior frame by 900 ms instead of 1200 ms");
+    check(sph_hud_poll_delay_ms(300, 380, true) == 220,
+          "queued completion latency is counted in the next sight budget");
+    check(sph_hud_poll_delay_ms(400, 400, true) == 150,
+          "a feasible slow reading retains a nonzero delay within freshness");
+    check(sph_hud_poll_delay_ms(500, 500, true) == 700,
+          "an infeasibly slow reader keeps bounded backoff instead of busy polling");
+    check(sph_hud_poll_delay_ms(10, 10, true) == 700,
+          "a fast reader is throttled while reserving time before expiry");
+    check(sph_hud_poll_delay_ms(300, 300, false) == 600 &&
+          sph_hud_poll_delay_ms(10, 10, false) == 300,
+          "partial and rejected readings keep the prior retry cadence");
+    check(sph_hud_poll_delay_ms(300, 1000, true) == 600 &&
+          sph_hud_poll_delay_ms(UINT64_MAX, UINT64_MAX, true) == 700,
+          "stale and overflowing duration inputs cannot underflow the delay");
     if (!failures) std::cout << "SPH HUD tests passed\n";
     return failures ? 1 : 0;
 }

@@ -6,6 +6,8 @@ This document describes the experimental workflow prepared for 2.13. It retains 
 
 Observation requires enabled game integration, SPH-2, a confirmed map, accepted gun and target coordinates, an available arc, and a foreground WARDOGS window. Capture and recognition run on a worker with one HUD frame in flight. Observation is disabled in the standalone manual calculator, diagnostic mode, while paused, and for L81. Showing manual coordinate fields does not itself change the operating mode.
 
+The next read accounts for elapsed OCR time and capture age so ordinary updates can complete before the reading expires. Partial reads retain a slower retry cadence. Recognition that is too slow is not presented as fresh or continuously retried just to preserve a coloured border.
+
 The observer uses screen pixels and text recognition. It does not aim, generate input, or read game-process memory. Window caption and class checks restrict capture but do not authenticate a game process. Screen capture uses standard [Microsoft GDI APIs](https://learn.microsoft.com/en-us/windows/win32/gdi/capturing-an-image).
 
 ## What is measured

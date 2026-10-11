@@ -914,6 +914,22 @@ std::optional<SphHudLayout> extract_sph_hud_supplemental_layout(const Image& ima
     return layout;
 }
 
+int sph_hud_poll_delay_ms(std::uint64_t processing_ms,
+                         std::uint64_t capture_age_ms,
+                         bool full_sight_accepted) noexcept {
+    const auto retry = processing_ms >= 350 ? 700
+        : static_cast<int>(std::max<std::uint64_t>(300, processing_ms * 2));
+    if (!full_sight_accepted || capture_age_ms >= 1000 || processing_ms >= 1000)
+        return retry;
+    const auto spent = capture_age_ms + processing_ms; // Both bounded above.
+    constexpr std::uint64_t minimum_delay = 150;
+    // A later completion cannot meet freshness even at the minimum delay.
+    // Keep the old bounded backoff rather than increasing futile CPU work.
+    if (spent + minimum_delay > 1000) return retry;
+    const auto budget = spent < 900 ? 900 - spent : 0;
+    return static_cast<int>(std::clamp<std::uint64_t>(budget, minimum_delay, 700));
+}
+
 SphHudReading read_sph_hud_supplemental(const SphHudFrame& frame) {
     SphHudReading result;
     result.provenance = {frame.frame_id, frame.provider, frame.captured_client_region, frame.layout.source};

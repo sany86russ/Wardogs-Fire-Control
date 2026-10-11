@@ -188,4 +188,12 @@ std::vector<ImageRect> extract_sph_hud_compass_word_regions(const Image& image, 
 std::optional<SphHudLayout> extract_sph_hud_supplemental_layout(const Image& image);
 SphHudReading read_sph_hud_supplemental(const SphHudFrame& frame);
 
+// Delay measured from OCR completion. A valid sight budgets the current
+// capture age and the next recognition against the one-second visual limit,
+// with a 100-ms reserve where possible. Refusal retains a slower bounded
+// retry; no delay is zero and an infeasibly slow reader is not busy-polled.
+[[nodiscard]] int sph_hud_poll_delay_ms(std::uint64_t processing_ms,
+                                      std::uint64_t capture_age_ms,
+                                      bool full_sight_accepted) noexcept;
+
 }  // namespace wardogs

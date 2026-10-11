@@ -5103,7 +5103,8 @@ private:
                     return;
                 }
                 if (self->hud_timer_) self->hud_timer_->setInterval(
-                    static_cast<int>(std::clamp<std::uint64_t>(elapsed * 2, 300, 700)));
+                    wardogs::sph_hud_poll_delay_ms(elapsed, GetTickCount64() - captured_at,
+                        reading && reading->accepted()));
                 if (!reading || !reading->accepted()) {
                     self->observed_shots_.invalidate_sight(GetTickCount64());
                     self->clear_hud_reading();
