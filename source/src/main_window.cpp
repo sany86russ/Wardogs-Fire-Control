@@ -1632,7 +1632,8 @@ public:
                     dispatch_registered_hotkey(8, hotkey_listener_epoch_.load());
                     const auto effective_unlock = wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey);
                     check("native_independent_resume_recovers_full_set_around_the_still_occupied_unlock",
-                        !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_ &&
+                        !application_paused_ && hotkey_listener_.active() && vehicle_mode_ &&
+                        !settings_.middle_mouse_enabled && mouse_listener_.active() && !busy_ &&
                         target_ == preserved_target && effective_unlock.virtual_key == 'Q' &&
                         (effective_unlock.modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == (MOD_ALT | MOD_SHIFT));
                 }
@@ -2128,13 +2129,12 @@ public:
               observed_context.impact_firing->bearing_deg == actual_sight.bearing_deg &&
               observed_context.impact_firing->mil == actual_sight.mil &&
               observed_shots_.outstanding_shots() == 1);
-        const auto before_observed_model = *high_result_;
         const bool observed_recorded = record_continuous_impact(*target_, QStringLiteral("test observed HUD"),
             *observed_context.impact_firing, &observed_context);
         check("SPH2_calibration_uses_actual_HUD_and_consumes_only_successfully_accepted_shot",
               observed_recorded && observation_count() == 1 && observed_shots_.outstanding_shots() == 0 &&
-              std::abs(high_result_->bearing_deg - before_observed_model.bearing_deg - 0.3) < 1e-6 &&
-              std::abs(high_result_->mil - before_observed_model.mil + 2) < 1e-6);
+              std::abs(high_result_->bearing_deg - actual_sight.bearing_deg) < 1e-6 &&
+              std::abs(high_result_->mil - actual_sight.mil) < 1e-6);
         bool observed_duplicate_rejected{};
         try { OcrMessage duplicate; capture_impact_context(duplicate); }
         catch (const std::invalid_argument&) { observed_duplicate_rejected = true; }
