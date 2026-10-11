@@ -756,8 +756,8 @@
     "en": "Could not connect heights: "
   },
   {
-    "ru": "Учтено попаданий: %1/%2. Поправка действует только рядом с записанной целью и для той же траектории.",
-    "en": "Impacts used: %1/%2. The correction applies only near the recorded target and to the same trajectory."
+    "ru": "Учтено попаданий: %1/%2. MIL уточняется рядом с целью; согласованный азимут может заранее уточняться по разным целям этой стоянки и траектории.",
+    "en": "Impacts recorded: %1/%2. MIL is refined near the target; a consistent bearing can be predicted from different targets of this gun position and arc."
   },
   {
     "ru": "Можно стрелять сразу. Поправка необязательна: после выстрела по показанным азимуту и MIL наведите курсор на фактическое попадание и нажмите %1 до смены цели или траектории.",
@@ -1570,5 +1570,61 @@
   {
     "ru": "курсор перемещён до подтверждения координат двумя кадрами",
     "en": "cursor moved before two frames confirmed the coordinates"
+  },
+  {
+    "ru": "Нет свободного сочетания для паузы захвата",
+    "en": "No available shortcut for capture pause"
+  },
+  {
+    "ru": "Захват на паузе",
+    "en": "Capture paused"
+  },
+  {
+    "ru": "Захват на паузе · возобновить: %1",
+    "en": "Capture paused · resume: %1"
+  },
+  {
+    "ru": "Ⅱ Захват на паузе",
+    "en": "Ⅱ Capture paused"
+  },
+  {
+    "ru": "Возобновить",
+    "en": "Resume"
+  },
+  {
+    "ru": "Пауза",
+    "en": "Pause"
+  },
+  {
+    "ru": "Возобновить захват · %1",
+    "en": "Resume capture · %1"
+  },
+  {
+    "ru": "Пауза захвата · %1",
+    "en": "Pause capture · %1"
+  },
+  {
+    "ru": "Захват на паузе. Горячие клавиши недоступны: ",
+    "en": "Capture paused. Shortcuts unavailable: "
+  },
+  {
+    "ru": "Захват возобновлён · пауза: %1",
+    "en": "Capture resumed · pause: %1"
+  },
+  {
+    "ru": "\nАзимут заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка боковой модели ≈%2 м; это не радиус попадания. MIL остаётся локальным. После поворота орудия заново задайте его позицию.",
+    "en": "\nBearing predicted from %1 different targets at this gun position. Lateral model validation error ≈%2 m; this is not a hit radius. MIL remains local. After rotating the gun, set its position again."
+  },
+  {
+    "ru": "Азимут: прогноз по %1 целям · предварительно",
+    "en": "Bearing: prediction from %1 targets · provisional"
+  },
+  {
+    "ru": " · прогноз азимута",
+    "en": " · bearing prediction"
+  },
+  {
+    "ru": "Прогноз азимута: ",
+    "en": "Bearing prediction: "
   }
 ]

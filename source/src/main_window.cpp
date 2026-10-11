@@ -125,6 +125,23 @@ namespace {
 
 QString qtext(const std::wstring& value) { return QString::fromStdWString(value); }
 
+wardogs::Hotkey available_pause_hotkey(std::span<const wardogs::Hotkey> actions,
+                                      const wardogs::Hotkey& preferred) {
+    constexpr UINT mask = MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
+    const auto unused = [&](const wardogs::Hotkey& candidate) {
+        return std::none_of(actions.begin(), actions.end(), [&](const auto& action) {
+            return action.virtual_key == candidate.virtual_key &&
+                (action.modifiers & mask) == (candidate.modifiers & mask);
+        });
+    };
+    if (unused(preferred)) return preferred;
+    for (const auto* chord : {L"Ctrl+Alt+P", L"Ctrl+Alt+Shift+P", L"Ctrl+Alt+F9", L"Ctrl+Alt+Shift+F9"}) {
+        auto candidate = wardogs::parse_hotkey(chord);
+        if (unused(candidate)) return candidate;
+    }
+    throw std::invalid_argument("Нет свободного сочетания для паузы захвата");
+}
+
 QString apply_registered_hotkeys(wardogs::AppSettings& settings,
                                  std::span<const wardogs::Hotkey> actual) {
     if (actual.size() != 8)
@@ -1448,6 +1465,179 @@ public:
               same_target_recorded && observation_count() == 2 && target_ == repeated_same_target.impact_firing->target &&
               std::abs(std::remainder(high_result_->bearing_deg - first_raw_high.bearing_deg, 360.0) - 1.0) < 1e-6 &&
               std::abs(high_result_->mil - first_raw_high.mil + 10.0) < 1e-6);
+        {
+            const auto preserved_base = base_;
+            const auto preserved_target = target_;
+            const auto preserved_history = history_;
+            const auto preserved_calibration_epoch = calibration_epoch_;
+            const auto preserved_count = observation_count();
+            const auto preserved_command = wardogs::displayed_firing_command(*high_result_);
+            enter_pinned_mode();
+            const auto preserved_card_rect = pinned_window_->geometry();
+            const bool preserved_lock = pinned_window_->is_locked();
+            OcrMessage late_impact;
+            capture_impact_context(late_impact);
+            late_impact.input_epoch = input_epoch_;
+            late_impact.calibration_epoch = calibration_epoch_;
+            late_impact.success = true;
+            late_impact.point = impact_for(*late_impact.impact_firing, 0.5, -5.0);
+            late_impact.confirmed = true;
+            pending_ocr_ = late_impact;
+            queued_map_job_.emplace();
+            map_retry_event_ = wardogs::MiddleMouseEvent{};
+            map_request_context_ = late_impact;
+            mouse_timer_->start(10000);
+            busy_ = true;
+            ocr_hold_ = true;
+            clear_result(QStringLiteral("CI pending capture"));
+            click("pauseCaptureButton");
+            check("pause_cancels_pending_capture_and_preserves_accepted_model_target_and_card",
+                application_paused_ && !busy_ && !pending_ocr_ && !queued_map_job_ && !map_retry_event_ &&
+                !map_request_context_ && !mouse_timer_->isActive() && !ocr_hold_ &&
+                base_ == preserved_base && target_ == preserved_target && history_ == preserved_history &&
+                calibration_epoch_ == preserved_calibration_epoch && observation_count() == preserved_count &&
+                pinned_window_->geometry().topLeft() == preserved_card_rect.topLeft() &&
+                pinned_window_->width() == preserved_card_rect.width() && pinned_window_->is_locked() == preserved_lock &&
+                pinned_window_->isVisible() && high_result_ &&
+                wardogs::displayed_firing_command(*high_result_).mil == preserved_command.mil &&
+                wardogs::displayed_firing_command(*high_result_).bearing_deg == preserved_command.bearing_deg &&
+                pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedWorkflowStatus"))->text().contains(
+                    wardogs::i18n::text(QStringLiteral("Захват на паузе"))));
+            const auto paused_epoch = input_epoch_;
+            for (std::size_t action = 0; action < 6; ++action) handle_hotkey(action);
+            begin_region_setup(); begin_quick_target(); start_ocr(OcrAction::base);
+            start_map_ocr(wardogs::MiddleMouseEvent{});
+            QMetaObject::invokeMethod(mouse_timer_, "timeout", Qt::DirectConnection);
+            finish_ocr(late_impact);
+            check("pause_blocks_hotkeys_buttons_mouse_timer_and_late_impact",
+                application_paused_ && !busy_ && !selecting_ && input_epoch_ == paused_epoch &&
+                !pending_ocr_ && !map_retry_event_ && !queued_map_job_ && observation_count() == preserved_count &&
+                target_ == preserved_target && base_ == preserved_base);
+            handle_hotkey(8);
+            busy_ = true; // Simulate a later worker while the old completion is delivered.
+            finish_ocr(late_impact);
+            check("resume_does_not_capture_and_pre_pause_completion_cannot_clear_newer_busy_state",
+                !application_paused_ && busy_ && !pending_ocr_ && !map_retry_event_ && !queued_map_job_ &&
+                input_epoch_ == paused_epoch && observation_count() == preserved_count && target_ == preserved_target);
+            busy_ = false;
+            auto* mini_pause = pinned_window_->findChild<QToolButton*>(QStringLiteral("pinnedPauseButton"));
+            mini_pause->click();
+            check("mini_pause_button_shares_main_pause_state_and_keeps_recovery_available",
+                application_paused_ && mini_pause->property("paused").toBool() &&
+                !mini_pause->icon().isNull() && mini_pause->isEnabled() &&
+                mini_pause->accessibleName().contains(qtext(pause_hotkey_.display)) &&
+                pause_button_->text() == wardogs::i18n::text(QStringLiteral("Возобновить")));
+            handle_hotkey(8);
+            check("pause_defaults_to_active_and_resumes_without_a_new_capture",
+                !application_paused_ && !busy_ && !pending_ocr_ && !mouse_timer_->isActive() &&
+                observation_count() == preserved_count && target_ == preserved_target);
+            exit_pinned_mode();
+        }
+        {
+            // Native Win32 registrations belong solely to this isolated CI
+            // process. No SendInput or game/global keyboard events are used.
+            const auto pause_test_settings = settings_;
+            const auto pause_test_shortcut = pause_hotkey_;
+            const std::array occupied_pause_chords{
+                wardogs::parse_hotkey(L"Ctrl+Alt+P"), wardogs::parse_hotkey(L"Ctrl+Alt+Shift+P")};
+            check("pause_shortcut_does_not_duplicate_user_capture_chords",
+                available_pause_hotkey(occupied_pause_chords, wardogs::parse_hotkey(L"Ctrl+Alt+P")).display == L"Ctrl+Alt+F9");
+            const std::array fields{&settings_.region_hotkey, &settings_.base_hotkey,
+                &settings_.target_hotkey, &settings_.quick_target_hotkey,
+                &settings_.impact_hotkey, &settings_.ghost_arc_hotkey,
+                &settings_.pinned_card.unlock_hotkey, &settings_.exit_game_mode_hotkey};
+            for (std::size_t index = 0; index < fields.size(); ++index)
+                *fields[index] = L"Ctrl+Alt+Shift+F" + std::to_wstring(13 + index);
+            settings_.middle_mouse_enabled = false;
+            settings_.game_integration_enabled = true;
+            pause_hotkey_ = wardogs::parse_hotkey(L"Ctrl+Alt+Shift+F21");
+            diagnostic_ = false;
+            try {
+                register_hotkeys(settings_, false);
+                const auto previous_listener_epoch = hotkey_listener_epoch_.load();
+                handle_hotkey(8);
+                dispatch_registered_hotkey(8, previous_listener_epoch);
+                check("native_pause_ignores_an_old_queued_resume_callback", application_paused_);
+                bool captures_released = true;
+                bool controls_retained = true;
+                for (std::size_t index = 0; index < fields.size(); ++index) {
+                    const auto key = wardogs::parse_hotkey(*fields[index]);
+                    const int probe = 0x6000 + static_cast<int>(index);
+                    const bool reserved = RegisterHotKey(nullptr, probe, key.modifiers, key.virtual_key) != FALSE;
+                    const DWORD error = reserved ? ERROR_SUCCESS : GetLastError();
+                    if (reserved) UnregisterHotKey(nullptr, probe);
+                    if (index < 6) captures_released = captures_released && reserved;
+                    else controls_retained = controls_retained && !reserved && error == ERROR_HOTKEY_ALREADY_REGISTERED;
+                }
+                const bool pause_reserved = RegisterHotKey(nullptr, 0x6010,
+                    pause_hotkey_.modifiers, pause_hotkey_.virtual_key) != FALSE;
+                const DWORD pause_error = pause_reserved ? ERROR_SUCCESS : GetLastError();
+                if (pause_reserved) UnregisterHotKey(nullptr, 0x6010);
+                check("native_pause_releases_capture_chords_to_windows_and_retains_unlock_return_resume",
+                    application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() &&
+                    captures_released && controls_retained && !pause_reserved && pause_error == ERROR_HOTKEY_ALREADY_REGISTERED);
+                handle_hotkey(8);
+                const auto resumed_epoch = input_epoch_;
+                dispatch_registered_hotkey(4, previous_listener_epoch);
+                check("native_resume_rejects_stale_capture_notifications_without_starting_ocr",
+                    !application_paused_ && !busy_ && !selecting_ && input_epoch_ == resumed_epoch);
+                settings_.game_integration_enabled = false;
+                register_hotkeys(settings_, false);
+                handle_hotkey(8);
+                handle_hotkey(8);
+                check("native_pause_shortcut_can_resume_even_in_manual_only_mode",
+                    !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_);
+                {
+                    // Reproduce an external reservation appearing while the
+                    // full set is released. The paused three-action fallback
+                    // must not steal a released capture chord, nor lose resume.
+                    unregister_hotkeys();
+                    settings_.game_integration_enabled = true;
+                    settings_.base_hotkey = L"Ctrl+Alt+Q";
+                    settings_.pinned_card.unlock_hotkey = L"Alt+Q";
+                    const auto occupied_unlock = wardogs::parse_hotkey(L"Alt+Q");
+                    struct OwnedHotkeyProbe {
+                        int id;
+                        bool owned;
+                        ~OwnedHotkeyProbe() { if (owned) UnregisterHotKey(nullptr, id); }
+                    } occupied{0x6011, RegisterHotKey(nullptr, 0x6011,
+                        occupied_unlock.modifiers, occupied_unlock.virtual_key) != FALSE};
+                    if (!occupied.owned) throw std::runtime_error("CI occupied-unlock reservation unavailable");
+                    const auto preserved_target = target_;
+                    handle_hotkey(8);
+                    const bool resume_reserved = RegisterHotKey(nullptr, 0x6012,
+                        pause_hotkey_.modifiers, pause_hotkey_.virtual_key) != FALSE;
+                    const DWORD resume_error = resume_reserved ? ERROR_SUCCESS : GetLastError();
+                    if (resume_reserved) UnregisterHotKey(nullptr, 0x6012);
+                    const auto released_capture = wardogs::parse_hotkey(settings_.base_hotkey);
+                    const bool capture_free = RegisterHotKey(nullptr, 0x6013,
+                        released_capture.modifiers, released_capture.virtual_key) != FALSE;
+                    if (capture_free) UnregisterHotKey(nullptr, 0x6013);
+                    check("native_occupied_unlock_cannot_steal_capture_or_remove_independent_resume",
+                        application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() &&
+                        !resume_reserved && resume_error == ERROR_HOTKEY_ALREADY_REGISTERED && capture_free &&
+                        target_ == preserved_target && !busy_ &&
+                        status_->text().contains(qtext(pause_hotkey_.display)));
+                    dispatch_registered_hotkey(8, hotkey_listener_epoch_.load());
+                    const auto effective_unlock = wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey);
+                    check("native_independent_resume_recovers_full_set_around_the_still_occupied_unlock",
+                        !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_ &&
+                        target_ == preserved_target && effective_unlock.virtual_key == 'Q' &&
+                        (effective_unlock.modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == (MOD_ALT | MOD_SHIFT));
+                }
+            } catch (const std::exception& error) {
+                set_status(QString::fromUtf8(error.what()), true);
+                check("native_pause_registration_contract", false);
+            }
+            unregister_hotkeys();
+            mouse_listener_.stop();
+            application_paused_ = false;
+            diagnostic_ = true;
+            settings_ = pause_test_settings;
+            pause_hotkey_ = pause_test_shortcut;
+            update_action_labels();
+            update_readiness();
+        }
         bool every_direction_capture_allowed = true;
         bool unrelated_targets_unchanged = true;
         bool unrelated_targets_have_no_correction_prompt = true;
@@ -1535,6 +1725,66 @@ public:
             terrain_ = std::move(terrain_before_numeric_rejection);
             terrain_map_ = terrain_map_before_numeric_rejection;
             accept_manual_target(target_before_numeric_rejection);
+        }
+        {
+            const auto saved_target = *target_;
+            auto saved_terrain = std::move(terrain_);
+            const auto saved_terrain_map = terrain_map_;
+            const auto saved_preferred_arc = settings_.ghost_reticle.preferred_arc;
+            terrain_map_.reset();
+            settings_.ghost_reticle.preferred_arc = wardogs::Arc::high;
+            reset_continuous_calibration();
+            const auto polar = [this](double range, double bearing) {
+                const auto angle = bearing * std::numbers::pi / 180.0;
+                return wardogs::Point{base_.x + std::sin(angle) * range / 100.0,
+                                      base_.y + std::cos(angle) * range / 100.0};
+            };
+            const std::array training_targets{polar(1800, 350), polar(2000, 0), polar(2200, 10)};
+            const auto fresh_target = polar(2100, 5);
+            const auto raw = wardogs::corrected_solution(base_, fresh_target,
+                {wardogs::identity_rotation(), 0.0}, wardogs::Arc::high);
+            const auto train = [&] {
+                bool recorded = true;
+                for (auto point : training_targets) {
+                    accept_manual_target(point);
+                    OcrMessage context; capture_impact_context(context);
+                    recorded = recorded && record_continuous_impact(
+                        impact_for(*context.impact_firing, 2.0, 0.0), QStringLiteral("test"),
+                        *context.impact_firing);
+                }
+                accept_manual_target(fresh_target);
+                return recorded;
+            };
+            check("SPH2_production_main_predicts_a_new_target_before_its_first_AltI",
+                train() && observation_count() == 3 && high_result_ &&
+                continuous_calibration_->assess(fresh_target, wardogs::Arc::high).bearing_prediction_applied &&
+                std::abs(std::remainder(high_result_->bearing_deg - raw.bearing_deg, 360.0) - 2.0) < 0.1 &&
+                high_result_->mil == raw.mil && fire_control_compact_->text().contains(
+                    wardogs::i18n::text(QStringLiteral("Азимут: прогноз по %1 целям · предварительно")).arg(3)));
+            check("SPH2_predicted_command_is_explicit_in_main_and_mini_card",
+                vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("Прогноз азимута: "))) &&
+                pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedContextCaption"))->text().contains(
+                    wardogs::i18n::text(QStringLiteral(" · прогноз азимута"))));
+            const auto saved_history = history_;
+            toggle_application_pause();
+            check("SPH2_pause_withdraws_transfer_and_rebuilds_visible_command_preserving_history",
+                application_paused_ && observation_count() == 3 && history_ == saved_history &&
+                target_ == fresh_target && high_result_->bearing_deg == raw.bearing_deg &&
+                !continuous_calibration_->assess(fresh_target, wardogs::Arc::high).bearing_prediction_applied);
+            toggle_application_pause();
+            check("SPH2_resume_does_not_resurrect_pre_pause_bearing_prediction",
+                !application_paused_ && high_result_->bearing_deg == raw.bearing_deg);
+            check("SPH2_prediction_can_relearn_from_fresh_independent_targets", train() &&
+                continuous_calibration_->assess(fresh_target, wardogs::Arc::high).bearing_prediction_applied);
+            toggle_ghost_arc(); toggle_ghost_arc();
+            check("SPH2_arc_change_withdraws_transfer_and_rebuilds_cached_values",
+                observation_count() == 6 && high_result_->bearing_deg == raw.bearing_deg &&
+                !continuous_calibration_->assess(fresh_target, wardogs::Arc::high).bearing_prediction_applied);
+            reset_continuous_calibration();
+            terrain_ = std::move(saved_terrain);
+            terrain_map_ = saved_terrain_map;
+            settings_.ghost_reticle.preferred_arc = saved_preferred_arc;
+            accept_manual_target(saved_target);
         }
         target_input_->setText(QStringLiteral("80 81")); manual_target();
         start_ocr(OcrAction::calibration_impact);
@@ -2438,11 +2688,12 @@ protected:
         QMainWindow::resizeEvent(event);
         if (tools_layout_) {
             const bool narrow = width() < 780;
-            for (auto* button : {mode_button_, game_button_, pin_button_, ghost_button_}) tools_layout_->removeWidget(button);
+            for (auto* button : {mode_button_, game_button_, pin_button_, ghost_button_, pause_button_}) tools_layout_->removeWidget(button);
             tools_layout_->addWidget(mode_button_, 0, 0);
             tools_layout_->addWidget(game_button_, 0, 1);
             tools_layout_->addWidget(pin_button_, narrow ? 1 : 0, narrow ? 0 : 2);
             tools_layout_->addWidget(ghost_button_, narrow ? 1 : 0, narrow ? 1 : 3);
+            tools_layout_->addWidget(pause_button_, narrow ? 1 : 0, narrow ? 2 : 4);
         }
         if (workspace_layout_) {
             const bool compact = width() < 900;
@@ -2527,6 +2778,11 @@ private:
     std::unique_ptr<wardogs::WindowsOcr> windows_;
     wardogs::GlobalHotkeyListener hotkey_listener_;
     wardogs::GlobalMouseListener mouse_listener_;
+    std::atomic_uint64_t hotkey_listener_epoch_{};
+    std::atomic_uint64_t mouse_listener_epoch_{};
+    wardogs::Hotkey pause_hotkey_{wardogs::parse_hotkey(L"Ctrl+Alt+P")};
+    bool application_paused_{};
+    std::uint64_t paused_capture_floor_{};
     QTimer* mouse_timer_{};
     QSystemTrayIcon* tray_{};
     std::uint64_t pending_mouse_epoch_{};
@@ -2552,7 +2808,7 @@ private:
     DirectionPlot* direction_plot_{};
     QComboBox* history_selector_{};
     QComboBox* language_selector_{};
-    QPushButton *game_button_{}, *copy_button_{};
+    QPushButton *game_button_{}, *copy_button_{}, *pause_button_{};
     QToolButton* calibration_toggle_{};
     QLabel* readiness_{};
     QLabel *quick_guide_{}, *quick_state_{};
@@ -2577,7 +2833,12 @@ private:
         *vehicle_result_group_{};
     VehicleSolutionWidget *low_solution_{}, *high_solution_{};
 
-    bool require_game_integration() {
+    bool require_game_integration(bool allow_paused = false) {
+        if (application_paused_ && !allow_paused) {
+            set_status(wardogs::i18n::text(QStringLiteral("Захват на паузе · возобновить: %1"))
+                .arg(qtext(pause_hotkey_.display)));
+            return false;
+        }
         if (diagnostic_ || settings_.game_integration_enabled) return true;
         set_status(wardogs::i18n::text(QStringLiteral("Включите захват: Настройки → Основные → отключите «Только ручной ввод». Разрешение BULKHEAD не подтверждено.")), true);
         return false;
@@ -2744,6 +3005,7 @@ private:
                            !base_capture_pending_ && !ocr_hold_;
         fire_control_reset_->setEnabled(has_calibration_data());
         bool correction_provisional = false;
+        std::optional<wardogs::ObservationAssessment> prediction_assessment;
         QString text;
         if (!ready) text = wardogs::i18n::text(QStringLiteral("Подтвердите карту, задайте орудие и цель. Пристрелка появится после первого наблюдения попадания."));
         else {
@@ -2765,6 +3027,7 @@ private:
             }
             if (continuous_calibration_) {
                 const auto assessment = continuous_calibration_->assess(*target_, *arc, target_height_delta(*target_));
+                prediction_assessment = assessment;
                 correction_provisional = assessment.local_observation_count > 0 && assessment.provisional;
                 text += wardogs::i18n::text(QStringLiteral("\nРядом с целью: %1 наблюдений · учтено: %2."))
                     .arg(assessment.local_observation_count).arg(assessment.accepted_observation_count);
@@ -2775,6 +3038,10 @@ private:
                 if (assessment.scatter_available)
                     text += wardogs::i18n::text(QStringLiteral("\nРазброс оценок поправки ≈%1 м; это не вероятность попадания."))
                         .arg(assessment.empirical_scatter_m, 0, 'f', 1);
+                if (assessment.bearing_prediction_applied)
+                    text += wardogs::i18n::text(QStringLiteral("\nАзимут заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка боковой модели ≈%2 м; это не радиус попадания. MIL остаётся локальным. После поворота орудия заново задайте его позицию."))
+                        .arg(assessment.bearing_prediction_target_count)
+                        .arg(assessment.bearing_prediction_residual_m, 0, 'f', 1);
             }
             text += wardogs::i18n::text(QStringLiteral("\nПравее / левее — градусы азимута. Дальше / ближе — MIL: настильная + / −, навесная − / +."));
             if (has_calibration_data()) {
@@ -2786,6 +3053,9 @@ private:
         fire_control_summary_->setText(text);
         if (fire_control_compact_) {
             QString compact = wardogs::i18n::text(QStringLiteral("Поправка необязательна · попадание: %1")).arg(qtext(settings_.impact_hotkey));
+            if (prediction_assessment && prediction_assessment->bearing_prediction_applied)
+                compact = wardogs::i18n::text(QStringLiteral("Азимут: прогноз по %1 целям · предварительно"))
+                    .arg(prediction_assessment->bearing_prediction_target_count);
             if (ready && last_impact_feedback_ && last_impact_feedback_->target == *target_ && last_impact_feedback_->arc == *arc) {
                 const auto& feedback = *last_impact_feedback_;
                 compact = wardogs::i18n::text(QStringLiteral("Промах %1 м · поправка уже учтена")).arg(feedback.miss_m, 0, 'f', 0);
@@ -2833,6 +3103,7 @@ private:
     }
 
     void update_readiness() {
+        update_pause_controls();
         update_game_button();
         update_fire_control();
         if (quick_state_)
@@ -2856,7 +3127,8 @@ private:
         if (quick_state_ && !recent_history_error_.isEmpty()) quick_state_->setText(quick_state_->text() + QStringLiteral("\n") +
             wardogs::i18n::text(QStringLiteral("История не сохранена: ")) + wardogs::i18n::text(recent_history_error_));
         if (!readiness_) return;
-        const auto capture = !settings_.game_integration_enabled ? wardogs::i18n::text(QStringLiteral("○ Захват выключен"))
+        const auto capture = application_paused_ ? wardogs::i18n::text(QStringLiteral("Ⅱ Захват на паузе"))
+            : !settings_.game_integration_enabled ? wardogs::i18n::text(QStringLiteral("○ Захват выключен"))
             : settings_.middle_mouse_enabled ? wardogs::i18n::text(QStringLiteral("✓ %1: чат · средняя кнопка: карта")).arg(qtext(settings_.base_hotkey))
                                              : wardogs::i18n::text(QStringLiteral("✓ Орудие: автопоиск в чате"));
         const bool guidance_ready = map_confirmed_ && base_set_ && !base_capture_pending_ && !ocr_hold_ &&
@@ -2875,7 +3147,9 @@ private:
         }
         if (next_step_) {
             QString next;
-            if (terrain_loading_) next = wardogs::i18n::text(QStringLiteral("Проверяю карту… Окно остаётся доступным."));
+            if (application_paused_) next = wardogs::i18n::text(QStringLiteral("Захват на паузе · возобновить: %1"))
+                .arg(qtext(pause_hotkey_.display));
+            else if (terrain_loading_) next = wardogs::i18n::text(QStringLiteral("Проверяю карту… Окно остаётся доступным."));
             else if (!map_confirmed_) next = wardogs::i18n::text(QStringLiteral("Выберите карту текущего матча и подтвердите её."));
             else if (busy_) next = wardogs::i18n::text(QStringLiteral("Считываю координаты…"));
             else if (ocr_hold_ || pending_ocr_) next = wardogs::i18n::text(QStringLiteral("Проверьте распознанные координаты или повторите захват."));
@@ -3036,7 +3310,7 @@ private:
         mouse_timer_ = new QTimer(this);
         mouse_timer_->setSingleShot(true);
         connect(mouse_timer_, &QTimer::timeout, this, [this] {
-            if (!closing_ && settings_.game_integration_enabled &&
+            if (!closing_ && !application_paused_ && settings_.game_integration_enabled &&
                 (settings_.middle_mouse_enabled || map_retry_action_ == OcrAction::calibration_impact) &&
                 base_set_ && !base_capture_pending_ && !selecting_ && map_retry_event_ &&
                 !QApplication::activeModalWidget() &&
@@ -3075,12 +3349,14 @@ private:
     void register_mouse_trigger() { register_mouse_trigger(settings_); }
 
     void register_mouse_trigger(const wardogs::AppSettings& settings) {
+        const auto listener_epoch = ++mouse_listener_epoch_;
         if (diagnostic_) return;
         mouse_listener_.stop();
-        if (!settings.game_integration_enabled || !settings.middle_mouse_enabled) return;
+        if (application_paused_ || !settings.game_integration_enabled || !settings.middle_mouse_enabled) return;
         const QPointer<MainWindow> self(this);
-        mouse_listener_.start([self](wardogs::MiddleMouseEvent event) {
-            if (self) QMetaObject::invokeMethod(self, [self, event] {
+        mouse_listener_.start([self, listener_epoch](wardogs::MiddleMouseEvent event) {
+            if (self) QMetaObject::invokeMethod(self, [self, event, listener_epoch] {
+                if (!self || self->application_paused_ || listener_epoch != self->mouse_listener_epoch_) return;
                 if (!self || self->closing_ || !wardogs_is_foreground() ||
                     reinterpret_cast<HWND>(event.foreground_window) != GetForegroundWindow()) return;
                 if (!self->settings_.game_integration_enabled || !self->settings_.middle_mouse_enabled) return;
@@ -3368,6 +3644,12 @@ private:
         tools->addWidget(game_button_, 0, 1);
         tools->addWidget(pin_button_, 0, 2);
         tools->addWidget(ghost_button_, 0, 3);
+        pause_button_ = new QPushButton;
+        pause_button_->setObjectName(QStringLiteral("pauseCaptureButton"));
+        pause_button_->setMinimumHeight(30);
+        tools->addWidget(pause_button_, 0, 4);
+        connect(pause_button_, &QPushButton::clicked, this, [this] { toggle_application_pause(); });
+        update_pause_controls();
         tools->setColumnStretch(0, 1);
         tools->setColumnStretch(1, 1);
         root->addLayout(tools);
@@ -3885,6 +4167,8 @@ private:
             continuous_impact_->clear();
             if (button == continuous_arc_) {
                 settings_.ghost_reticle.preferred_arc = arc_from_button(button);
+                if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+                if (base_set_ && target_ && !ocr_hold_) show_result(*target_);
                 sync_ghost_solution();
                 sync_pinned_result();
             }
@@ -3922,6 +4206,7 @@ private:
 
     void toggle_mode() {
         advance_input_epoch();
+        if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
         vehicle_mode_ = !vehicle_mode_;
         wardogs::log_info(std::string("weapon.selected weapon=") + (vehicle_mode_ ? "sph2" : "l81"));
         update_mode_button();
@@ -4285,7 +4570,7 @@ private:
     void update_calibration_summary() {
         if (!calibration_summary_) return;
         calibration_summary_->setText(has_calibration_data()
-            ? wardogs::i18n::text(QStringLiteral("Учтено попаданий: %1/%2. Поправка действует только рядом с записанной целью и для той же траектории."))
+            ? wardogs::i18n::text(QStringLiteral("Учтено попаданий: %1/%2. MIL уточняется рядом с целью; согласованный азимут может заранее уточняться по разным целям этой стоянки и траектории."))
                 .arg(continuous_calibration_->sample_count()).arg(wardogs::maximum_continuous_observations)
             : wardogs::i18n::text(QStringLiteral("Можно стрелять сразу. Поправка необязательна: после выстрела по показанным азимуту и MIL наведите курсор на фактическое попадание и нажмите %1 до смены цели или траектории."))
                 .arg(qtext(settings_.impact_hotkey)));
@@ -4435,7 +4720,7 @@ private:
             auto candidate = continuous_calibration_;
             if (!candidate)
                 candidate.emplace(base_, wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0},
-                                  wardogs::ContinuousCorrectionMode::local_only);
+                                  wardogs::ContinuousCorrectionMode::local_only, true);
             const auto impact_height_delta = target_height_delta(impact);
             observed_impact_height = impact_height_delta;
             const auto assessment = candidate->add_landing(firing, impact, impact_height_delta);
@@ -4556,7 +4841,7 @@ private:
     }
 
     void enter_pinned_mode() {
-        if (!require_game_integration()) return;
+        if (!require_game_integration(true)) return;
         wardogs::log_info("window.enter_pinned_mode");
         if (!pinned_window_) {
             pinned_window_ = std::make_unique<PinnedResultWindow>(
@@ -4829,6 +5114,7 @@ private:
         high_result_.reset();
         QStringList warnings;
         QStringList corrected_arcs;
+        QStringList predicted_arcs;
         const auto raw_distance = wardogs::i18n::text(qtext(wardogs::format_distance_meters(result.distance)));
         const auto raw_bearing = qtext(wardogs::format_bearing(result.angle));
         for (const auto [arc, name, card] : std::array{
@@ -4861,6 +5147,15 @@ private:
                        << " table_range_m=" << displayed.table_distance_m
                        << " computed_bearing=" << solution.bearing_deg << " computed_mil=" << solution.mil
                        << " target_height_delta_m=" << height_delta << " table_profile=sph2_retained_v1";
+                if (continuous_calibration_) {
+                    const auto assessment = continuous_calibration_->assess(result.target, arc, height_delta);
+                    if (assessment.bearing_prediction_applied) predicted_arcs.push_back(name.toLower());
+                    issued << " bearing_prediction_applied=" << assessment.bearing_prediction_applied
+                           << " bearing_prediction_targets=" << assessment.bearing_prediction_target_count
+                           << " bearing_prediction_offset_deg=" << assessment.bearing_prediction_offset_deg
+                           << " bearing_prediction_validation_rms_m=" << assessment.bearing_prediction_residual_m
+                           << " correction_provisional=" << assessment.provisional;
+                }
                 wardogs::log_info(issued.str());
                 if (continuous_calibration_) {
                     const auto baseline = wardogs::corrected_solution(
@@ -4919,7 +5214,9 @@ private:
             }
             return true;
         }
-        vehicle_note_->setText((corrected_arcs.isEmpty() ? wardogs::i18n::text(QStringLiteral("Табличный расчёт"))
+        vehicle_note_->setText((!predicted_arcs.isEmpty()
+            ? wardogs::i18n::text(QStringLiteral("Прогноз азимута: ")) + predicted_arcs.join(QStringLiteral(", "))
+            : corrected_arcs.isEmpty() ? wardogs::i18n::text(QStringLiteral("Табличный расчёт"))
             : wardogs::i18n::text(QStringLiteral("Локальная поправка: ")) + corrected_arcs.join(QStringLiteral(", "))) +
             (terrain_map_ ? wardogs::i18n::text(QStringLiteral(" · %1 · перепад %2 м"))
                 .arg(wardogs::i18n::text(qtext(terrain_map_->spec.display_name))).arg(height_delta, 0, 'f', 1)
@@ -4983,6 +5280,9 @@ private:
                 const auto [azimuth, mil] = active_aim_offsets_[*arc == wardogs::Arc::low ? 0U : 1U];
                 if (azimuth != 0.0 || mil != 0.0)
                     caption += wardogs::i18n::text(QStringLiteral(" · поправка учтена"));
+                if (continuous_calibration_ && continuous_calibration_->assess(
+                        *target_, *arc, target_height_delta(*target_)).bearing_prediction_applied)
+                    caption += wardogs::i18n::text(QStringLiteral(" · прогноз азимута"));
             }
             if (vehicle_note_) details.append(vehicle_note_->text());
             if (terrain_assistance_) details.append(terrain_assistance_->text());
@@ -4993,7 +5293,10 @@ private:
         details.removeAll(QString{});
         pinned_window_->set_context_caption(caption, details.join(QStringLiteral("\n")));
         QString workflow = status_->text();
-        if (ready && !failure_state_ && !busy_) {
+        if (application_paused_) {
+            workflow = wardogs::i18n::text(QStringLiteral("Захват на паузе · возобновить: %1"))
+                .arg(qtext(pause_hotkey_.display));
+        } else if (ready && !failure_state_ && !busy_) {
             workflow = wardogs::i18n::text(QStringLiteral("Цель: ")) + qtext(wardogs::format_point(*target_));
             if (vehicle_mode_ && last_impact_feedback_ && last_impact_feedback_->target == *target_ &&
                 last_impact_feedback_->arc == *arc && fire_control_compact_)
@@ -5020,7 +5323,7 @@ private:
             ghost_button_->style()->unpolish(ghost_button_);
             ghost_button_->style()->polish(ghost_button_);
         }
-        if (ghost_window_) ghost_window_->set_overlay_enabled(enabled);
+        if (ghost_window_) ghost_window_->set_overlay_enabled(enabled && !application_paused_);
         if (pinned_window_) pinned_window_->set_ghost_enabled(enabled);
         sync_ghost_solution();
     }
@@ -5051,6 +5354,8 @@ private:
         advance_input_epoch();
         ++calibration_epoch_;
         continuous_impact_->clear();
+        if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+        if (base_set_ && target_ && !ocr_hold_) show_result(*target_);
         try { if (!diagnostic_) wardogs::save_settings(settings_); }
                 catch (const std::exception& e) { wardogs::log_warning("settings.save_failed error=" + std::string(e.what())); }
         sync_ghost_solution();
@@ -5073,6 +5378,11 @@ private:
     }
 
     void sync_ghost_solution() {
+        if (application_paused_) {
+            if (ghost_window_) ghost_window_->hide();
+            update_readiness();
+            return;
+        }
         const auto arc = effective_vehicle_arc();
         update_readiness();
         low_solution_->set_selected(vehicle_mode_ && arc == wardogs::Arc::low);
@@ -5219,6 +5529,7 @@ private:
             [this, resume_action, resume_context = std::move(resume_context)]
             (std::optional<wardogs::CaptureRegion> region, QString error) mutable {
                 restore_after_selection();
+                if (application_paused_) return;
                 if (!error.isEmpty()) { set_status(error, true); return; }
                 if (!region) { set_status(wardogs::i18n::text(QStringLiteral("Выбор области отменён"))); return; }
                 if (resume_context.impact_firing && !impact_snapshot_matches(resume_context)) {
@@ -5262,6 +5573,7 @@ private:
         hide_for_selection();
         const bool started = selector_.begin(
             [this](std::optional<wardogs::CaptureRegion> region, QString error) {
+                if (application_paused_) { restore_after_selection(); return; }
                 if (!error.isEmpty()) {
                     restore_after_selection();
                     set_status(error, true);
@@ -5616,6 +5928,7 @@ private:
 
     void launch_ocr_worker(wardogs::Image image, OcrMessage context,
                            std::optional<wardogs::MapOcrSearchLayout> map_layout = std::nullopt) {
+        if (application_paused_) { busy_ = false; return; }
         const auto action = context.action;
         if (worker_.joinable()) worker_.join();
         ocr_hold_ = true;
@@ -5734,6 +6047,12 @@ private:
     }
 
     void finish_ocr(OcrMessage message) {
+        // A completed callback may already be queued when pause requests a
+        // stop. It must not clear a newer worker's busy flag after resuming.
+        if (application_paused_ || message.input_epoch < paused_capture_floor_) {
+            wardogs::log_info("ocr.paused_result_discarded");
+            return;
+        }
         busy_ = false;
         if (closing_) return;
         if (queued_map_job_ && queued_map_job_->context.input_epoch == input_epoch_) {
@@ -5976,7 +6295,7 @@ private:
                     settings_.ghost_reticle.bearing_compensation_deg);
                 ghost_window_->set_width(settings_.ghost_reticle.width);
                 sync_ghost_monitor();
-                if (adjust_ghost && settings_.game_integration_enabled) ghost_window_->begin_adjustment();
+                if (adjust_ghost && settings_.game_integration_enabled && !application_paused_) ghost_window_->begin_adjustment();
             }
             if (pinned_window_) {
                 pinned_window_->configure_unlock_hotkey(settings_.pinned_card.unlock_hotkey);
@@ -6006,7 +6325,100 @@ private:
     }
 
     void unregister_hotkeys() {
+        ++hotkey_listener_epoch_;
         hotkey_listener_.stop();
+    }
+
+    void update_pause_controls() {
+        if (pause_button_) {
+            pause_button_->setText(wardogs::i18n::text(application_paused_
+                ? QStringLiteral("Возобновить") : QStringLiteral("Пауза")));
+            pause_button_->setToolTip(wardogs::i18n::text(application_paused_
+                ? QStringLiteral("Возобновить захват · %1")
+                : QStringLiteral("Пауза захвата · %1")) .arg(qtext(pause_hotkey_.display)));
+            pause_button_->setAccessibleName(pause_button_->toolTip());
+            if (pause_button_->property("highlighted").toBool() != application_paused_) {
+                pause_button_->setProperty("highlighted", application_paused_);
+                pause_button_->style()->unpolish(pause_button_);
+                pause_button_->style()->polish(pause_button_);
+            }
+        }
+        if (pinned_window_)
+            pinned_window_->configure_pause_control(application_paused_, pause_hotkey_.display,
+                [this] { toggle_application_pause(); });
+        for (auto* button : {region_button_, base_button_, target_button_, quick_target_button_, calibration_ocr_})
+            if (button) button->setEnabled(!application_paused_ && (diagnostic_ || settings_.game_integration_enabled));
+    }
+
+    void toggle_application_pause() {
+        if (closing_) return;
+        const bool requested_pause = !application_paused_;
+        if (requested_pause) {
+            application_paused_ = true;
+            if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+            enter_game_after_terrain_ = false;
+            // Release capture chords before attempting any new registration:
+            // even a validation/OS failure must leave them free for the game.
+            unregister_hotkeys();
+            ++mouse_listener_epoch_;
+            mouse_listener_.stop();
+            advance_input_epoch();
+            paused_capture_floor_ = input_epoch_;
+            if (worker_.joinable()) worker_.request_stop();
+            busy_ = false;
+            if (selecting_) selector_.cancel();
+            base_capture_pending_ = false;
+            ocr_hold_ = false;
+            if (ghost_window_) {
+                ghost_window_->cancel_adjustment();
+                ghost_window_->set_overlay_enabled(false);
+            }
+            // The previous accepted target/model survives cancellation of an
+            // incomplete capture. Rebuild its visible command if OCR hid it.
+            if (base_set_ && target_) show_result(*target_);
+        } else {
+            application_paused_ = false;
+        }
+        try {
+            const auto changes = register_hotkeys(settings_);
+            update_action_labels();
+            if (pinned_window_)
+                pinned_window_->configure_unlock_hotkey(settings_.pinned_card.unlock_hotkey);
+            register_mouse_trigger();
+            if (!changes.isEmpty()) wardogs::log_info("pause.hotkeys_changed changes=" + utf8(changes));
+        } catch (const std::exception& error) {
+            // Failure to register the active set cannot leave captures half
+            // enabled. Pause stays safe; controls remain usable to retry.
+            application_paused_ = true;
+            wardogs::log_error("pause.hotkeys_failed error=" + std::string(error.what()));
+            ++mouse_listener_epoch_;
+            mouse_listener_.stop();
+            try { register_hotkeys(settings_, false); }
+            catch (const std::exception& recovery) {
+                wardogs::log_error("pause.resume_shortcuts_unavailable error=" + std::string(recovery.what()));
+                try { register_resume_only_hotkey(); }
+                catch (const std::exception& resume_error) {
+                    wardogs::log_error("pause.resume_only_failed error=" + std::string(resume_error.what()));
+                }
+            }
+            update_readiness();
+            sync_pinned_status();
+            set_status(hotkey_listener_.active()
+                ? wardogs::i18n::text(QStringLiteral("Захват на паузе · возобновить: %1"))
+                    .arg(qtext(pause_hotkey_.display)) + QStringLiteral("\n") + error_text(error)
+                : wardogs::i18n::text(QStringLiteral("Захват на паузе. Горячие клавиши недоступны: ")) + error_text(error), true);
+            return;
+        }
+        if (!application_paused_ && ghost_window_) {
+            ghost_window_->set_overlay_enabled(ghost_enabled_);
+            sync_ghost_solution();
+        }
+        wardogs::log_info(std::string("application.capture_pause paused=") + (application_paused_ ? "1" : "0"));
+        update_readiness();
+        sync_pinned_result();
+        set_status(wardogs::i18n::text(application_paused_
+            ? QStringLiteral("Захват на паузе · возобновить: %1")
+            : QStringLiteral("Захват возобновлён · пауза: %1")) .arg(qtext(pause_hotkey_.display)));
     }
 
     void unlock_pinned_window(const char* source) {
@@ -6048,15 +6460,63 @@ private:
         if (!notice.isEmpty()) set_status(notice, notice_error);
     }
 
+    void register_resume_only_hotkey() {
+        const std::array configured{
+            wardogs::parse_hotkey(settings_.region_hotkey),
+            wardogs::parse_hotkey(settings_.base_hotkey),
+            wardogs::parse_hotkey(settings_.target_hotkey),
+            wardogs::parse_hotkey(settings_.quick_target_hotkey),
+            wardogs::parse_hotkey(settings_.impact_hotkey),
+            wardogs::parse_hotkey(settings_.ghost_arc_hotkey),
+            wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey),
+            wardogs::parse_hotkey(settings_.exit_game_mode_hotkey)};
+        wardogs::validate_unique_hotkeys(configured);
+        std::vector<wardogs::Hotkey> attempted(configured.begin(), configured.end());
+        const QPointer<MainWindow> self(this);
+        // Each retry here follows a registered but incompatible modifier
+        // fallback, never an unrelated OS/resource failure. Every chosen key
+        // must remain distinct from the complete, currently released set.
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            const auto candidate = available_pause_hotkey(attempted, pause_hotkey_);
+            attempted.push_back(candidate);
+            const auto listener_epoch = ++hotkey_listener_epoch_;
+            const auto callback = [self, listener_epoch](std::size_t index) {
+                if (!self || index != 0) return;
+                QMetaObject::invokeMethod(self, [self, listener_epoch] {
+                    if (self) self->dispatch_registered_hotkey(8, listener_epoch);
+                }, Qt::QueuedConnection);
+            };
+            const std::array values{candidate};
+            const auto actual = hotkey_listener_.start_with_conflict_fallback(values, callback);
+            if (actual.size() != 1) {
+                unregister_hotkeys();
+                throw std::invalid_argument("Windows вернула неполный набор горячих клавиш");
+            }
+            try {
+                auto complete = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+                complete.push_back(actual.front());
+                try { wardogs::validate_unique_hotkeys(complete); }
+                catch (const std::invalid_argument&) {
+                    unregister_hotkeys();
+                    wardogs::log_warning("pause.resume_only_candidate_conflicts key=" +
+                        one_line_utf8(qtext(actual.front().display)));
+                    continue;
+                }
+                pause_hotkey_ = actual.front();
+                wardogs::log_info("pause.resume_only_registered key=" +
+                    one_line_utf8(qtext(pause_hotkey_.display)));
+                return;
+            } catch (...) {
+                unregister_hotkeys();
+                throw;
+            }
+        }
+        throw std::invalid_argument("Нет свободного сочетания для паузы захвата");
+    }
+
     QString register_hotkeys(wardogs::AppSettings& settings, bool recover_conflicts = true) {
         if (diagnostic_) return {};
-        if (!settings.game_integration_enabled) {
-            unregister_hotkeys();
-            mouse_listener_.stop();
-            wardogs::log_info("game_integration.disabled hotkeys=0 mouse=0");
-            return {};
-        }
-        const std::array values{
+        auto configured = std::array{
             wardogs::parse_hotkey(settings.region_hotkey),
             wardogs::parse_hotkey(settings.base_hotkey),
             wardogs::parse_hotkey(settings.target_hotkey),
@@ -6065,12 +6525,23 @@ private:
             wardogs::parse_hotkey(settings.ghost_arc_hotkey),
             wardogs::parse_hotkey(settings.pinned_card.unlock_hotkey),
             wardogs::parse_hotkey(settings.exit_game_mode_hotkey)};
+        wardogs::validate_unique_hotkeys(configured);
+        const auto pause_key = available_pause_hotkey(configured, pause_hotkey_);
+        std::vector<wardogs::Hotkey> values;
+        std::vector<std::size_t> actions;
+        for (std::size_t index = 0; index < configured.size(); ++index) {
+            if (!settings.game_integration_enabled || (application_paused_ && index < 6)) continue;
+            values.push_back(configured[index]);
+            actions.push_back(index);
+        }
+        values.push_back(pause_key);
+        actions.push_back(8);
         wardogs::validate_unique_hotkeys(values);
         {
             std::ostringstream diagnostic;
             diagnostic << "hotkey.configure";
             for (std::size_t index = 0; index < values.size(); ++index) {
-                diagnostic << " key" << index << '='
+                diagnostic << " key" << actions[index] << '='
                            << one_line_utf8(qtext(values[index].display))
                            << "(vk=0x" << std::hex << std::uppercase
                            << values[index].virtual_key << ",mod=0x"
@@ -6079,21 +6550,35 @@ private:
             wardogs::log_info(diagnostic.str());
         }
         const QPointer<MainWindow> self(this);
-        const auto callback = [self](std::size_t index) {
+        const auto listener_epoch = ++hotkey_listener_epoch_;
+        const auto callback = [self, actions, listener_epoch](std::size_t index) {
             if (!self) return;
-            QMetaObject::invokeMethod(self, [self, index] {
-                if (!self) return;
+            QMetaObject::invokeMethod(self, [self, actions, index, listener_epoch] {
+                if (!self || listener_epoch != self->hotkey_listener_epoch_ || index >= actions.size()) return;
                 auto* const window = self.data();
-                window->handle_hotkey(index);
+                window->dispatch_registered_hotkey(actions[index], listener_epoch);
             }, Qt::QueuedConnection);
         };
         if (!recover_conflicts) {
             hotkey_listener_.start(values, callback);
+            pause_hotkey_ = pause_key;
             return {};
         }
         const auto actual = hotkey_listener_.start_with_conflict_fallback(values, callback);
         try {
-            const auto changes = apply_registered_hotkeys(settings, actual);
+            if (actual.size() != actions.size()) throw std::invalid_argument("Windows вернула неполный набор горячих клавиш");
+            auto next_pause_key = pause_key;
+            for (std::size_t index = 0; index < actions.size(); ++index) {
+                if (actions[index] < configured.size()) configured[actions[index]] = actual[index];
+                else next_pause_key = actual[index];
+            }
+            // A paused registration must not choose a fallback that steals a
+            // currently released capture key when the app later resumes.
+            auto all_effective = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+            all_effective.push_back(next_pause_key);
+            wardogs::validate_unique_hotkeys(all_effective);
+            const auto changes = apply_registered_hotkeys(settings, configured);
+            pause_hotkey_ = std::move(next_pause_key);
             if (!changes.isEmpty())
                 wardogs::log_info("hotkey.conflicts_resolved changes=" + utf8(changes));
             return changes;
@@ -6102,7 +6587,10 @@ private:
     }
 
     void handle_hotkey(std::size_t index) {
+                if (closing_) return;
+                if (index == 8) { toggle_application_pause(); return; }
                 if (closing_ || !settings_.game_integration_enabled || QApplication::activeModalWidget()) return;
+                if (application_paused_ && index < 6) return;
                 if (index < 6 && !isActiveWindow() && !wardogs_is_foreground()) {
                     wardogs::log_info("hotkey.ignored foreground_not_game_or_own");
                     return;
@@ -6121,6 +6609,10 @@ private:
                 else if (index == 5) toggle_ghost_arc();
                 else if (index == 6) unlock_pinned_window("hotkey");
                 else if (index == 7) exit_game_mode();
+    }
+
+    void dispatch_registered_hotkey(std::size_t action, std::uint64_t listener_epoch) {
+        if (listener_epoch == hotkey_listener_epoch_) handle_hotkey(action);
     }
 };
 

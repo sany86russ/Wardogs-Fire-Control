@@ -2,9 +2,15 @@
 
 [Русский](SPH2-VALIDATION-RU.md) · [Ranging model](continuous-calibration.md)
 
-Version 2.12 learns from the command shown to the player: integer MIL and azimuth rounded to 0.1°. Cards, the ghost sight, clipboard and active planning command agree. Internal calculations retain full precision; the approximate sight-table range corresponds to commanded MIL. Displayed settings are not automatically treated as observed in-game settings.
+Since 2.12, impact learning uses the command shown to the player: integer MIL and azimuth rounded to 0.1°. Cards, the ghost sight, clipboard and active planning command agree. Internal calculations retain full precision; the approximate sight-table range corresponds to commanded MIL. Displayed settings are not automatically treated as observed in-game settings.
 
-The first valid impact applies the full local correction. From three effective nearby observations, a robust series centre suppresses isolated outliers independently for azimuth and MIL. No additional settings or mandatory shot sequence are introduced. Corrections fade to zero over 50 m and remain on their observed arc. Changing the map or firing position clears history. Turning the hull in place still requires a manual reset because the application does not observe its pose.
+The first valid impact applies the full local correction. From three effective nearby observations, a robust series centre suppresses isolated outliers independently for azimuth and MIL. Individual target corrections and MIL fade to zero over 50 m and remain on their observed arc.
+
+The main SPH-2 workflow also learns **a new target's bearing before its first Alt+I**. It needs at least three independent groups of previously ranged targets from the same firing position, arc and current session; repeated shots at one target do not create three groups. Each group contributes one median offset. With agreeing signs, the estimate shrinks when past targets disagree. Validation excludes every target group in turn and refits using only the remaining groups. Transfer is enabled only if median and RMS errors improve and the maximum validation error does not increase. The forecast remains provisional: an individual target can become worse.
+
+The new target must stay within the observed ranges, modelled physical elevations and short bearing sector; only the displayed command's 0.1° resolution is allowed at the sector edge. A measured local correction takes priority, with a smooth transition to the shared bearing; **MIL is not transferred between distant targets**. No imported or hardcoded measured offset is applied, and no new user settings are required.
+
+Predictions do not carry between maps, positions, arcs or sessions and are disabled after pause or reset. Transfer then needs fresh independent targets. Changing the map or firing position clears history. Turning the hull in place still requires a manual reset because the application does not observe its pose. The forecast is already included in displayed bearing and must not be added again. It establishes neither a 99% hit rate nor improvement of every shot.
 
 ## Why the tables are preserved
 

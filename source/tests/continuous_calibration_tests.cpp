@@ -1134,6 +1134,97 @@ int main() {
     check(local_bounded.sample_count() == 1,
           "clearing the local-only session frees capacity without requiring two new shots");
 
+    // New-target prediction learns only from past independent targets of a
+    // stationary gun. Repeated observations do not create extra target votes.
+    const auto polar_target = [&](double range, double bearing) {
+        const auto angle = bearing * std::numbers::pi / 180.0;
+        return Point{base.x + std::sin(angle) * range / 100.0,
+                     base.y + std::cos(angle) * range / 100.0};
+    };
+    for (auto arc : {Arc::low, Arc::high}) {
+        ContinuousCalibration predictive(base, baseline, ContinuousCorrectionMode::local_only, true);
+        const auto learn = [&](Point point, double offset) {
+            const auto firing = predictive.firing_snapshot(point, arc);
+            const auto direct = corrected_solution(base, point, baseline, arc);
+            const auto impact = impact_with_required_offset(base, point, arc, offset, 0.0,
+                std::remainder(firing.bearing_deg - direct.bearing_deg, 360.0));
+            predictive.add_landing(firing, impact);
+        };
+        const auto first = polar_target(1800, 350);
+        const auto second = polar_target(2000, 0);
+        const auto third = polar_target(2200, 10);
+        const auto fresh = polar_target(2100, 5);
+        const auto direct = corrected_solution(base, fresh, baseline, arc);
+        learn(first, 2.0);
+        for (int repeat = 0; repeat < 8; ++repeat) learn(first, 2.0);
+        learn(second, 2.0);
+        check(!predictive.assess(fresh, arc).bearing_prediction_applied,
+              "many repeated shots on two targets cannot enable a new-target prediction");
+        close(predictive.solution(fresh, arc).bearing_deg, direct.bearing_deg,
+              "insufficient independent targets retain raw first-shot bearing", 1e-9);
+        learn(third, 2.0);
+        const auto predicted = predictive.solution(fresh, arc);
+        const auto assessed = predictive.assess(fresh, arc);
+        close(predicted.bearing_deg, direct.bearing_deg + 2.0,
+              "three agreeing independent targets predict a fresh target before its first impact", 1e-8);
+        close(predicted.mil, direct.mil, "automatic new-target prediction never transfers MIL", 1e-8);
+        check(assessed.bearing_prediction_applied && assessed.bearing_prediction_target_count == 3 &&
+                  assessed.local_observation_count == 0 && assessed.provisional &&
+                  assessed.bearing_prediction_residual_m < 1e-7,
+              "predicted bearing explicitly reports independent evidence and remains provisional");
+        const auto near_first = polar_target(1800, 350.01);
+        check(!predictive.assess(first, arc).bearing_prediction_applied,
+              "full same-target local correction overrides the predictive prior");
+        check(predictive.assess(near_first, arc).bearing_prediction_applied &&
+                  predictive.assess(near_first, arc).provisional &&
+                  !predictive.assess(first, arc).provisional,
+              "a partial prior remains provisional even beside an established local series");
+        close(std::remainder(predictive.solution(near_first, arc).bearing_deg -
+                  corrected_solution(base, near_first, baseline, arc).bearing_deg, 360.0), 2.0,
+              "local and prior corrections blend without adding a constant bias twice", 1e-8);
+        check(!predictive.assess(polar_target(2300, 5), arc).bearing_prediction_applied &&
+                  !predictive.assess(polar_target(2100, 50), arc).bearing_prediction_applied &&
+                  !predictive.assess(fresh, arc, 200.0).bearing_prediction_applied,
+              "bearing prior cannot extrapolate range direction or physical elevation");
+        check(!predictive.assess(fresh, arc == Arc::low ? Arc::high : Arc::low).bearing_prediction_applied,
+              "learned bearing never transfers to another arc");
+        const auto count = predictive.sample_count();
+        const auto first_solution = predictive.solution(first, arc);
+        predictive.invalidate_bearing_prediction();
+        check(predictive.sample_count() == count &&
+                  !predictive.assess(fresh, arc).bearing_prediction_applied &&
+                  predictive.solution(first, arc).bearing_deg == first_solution.bearing_deg,
+              "pose invalidation removes transfer while preserving history and local corrections");
+        for (auto point : {first, second, third}) learn(point, 2.0);
+        check(predictive.assess(fresh, arc).bearing_prediction_applied,
+              "transfer needs three fresh independent targets after pose invalidation");
+        learn(fresh, -2.0);
+        check(!predictive.assess(polar_target(2050, 3), arc).bearing_prediction_applied,
+              "a contradicting new target withdraws the common bearing prior");
+        predictive.clear();
+        check(predictive.sample_count() == 0 && !predictive.assess(fresh, arc).bearing_prediction_applied,
+              "reset removes all predictive evidence");
+
+        ContinuousCalibration unequal(base, baseline, ContinuousCorrectionMode::local_only, true);
+        const std::array unequal_targets{first, second, third};
+        for (std::size_t index = 0; index < unequal_targets.size(); ++index) {
+            const auto point = unequal_targets[index];
+            unequal.add_landing(unequal.firing_snapshot(point, arc),
+                impact_with_required_offset(base, point, arc, 1.0 + index, 0.0));
+        }
+        const auto unequal_assessment = unequal.assess(fresh, arc);
+        close(unequal_assessment.bearing_prediction_offset_deg, 2.0 * 14.0 / 18.5,
+              "unequal target votes learn their data-driven shrink rather than a fixed multiplier", 1e-8);
+        const auto expected_validation = std::sqrt(
+            (std::pow((1.0 - 13.0 / 6.0) * 1800.0, 2) +
+             std::pow((2.0 - 10.0 / 9.0) * 2000.0, 2) +
+             std::pow((3.0 - 15.0 / 14.0) * 2200.0, 2)) / 3.0) * std::numbers::pi / 180.0;
+        check(unequal_assessment.bearing_prediction_applied,
+              "unequal agreeing offsets pass validation despite one individually worse fold");
+        close(unequal_assessment.bearing_prediction_residual_m, expected_validation,
+              "each validation fold refits shrink without using the held-out target label", 1e-7);
+    }
+
     if (failures) return 1;
     std::cout << "All continuous calibration tests passed\n";
 }

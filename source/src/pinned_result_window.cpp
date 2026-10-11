@@ -246,6 +246,28 @@ QIcon settings_icon() {
     return QIcon(QPixmap::fromImage(image));
 }
 
+QIcon pause_icon(bool paused) {
+    QImage image(24, 24, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QColor color(paused ? QStringLiteral("#f0b45d") : QStringLiteral("#c2cfdf"));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    if (paused) {
+        QPainterPath play;
+        play.moveTo(8, 5);
+        play.lineTo(19, 12);
+        play.lineTo(8, 19);
+        play.closeSubpath();
+        painter.drawPath(play);
+    } else {
+        painter.drawRoundedRect(QRectF(6, 5, 4, 14), 1, 1);
+        painter.drawRoundedRect(QRectF(14, 5, 4, 14), 1, 1);
+    }
+    return QIcon(QPixmap::fromImage(image));
+}
+
 }  // namespace
 
 PinnedResultWindow::PinnedResultWindow(std::function<void()> exit_callback,
@@ -326,6 +348,10 @@ PinnedResultWindow::PinnedResultWindow(
     };
     header_lock_button_ = header_button(QStringLiteral("pinnedHeaderLockButton"));
     header_lock_button_->setCheckable(true);
+    pause_button_ = header_button(QStringLiteral("pinnedPauseButton"));
+    connect(pause_button_, &QToolButton::clicked, this, [this] {
+        if (pause_toggle_) pause_toggle_();
+    });
     controls_button_ = header_button(QStringLiteral("pinnedControlsButton"));
     controls_button_->setIcon(settings_icon());
     header_return_button_ = header_button(QStringLiteral("pinnedHeaderReturnButton"));
@@ -641,10 +667,29 @@ void PinnedResultWindow::update_header_controls() {
         header_return_button_->setToolTip(wardogs::i18n::text(QStringLiteral("Вернуться в калькулятор")));
         header_return_button_->setAccessibleName(header_return_button_->toolTip());
     }
+    if (pause_button_) {
+        pause_button_->setIcon(pause_icon(application_paused_));
+        pause_button_->setToolTip(wardogs::i18n::text(application_paused_
+            ? QStringLiteral("Возобновить захват · %1")
+            : QStringLiteral("Пауза захвата · %1"))
+                .arg(QString::fromStdWString(pause_hotkey_)));
+        pause_button_->setAccessibleName(pause_button_->toolTip());
+        pause_button_->setProperty("paused", application_paused_);
+        pause_button_->setEnabled(static_cast<bool>(pause_toggle_));
+    }
     if (topmost_button_) {
         const QSignalBlocker blocker(topmost_button_);
         topmost_button_->setChecked(preferences_.always_on_top);
     }
+}
+
+void PinnedResultWindow::configure_pause_control(bool paused, const std::wstring& hotkey,
+                                               std::function<void()> toggle) {
+    const bool changed = application_paused_ != paused || pause_hotkey_ != hotkey;
+    application_paused_ = paused;
+    pause_hotkey_ = hotkey;
+    pause_toggle_ = std::move(toggle);
+    if (changed) update_header_controls();
 }
 
 void PinnedResultWindow::update_unlock_hotkey_control() {
