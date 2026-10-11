@@ -50,6 +50,56 @@ int main() {
         invalid.observe(wardogs::Point{std::numeric_limits<double>::infinity(), 1.0}, true);
     check(invalid.candidates().empty() && invalid.agreeing_frames() == 0,
           "non-finite observations cannot contribute evidence or review candidates");
+    const wardogs::MapCaptureAnchor anchor{{298, 276, 357, 291, 265, 202, 324, 221}, 4.0 / 3.0};
+    wardogs::MapCaptureFrameEvidence guarded;
+    MapCaptureConsensus frozen;
+    guarded.observe(anchor, true);
+    const auto first_frozen = frozen.observe(point, true);
+    check(wardogs::complete_map_capture(first_frozen, true, false, true,
+                                        guarded.frozen_pair_verified()) == MapCaptureDecision::review &&
+          frozen.frames() == 1 && frozen.agreeing_frames() == 1 && guarded.verified_frames() == 1,
+          "moving after one guarded frame permits review but no retry or automatic target");
+    check(wardogs::complete_map_capture(MapCaptureDecision::retry, true, false, true, false) ==
+              MapCaptureDecision::review && frozen.frames() == 1 && frozen.agreeing_frames() == 1,
+          "reviewing a saved candidate after a retry guard never adds another frame or vote");
+    guarded.observe(anchor, true);
+    const auto second_frozen = frozen.observe(point, true);
+    check(wardogs::complete_map_capture(second_frozen, true, false, true,
+                                        guarded.frozen_pair_verified()) == MapCaptureDecision::accept,
+          "two independent guarded agreeing frames with stable anchors survive later cursor movement");
+    check(wardogs::complete_map_capture(second_frozen, false, true, true, true) == MapCaptureDecision::failed &&
+          wardogs::complete_map_capture(second_frozen, false, false, true, true) == MapCaptureDecision::failed,
+          "changed game focus or client invalidates even a frozen agreeing pair");
+    check(wardogs::complete_map_capture(first_frozen, true, true, true, false) == MapCaptureDecision::retry &&
+          wardogs::complete_map_capture(first_frozen, true, false, false, false) == MapCaptureDecision::failed,
+          "fresh screenshots require unchanged cursor and unreadable moved sources fail");
+    wardogs::MapCaptureFrameEvidence unverified;
+    MapCaptureConsensus unverified_pair;
+    unverified.observe(anchor, false);
+    unverified_pair.observe(point, false);
+    unverified.observe(anchor, true);
+    const auto one_verified = unverified_pair.observe(point, true);
+    check(one_verified == MapCaptureDecision::retry && !unverified.frozen_pair_verified() &&
+          wardogs::complete_map_capture(one_verified, true, false, true, false) == MapCaptureDecision::review,
+          "an earlier unverified frame cannot vote with the latest guarded screenshot");
+    auto shifted_anchor = anchor; ++shifted_anchor.bounds[0];
+    wardogs::MapCaptureFrameEvidence displaced;
+    displaced.observe(anchor, true); displaced.observe(shifted_anchor, true);
+    check(wardogs::complete_map_capture(second_frozen, true, false, true,
+                                        displaced.frozen_pair_verified()) == MapCaptureDecision::review,
+          "equal coordinates from shifted axis bounds require review after cursor release");
+    auto changed_scale = anchor; changed_scale.scale = 1.0;
+    wardogs::MapCaptureFrameEvidence scaled;
+    scaled.observe(anchor, true); scaled.observe(changed_scale, true);
+    check(!scaled.frozen_pair_verified(), "changed screenshot scale cannot establish a frozen pair");
+    wardogs::MapCaptureFrameEvidence missing_anchor;
+    missing_anchor.observe(anchor, true); missing_anchor.observe(std::nullopt, true);
+    check(!missing_anchor.frozen_pair_verified(), "missing axis receipts cannot establish a frozen pair");
+    check(wardogs::complete_map_capture(MapCaptureDecision::review, true, false, true, true) == MapCaptureDecision::review,
+          "weak or conflicting coordinates never become automatic after cursor movement");
+    guarded = {};
+    check(!guarded.frozen_pair_verified() && guarded.verified_frames() == 0,
+          "a new request resets all frame and anchor receipts");
     std::cout << "Map temporal consensus: " << failures << " failures\n";
     return failures ? 1 : 0;
 }

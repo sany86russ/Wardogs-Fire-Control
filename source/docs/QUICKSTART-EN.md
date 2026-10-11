@@ -31,7 +31,7 @@ If aim is unavailable or coordinates need review, previous values are hidden. Do
 | --- | --- |
 | Gun reading failed | Repeat **Mark Coordinates**, make sure a complete X/Y pair is visible in the active chat input, then press **Alt+X**. |
 | Target reading failed | Return to the chosen point's label and middle-click again. Keep the cursor and game window unchanged during reading. |
-| Review requested | **Alt+C** → choose or correct the pair → apply reviewed coordinates. **Reject** restores the previous solution. |
+| Review requested | Repeat capture with the same shortcut to replace an uncertain reading. To confirm it: **Alt+C** → choose or correct the pair → apply reviewed coordinates. **Reject** restores the previous solution. |
 | Manual input needed | Expand **Manual input** in the main window and enter the gun and target. Example: `x98.48, y110.35`. **Paste** reads the clipboard only when you click it. |
 | Backup target from chat needed | **M → right-click the target → Mark Coordinates → Alt+T**. In **Settings → Recognition**, enable automatic search for additional captures. |
 
