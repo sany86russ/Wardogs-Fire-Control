@@ -19,7 +19,10 @@
 - Removed the redundant old aiming display before applying an impact. A boundary-correction error names the required MIL and supported range; the last supported command is retained.
 - Log-directory analysis automatically includes the nested `latest.archive`, so the main command does not omit retained sessions.
 
-**Calculation mathematics is preserved:** L81/SPH-2 tables, the height model and ranging rules are unchanged. OCR quality and two-independent-frame requirements are not relaxed. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
+- Before the first Alt+I for a new SPH-2 target, a validated common bearing can be learned from three different targets of this gun position. Training uses only past impacts, validates independent targets and the application envelope, and retains local MIL. Predictions are explicitly provisional; pause, weapon or arc changes withdraw transfer. This does not establish a hit percentage.
+- **Ctrl+Alt+P**, the main-window button and the mini-card icon pause capture. Capture shortcuts and the middle button are released to the game, unfinished OCR is cancelled, and accepted coordinates and history remain. Resume does not start capture automatically.
+
+**Tables and height mathematics are preserved:** L81 is unchanged; SPH-2 gains a guarded provisional bearing prediction. OCR quality and two-independent-frame requirements are not relaxed. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
 
 ## 2.12.0 — consistent commands and robust ranging · October 10, 2026
 

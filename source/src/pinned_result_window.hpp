@@ -62,6 +62,8 @@ public:
     [[nodiscard]] bool always_on_top() const { return preferences_.always_on_top; }
     void set_opacity_percent(int opacity_percent);
     void configure_unlock_hotkey(const std::wstring& hotkey);
+    void configure_pause_control(bool paused, const std::wstring& hotkey,
+                                 std::function<void()> toggle);
     [[nodiscard]] int opacity_percent() const {
         return preferences_.opacity_percent;
     }
@@ -119,6 +121,10 @@ private:
     QLabel* weapon_caption_{};
     QLabel* lock_hint_{};
     QToolButton *header_lock_button_{}, *controls_button_{}, *header_return_button_{};
+    QToolButton* pause_button_{};
+    bool application_paused_{};
+    std::wstring pause_hotkey_;
+    std::function<void()> pause_toggle_;
     QToolButton* lock_button_{};
     QToolButton* topmost_button_{};
     QSlider* opacity_slider_{};

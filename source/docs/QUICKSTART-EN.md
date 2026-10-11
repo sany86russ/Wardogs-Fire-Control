@@ -16,6 +16,8 @@ Extract the **complete** portable package and open **Start.cmd**. Administrator 
 
 **Alt+C** returns to the calculator and keeps middle-click capture ready. If you move the gun, capture its coordinates again. Changing the map clears previous coordinates and corrections; after restarting, confirm the map again.
 
+**Ctrl+Alt+P** pauses or resumes capture. The main window has **Pause / Resume**; the mini-card header has a **Ⅱ / ▶** button. While paused, capture shortcuts and middle-click remain available to the game, OCR does not start and the reticle is hidden. Gun, target, corrections and history are retained; an incomplete reading is cancelled. Resuming never captures the screen automatically. Manual input remains available. Use the shortcut to resume a locked card, or unlock it first to use its buttons. If a shortcut is occupied, the button tooltip shows the actual available combination. Capture is active again after a new application start.
+
 ## Reading the result
 
 - **To target** is the horizontal map distance.
@@ -41,7 +43,7 @@ Normal play does not require selecting a custom OCR region. **Alt+R** and Window
 
 If a normal shot misses, point at the **actual impact** on the map and press **Alt+I**, before changing the target or arc. Do not middle-click the impact: that would replace the target.
 
-Ranging displays the miss and the already applied bearing/MIL change. **Do not add the correction again.** One accepted observation immediately refines the current target; more observations help assess consistency. Corrections apply to that arc and the local target area. Reset returns to the direct solution; ranging shots are optional.
+Ranging displays the miss and the already applied bearing/MIL change. **Do not add the correction again.** One accepted observation immediately refines the current target; more observations help assess consistency. MIL and individual corrections remain local to the target and arc. After impacts on three different targets from a stationary gun, the application also validates a common bearing: a consistent prediction can be included before the first shot at another target within the observed envelope. The card shows **bearing prediction · provisional**; the correction is already included in the numbers. This is not a hit guarantee. Pause, weapon or arc changes withdraw the prediction transfer while retaining local history. Reset returns to the direct solution; ranging shots are optional.
 
 The application does not observe firing, actual sight settings or the vehicle's attitude. If the chassis changes attitude without moving to new coordinates, reset corrections manually. [Full workflow and ranging limits](USAGE-EN.md).
 
@@ -49,7 +51,7 @@ The application does not observe firing, actual sight settings or the vehicle's 
 
 | Section | Purpose |
 | --- | --- |
-| **General** | Operating mode, middle-click and update checks. Manual input only disables game capture and global shortcuts. |
+| **General** | Operating mode, middle-click and update checks. Manual input only disables game capture and its shortcuts; the pause shortcut remains available. |
 | **Shortcuts** | Your key combinations. Conflicts are resolved with an available combination; the interface displays the current shortcuts. |
 | **Sight** | Size and alignment of the transparent reticle. |
 | **Recognition** | Marker-reading delay, custom-region OCR and additional captures. The custom coordinate pattern expands separately. |

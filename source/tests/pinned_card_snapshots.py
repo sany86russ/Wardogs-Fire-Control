@@ -209,7 +209,7 @@ def verify_snapshot(path, language, scale, mode):
             check(widget.get('checked') is True and widget.get('enabled') is True,
                   'Popup must expose the current always-on-top preference')
     else:
-        for name in ('pinnedHeaderLockButton', 'pinnedControlsButton', 'pinnedHeaderReturnButton'):
+        for name in ('pinnedHeaderLockButton', 'pinnedPauseButton', 'pinnedControlsButton', 'pinnedHeaderReturnButton'):
             for widget in named(name):
                 widget_surface(name, widget, button=True)
                 if not locked:
