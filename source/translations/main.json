@@ -1554,5 +1554,21 @@
   {
     "ru": "Покажите X/Y цели в своей области и нажмите <b>%1</b>. Если область ещё не выбрана, выделите строку координат по запросу. Средняя кнопка выключена.",
     "en": "Show the target X/Y in your custom region and press <b>%1</b>. If a region has not been selected, select the coordinate line when prompted. Middle-click capture is disabled."
+  },
+  {
+    "ru": "Предыдущая проверка отменена · считываю координаты заново",
+    "en": "Previous review cancelled · reading coordinates again"
+  },
+  {
+    "ru": "\nУдерживайте курсор до захвата или отметьте координаты в чате и нажмите %1.",
+    "en": "\nHold the cursor until capture, or mark coordinates in chat and press %1."
+  },
+  {
+    "ru": "подписи координат изменили положение между кадрами",
+    "en": "coordinate labels moved between frames"
+  },
+  {
+    "ru": "курсор перемещён до подтверждения координат двумя кадрами",
+    "en": "cursor moved before two frames confirmed the coordinates"
   }
 ]

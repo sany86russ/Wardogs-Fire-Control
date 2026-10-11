@@ -8,6 +8,7 @@
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -676,6 +677,53 @@ int main() {
         check(unsupported.sample_count() == 0 && retained.mil == maximum_firing.mil &&
                   retained.bearing_deg == maximum_firing.bearing_deg,
               "unsupported output rejection preserves the exact usable direct solution");
+
+        // Synthetic flat-ground observations near the maximum sight range:
+        // the first compensation fits, but the second would cross the arc's
+        // MIL boundary. Keep the previous usable command and explain the
+        // proposed command instead of blaming its supported captured MIL.
+        const double boundary_nominal_mil = arc == Arc::low ? 590.0 : 630.0;
+        const double first_impact_mil = arc == Arc::low ? 585.0 : 640.0;
+        const double second_impact_mil = arc == Arc::low ? 530.0 : 700.0;
+        const Point boundary_target{base.x,
+            base.y + sph2_distance_for_mil(boundary_nominal_mil, arc) / 100.0};
+        const Point boundary_first_impact{base.x,
+            base.y + sph2_distance_for_mil(first_impact_mil, arc) / 100.0};
+        const Point boundary_second_impact{base.x,
+            base.y + sph2_distance_for_mil(second_impact_mil, arc) / 100.0};
+        ContinuousCalibration boundary_model(base, baseline, ContinuousCorrectionMode::local_only);
+        boundary_model.add_landing(boundary_model.firing_snapshot(boundary_target, arc),
+                                   boundary_first_impact);
+        const auto boundary_before = boundary_model.solution(boundary_target, arc);
+        const auto [minimum_mil, maximum_mil] = sph2_mil_bounds(arc);
+        check(boundary_before.mil >= minimum_mil && boundary_before.mil <= maximum_mil,
+              "the first near-boundary compensation remains in the canonical sight-table domain");
+        close(boundary_before.mil, arc == Arc::low ? 595.0 : 620.0,
+              "supported near-boundary corrections retain their full mathematical value", 1e-7);
+        std::string boundary_error;
+        try {
+            boundary_model.add_landing(boundary_model.firing_snapshot(boundary_target, arc),
+                                       boundary_second_impact);
+            check(false, "a second unsupported near-boundary compensation is rejected");
+        } catch (const std::invalid_argument& error) {
+            boundary_error = error.what();
+        }
+        check(boundary_error.find(arc == Arc::low ? "625.0 MIL" : "585.0 MIL") != std::string::npos &&
+                  boundary_error.find(arc == Arc::low ? "настильной" : "навесной") != std::string::npos &&
+                  boundary_error.find(arc == Arc::low ? "20–600 MIL" : "610–1400 MIL") != std::string::npos,
+              "the boundary rejection names the proposed MIL, selected arc and canonical supported bounds");
+        const auto boundary_after = boundary_model.solution(boundary_target, arc);
+        check(boundary_model.sample_count() == 1 &&
+                  boundary_after.bearing_deg == boundary_before.bearing_deg &&
+                  boundary_after.mil == boundary_before.mil &&
+                  boundary_after.reticle_distance_m == boundary_before.reticle_distance_m &&
+                  boundary_model.global_calibration().rotation == baseline.rotation,
+              "numeric boundary diagnostics preserve the exact retained model and last supported command");
+        boundary_model.add_landing(boundary_model.firing_snapshot(boundary_target, arc), boundary_target);
+        close(boundary_model.solution(boundary_target, arc).mil, boundary_before.mil,
+              "a following supported near-boundary observation is still accepted without clamping", 1e-7);
+        check(boundary_model.sample_count() == 2,
+              "a rejected boundary observation does not occupy a retained sample slot");
 
         // Deliberately feed a fixed incorrect impact while taking each newly
         // corrected snapshot. This is inconsistent feedback, not constant

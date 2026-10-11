@@ -212,7 +212,7 @@ def analyze_logs(paths: Iterable[Path], radius_m: float = 10.0) -> dict:
     duplicate_count = 0
     issue_counts: Counter = Counter()
     issues: list[dict] = []
-    files = list(dict.fromkeys(Path(path).resolve() for path in paths))
+    files = sorted(set(Path(path).resolve() for path in paths))
     recorded_events = 0
     other_impact_events: set[tuple] = set()
 
@@ -334,24 +334,34 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def archive_log_files(directory: Path) -> list[Path]:
+    """Read the supplied log directory and its one known runtime archive."""
+    if not directory.is_dir():
+        raise ValueError("archive directory does not exist or is not a directory: " + str(directory))
+    paths = [path for path in sorted(directory.iterdir())
+             if path.is_file() and (path.name in ("latest.log", "latest.previous.log") or
+                                   re.fullmatch(r"session-[^.]+\.log", path.name))]
+    archive = directory / "latest.archive"
+    if archive.is_dir():
+        paths.extend(path for path in sorted(archive.iterdir())
+                     if path.is_file() and re.fullmatch(r"session-[^.]+\.log", path.name))
+    return paths
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("logs", type=Path, nargs="*", help="Explicit session log files")
-    parser.add_argument("--archive-directory", type=Path, help="Read latest.log, latest.previous.log and session-*.log in this explicit directory only")
+    parser.add_argument("--archive-directory", type=Path, help="Read latest.log, latest.previous.log and session-*.log here, including session logs in latest.archive")
     parser.add_argument("--radius", type=float, default=10.0, help="Closed hit radius in meters (default: 10)")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown")
     parser.add_argument("--output", type=Path, help="Write the report here instead of stdout")
     args = parser.parse_args(argv)
-    paths = list(args.logs)
-    if args.archive_directory:
-        if not args.archive_directory.is_dir():
-            parser.error("archive directory does not exist")
-        paths.extend(path for path in sorted(args.archive_directory.iterdir())
-                     if path.is_file() and (path.name in ("latest.log", "latest.previous.log") or
-                                           re.fullmatch(r"session-[^.]+\.log", path.name)))
-    if not paths:
-        parser.error("provide explicit log files or a nonempty archive directory")
     try:
+        paths = list(args.logs)
+        if args.archive_directory:
+            paths.extend(archive_log_files(args.archive_directory))
+        if not paths:
+            parser.error("provide explicit log files or a nonempty archive directory")
         report = analyze_logs(paths, args.radius)
         content = (json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
                    if args.json else render_markdown(report))

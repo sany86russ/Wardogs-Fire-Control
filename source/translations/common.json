@@ -1,4 +1,18 @@
 [
+  {"ru":"Настройки сохранены", "en":"Settings saved"},
+  {"ru":"Карта не подтверждена", "en":"Map not confirmed"},
+  {"ru":" · высоты учтены", "en":" · heights applied"},
+  {"ru":" · высоты подключены", "en":" · height data loaded"},
+  {"ru":" · без высот", "en":" · no height data"},
+  {"ru":"\nМодель: пересечение земли на ≈%1 м", "en":"\nModel: ground intersection at ≈%1 m"},
+  {"ru":" · профиль земли неполный", "en":" · ground profile incomplete"},
+  {"ru":" · профиль земли не проверен", "en":" · ground profile not checked"},
+  {"ru":" · поправка учтена", "en":" · correction applied"},
+  {"ru":" · табличная наводка", "en":" · table guidance"},
+  {"ru":"Поверх остальных окон", "en":"Always on top"},
+  {"ru":"Разблокировать: %1", "en":"Unlock: %1"},
+  {"ru":"Некорректное расположение мини-карточки.", "en":"Invalid mini card placement."},
+  {"ru":"Некорректный размер мини-карточки.", "en":"Invalid mini card size."},
   {"ru":"Язык интерфейса", "en":"Interface language"},
   {"ru":"Язык интерфейса · сохраняется автоматически", "en":"Interface language · saved automatically"},
   {"ru":"Язык изменён для этого сеанса. Сохранить не удалось: ", "en":"Language changed for this session. Could not save: "},
@@ -26,5 +40,7 @@
   {"ru": "История и именованные точки, перенос цели, измерения времени и профиль рельефа", "en": "History and named points, target relocation, time measurements and terrain profile"},
   {"ru": "ПРИСТРЕЛКА", "en": "RANGING"},
   {"ru": "Запись журнала остановлена. Новые действия не сохраняются. Проверьте свободное место и доступ к папке журналов, затем перезапустите программу.", "en": "Log recording has stopped. New actions are not being saved. Check free disk space and access to the log folder, then restart the application."},
-  {"ru": "\nВ текущей команде учтено: азимут %1° · MIL %2. При смене цели или дуги влияние поправки может уменьшиться.", "en": "\nIncluded in the current command: azimuth %1° · MIL %2. Changing the target or arc may reduce the correction."}
+  {"ru": "\nВ текущей команде учтено: азимут %1° · MIL %2. При смене цели или дуги влияние поправки может уменьшиться.", "en": "\nIncluded in the current command: azimuth %1° · MIL %2. Changing the target or arc may reduce the correction."},
+  {"ru": "Стрельбище", "en": "Training"},
+  {"ru": "Другая карта", "en": "Other map"}
 ]

@@ -79,6 +79,7 @@ add_library(wardogs_core
     src/logger.cpp
     src/mouse_trigger.cpp
     src/ocr.cpp
+    src/pinned_placement.cpp
     src/presentation.cpp
     src/vehicle_ballistics.cpp
 )
@@ -291,6 +292,14 @@ if(MSVC)
     target_compile_options(wardogs_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
 add_test(NAME wardogs_core_tests COMMAND wardogs_tests)
+
+add_executable(wardogs_pinned_placement_tests tests/pinned_placement_tests.cpp)
+target_link_libraries(wardogs_pinned_placement_tests PRIVATE wardogs_core)
+if(MSVC)
+    target_compile_options(wardogs_pinned_placement_tests PRIVATE /W4 /permissive- /utf-8)
+endif()
+add_test(NAME wardogs_pinned_placement_tests COMMAND wardogs_pinned_placement_tests)
+set_tests_properties(wardogs_pinned_placement_tests PROPERTIES TIMEOUT 15)
 
 add_executable(wardogs_mouse_trigger_tests tests/mouse_trigger_tests.cpp)
 target_link_libraries(wardogs_mouse_trigger_tests PRIVATE wardogs_core user32)

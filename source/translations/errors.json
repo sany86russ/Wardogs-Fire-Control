@@ -1024,6 +1024,18 @@
     "en": "The accumulated correction shifts the aiming vector from the direct calculation by %1 m. This target allows up to %2 m. Check the impacts or reset corrections."
   },
   {
+    "ru": "Поправка требует %1 MIL для %2 траектории. Поддерживаемый диапазон: %3–%4 MIL. Смените траекторию или позицию орудия и повторите пристрелку.",
+    "en": "The correction requires %1 MIL for the %2 arc. Supported range: %3–%4 MIL. Change the arc or gun position and repeat ranging."
+  },
+  {
+    "ru": "настильной",
+    "en": "low"
+  },
+  {
+    "ru": "навесной",
+    "en": "high"
+  },
+  {
     "ru": "Попадания не согласуются с общей поправкой: расхождение %1° (допустимо до %2°). Проверьте азимут и MIL обоих выстрелов; после перемещения орудия повторите пристрелку.",
     "en": "The impacts are inconsistent with a shared correction: deviation %1° (allowed up to %2°). Check the bearing and MIL of both shots; repeat ranging after moving the gun."
   },

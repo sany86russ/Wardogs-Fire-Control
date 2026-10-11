@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <locale>
 #include <numbers>
 #include <sstream>
 #include <stdexcept>
@@ -636,6 +637,19 @@ CorrectedSolution ContinuousCalibration::solution(
     const auto direct = result;
     result.bearing_deg = std::fmod(result.bearing_deg + bearing + 360.0, 360.0);
     result.mil += mil;
+    const auto [minimum_mil, maximum_mil] = sph2_mil_bounds(arc);
+    if (std::isfinite(result.mil) &&
+        (result.mil < minimum_mil || result.mil > maximum_mil)) {
+        std::ostringstream message;
+        message.imbue(std::locale::classic());
+        message << std::fixed << std::setprecision(1)
+                << "Поправка требует " << result.mil << " MIL для "
+                << (arc == Arc::low ? "настильной" : "навесной")
+                << " траектории. Поддерживаемый диапазон: " << std::setprecision(0)
+                << minimum_mil << "–" << maximum_mil
+                << " MIL. Смените траекторию или позицию орудия и повторите пристрелку.";
+        throw std::invalid_argument(message.str());
+    }
     result.reticle_distance_m = sph2_distance_for_mil(result.mil, arc);
     if (mode_ == ContinuousCorrectionMode::local_only) {
         constexpr double acceptance_roundoff_m = 1e-7;

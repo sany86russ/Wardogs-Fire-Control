@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <utility>
 
 namespace wardogs {
 
@@ -67,6 +68,7 @@ void validate_platform_calibration(const PlatformCalibration& calibration);
                                        double height_delta_m = 0.0);
 [[nodiscard]] double sph2_mil_for_distance(double distance_m, Arc arc);
 [[nodiscard]] double sph2_world_mil_for_distance(double distance_m, Arc arc);
+[[nodiscard]] std::pair<double, double> sph2_mil_bounds(Arc arc);
 [[nodiscard]] double sph2_distance_for_mil(double mil, Arc arc);
 // Uses the retained approximate physical trajectory to convert a horizontal
 // distance and target-minus-gun height to the observed flat-ground sight table.

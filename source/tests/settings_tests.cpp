@@ -78,6 +78,10 @@ int run_settings_tests() {
           "the ghost trajectory shortcut defaults to the unused F4 key");
     check(saved.ghost_reticle.bearing_compensation_deg == 0.0,
           "ghost bearing compensation defaults to zero degrees");
+    check(saved.pinned_card.always_on_top && !saved.pinned_card.placement &&
+              !saved.pinned_card.mode_sizes[0] && !saved.pinned_card.mode_sizes[1] &&
+              fresh.pinned_card.always_on_top && !fresh.pinned_card.placement,
+          "fresh and legacy cards keep topmost without inventing a saved location or size");
     saved.region_hotkey = L"Ctrl+F8";
     saved.language = wardogs::UiLanguage::english;
     saved.check_updates_on_start = false;
@@ -95,6 +99,11 @@ int run_settings_tests() {
     saved.pinned_card.locked = true;
     saved.pinned_card.opacity_percent = 63;
     saved.pinned_card.unlock_hotkey = L"Ctrl+Shift+U";
+    saved.pinned_card.always_on_top = false;
+    saved.pinned_card.placement = wardogs::PinnedCardPlacement{
+        L"\\\\.\\DISPLAY2", {-2560, -200, 2560, 1400}, {-2230, 120, 640, 180}};
+    saved.pinned_card.mode_sizes[0] = wardogs::PinnedCardSize{420, 144};
+    saved.pinned_card.mode_sizes[1] = wardogs::PinnedCardSize{640, 180};
     saved.capture_region = CaptureRegion{L"\\\\.\\DISPLAY2", {13, 27, 413, 81}};
     saved.capture_region->monitor_size = {2560, 1440};
     saved.automatic_chat_region = false;
@@ -197,6 +206,78 @@ int run_settings_tests() {
           "the pinned card opacity survives the explicit-path round trip");
     check(loaded.pinned_card.unlock_hotkey == L"Ctrl+Shift+U",
           "the pinned-card unlock hotkey survives the explicit-path round trip");
+    check(!loaded.pinned_card.always_on_top &&
+              loaded.pinned_card.placement == saved.pinned_card.placement &&
+              loaded.pinned_card.mode_sizes == saved.pinned_card.mode_sizes,
+          "card placement on a negative-coordinate monitor, both mode sizes and topmost round trip");
+
+    const fs::path placement_path = directory / L"pinned-placement.ini";
+    wardogs::save_settings_to(placement_path, saved);
+    WritePrivateProfileStringW(L"extension", L"layout_future", L"keep", placement_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"pinned_card_future", L"keep", placement_path.c_str());
+    for (const wchar_t* invalid : {L"", L"640junk", L"640.0", L"+640", L"0", L"-1",
+            L"16385", L"2147483648", L"999999999999999999999999"}) {
+        WritePrivateProfileStringW(L"settings", L"pinned_card_width", invalid, placement_path.c_str());
+        const auto before_read = bytes(placement_path);
+        const auto rejected = wardogs::load_settings_from(placement_path);
+        check(!rejected.pinned_card.placement && rejected.pinned_card.mode_sizes == saved.pinned_card.mode_sizes &&
+                  bytes(placement_path) == before_read,
+              "malformed or unbounded geometry is ignored without rewriting profile or valid mode sizes");
+    }
+    wardogs::save_settings_to(placement_path, saved);
+    for (const wchar_t* invalid : {L"-1000001", L"1000001", L"-2147483649", L"12x"}) {
+        WritePrivateProfileStringW(L"settings", L"pinned_card_x", invalid, placement_path.c_str());
+        check(!wardogs::load_settings_from(placement_path).pinned_card.placement,
+              "out-of-range and noninteger signed coordinates cannot restore a card");
+    }
+    wardogs::save_settings_to(placement_path, saved);
+    WritePrivateProfileStringW(L"settings", L"pinned_card_screen_id", L"", placement_path.c_str());
+    check(!wardogs::load_settings_from(placement_path).pinned_card.placement,
+          "incomplete screen identity cannot restore unrelated monitor coordinates");
+    wardogs::save_settings_to(placement_path, saved);
+    WritePrivateProfileStringW(L"settings", L"pinned_card_always_on_top", L"unexpected", placement_path.c_str());
+    check(wardogs::load_settings_from(placement_path).pinned_card.always_on_top,
+          "unrecognized topmost values preserve the legacy topmost default");
+    wardogs::save_settings_to(placement_path, saved);
+    WritePrivateProfileStringW(L"settings", L"pinned_card_placement_version", L"2", placement_path.c_str());
+    check(!wardogs::load_settings_from(placement_path).pinned_card.placement,
+          "unknown future placement versions are not misinterpreted as the current schema");
+    wardogs::save_settings_to(placement_path, saved);
+    WritePrivateProfileStringW(L"settings", L"pinned_card_mortar_height", nullptr, placement_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"pinned_card_sph2_width", L"-1", placement_path.c_str());
+    const auto incomplete_sizes = wardogs::load_settings_from(placement_path);
+    check(!incomplete_sizes.pinned_card.mode_sizes[0] && !incomplete_sizes.pinned_card.mode_sizes[1] &&
+              incomplete_sizes.pinned_card.placement == saved.pinned_card.placement,
+          "mode sizes require a valid complete pair and cannot corrupt valid placement");
+    wardogs::save_settings_to(placement_path, saved);
+    const auto before_invalid_placement = bytes(placement_path);
+    auto invalid_placement = saved;
+    invalid_placement.pinned_card.placement->rect.x = std::numeric_limits<int>::max();
+    bool rejected_placement_save = false;
+    try { wardogs::save_settings_to(placement_path, invalid_placement); }
+    catch (const std::invalid_argument&) { rejected_placement_save = true; }
+    check(rejected_placement_save && bytes(placement_path) == before_invalid_placement,
+          "invalid placement cannot partially overwrite the existing settings transaction");
+    invalid_placement = saved;
+    invalid_placement.pinned_card.mode_sizes[1] = wardogs::PinnedCardSize{640, 0};
+    bool rejected_size_save = false;
+    try { wardogs::save_settings_to(placement_path, invalid_placement); }
+    catch (const std::invalid_argument&) { rejected_size_save = true; }
+    check(rejected_size_save && bytes(placement_path) == before_invalid_placement,
+          "invalid mode sizes leave every byte of the previous settings file intact");
+    auto reset_placement = saved;
+    reset_placement.pinned_card.placement.reset();
+    reset_placement.pinned_card.mode_sizes = {};
+    wardogs::save_settings_to(placement_path, reset_placement);
+    const auto reset_loaded = wardogs::load_settings_from(placement_path);
+    check(!reset_loaded.pinned_card.placement && !reset_loaded.pinned_card.mode_sizes[0] &&
+              !reset_loaded.pinned_card.mode_sizes[1] &&
+              ini_value(placement_path, L"settings", L"pinned_card_placement_version").empty() &&
+              ini_value(placement_path, L"settings", L"pinned_card_x").empty() &&
+              ini_value(placement_path, L"settings", L"pinned_card_sph2_height").empty() &&
+              ini_value(placement_path, L"settings", L"pinned_card_future") == L"keep" &&
+              ini_value(placement_path, L"extension", L"layout_future") == L"keep",
+          "clearing known placement values preserves future keys and unrelated INI sections");
     check(loaded.capture_region.has_value(),
           "a configured OCR capture region is restored");
     if (loaded.capture_region) {

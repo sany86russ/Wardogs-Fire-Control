@@ -20,7 +20,7 @@
 py -3.11 source/tools/analyze_shot_accuracy.py --archive-directory "$env:LOCALAPPDATA/WardogsFireControl/logs" --json --output shot-accuracy.json
 ```
 
-По умолчанию попадание — **расстояние до выбранной точки ≤10 м**. Инструмент читает только явно переданные файлы/папку, не снимает экран и не меняет журналы. `latest.archive` передаётся отдельно, если нужен более ранний архив:
+По умолчанию попадание — **расстояние до выбранной точки ≤10 м**. Инструмент читает только явно переданные файлы/папку, не снимает экран и не меняет журналы. При передаче папки `logs` он включает `latest.log`, `latest.previous.log` и `session-*.log` из её `latest.archive`; повторно переданные файлы читаются один раз. Для анализа только более раннего архива можно передать `latest.archive` отдельно:
 
 ```powershell
 py -3.11 source/tools/analyze_shot_accuracy.py --archive-directory "$env:LOCALAPPDATA/WardogsFireControl/logs/latest.archive" --output shot-accuracy-archive.md

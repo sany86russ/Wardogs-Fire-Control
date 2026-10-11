@@ -4,15 +4,22 @@
 
 ## 2.13.0 — prepared: clearer interface and more responsive operation
 
-**Update 2.13.0 is prepared; the release has not been published. Validation and native UI screenshots are available in [PR #11](https://github.com/sany86russ/Wardogs-Fire-Control/pull/11).**
+**Update 2.13.0 is prepared; the release has not been published. Main-window validation is available in [PR #11](https://github.com/sany86russ/Wardogs-Fire-Control/pull/11); mini-card and capture-recovery checks are in [PR #12](https://github.com/sany86russ/Wardogs-Fire-Control/pull/12).**
 
 - The main window guides **Map → Gun → Target** and shows the next action. Aiming values are more prominent; manual input, history with direction and the complete correction report expand when needed.
 - Settings are split into **General / Shortcuts / Sight / Recognition**. Short help and instructions explain the normal workflow; additional parameter explanations move to tooltips. **Positions and flight** shows a concise result first, with full details and model settings available through disclosure controls.
 - Elevation-pack verification and import run in the background. An unconfirmed map remains unavailable for calculation until verification finishes. The OCR model is also prepared in the background after startup.
 - In a local paired measurement, OCR input-tensor preparation time fell by approximately **69%** and coordinate-mask preparation time by **82%**, with identical preprocessing results. These are individual image-processing stages; the same speedup is not promised for complete OCR or in-game capture.
 - Ordinary planning calculations no longer build the terrain profile twice, and the mini card avoids redundant style updates.
+- The mini card remembers its monitor, position and separate L81/SPH-2 sizes. Returning from the main window, capturing new coordinates and updating results no longer move it to the primary monitor. If the saved display is disconnected, the card becomes reachable on a remaining display.
+- The mini card header exposes locking, controls and return. Its menu can disable **Always on top** for a second monitor. Map and height status remain beside the result; model details and the original status are available in tooltips. Both SPH-2 arcs, the selected command, target range and table range are retained.
 
-**Calculation accuracy is unchanged:** L81/SPH-2 tables, the height model, coordinate acceptance and ranging rules are preserved. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
+- A fresh capture can replace pending OCR review while retaining the original shot command for Alt+I. Unconfirmed coordinates are never applied; old numbers stay hidden until the new reading completes.
+- Moving the cursor after two independently guarded agreeing frames with unchanged axis labels no longer discards their completed result. A new screenshot still requires the original cursor position; changed window or input data still cancels capture. A single frame requires user review. Cancellation reasons are now distinguished in the log.
+- Removed the redundant old aiming display before applying an impact. A boundary-correction error names the required MIL and supported range; the last supported command is retained.
+- Log-directory analysis automatically includes the nested `latest.archive`, so the main command does not omit retained sessions.
+
+**Calculation mathematics is preserved:** L81/SPH-2 tables, the height model and ranging rules are unchanged. OCR quality and two-independent-frame requirements are not relaxed. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
 
 ## 2.12.0 — consistent commands and robust ranging · October 10, 2026
 
