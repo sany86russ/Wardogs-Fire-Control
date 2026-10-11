@@ -416,6 +416,7 @@ void PinnedResultWindow::build_context_menu() {
     auto* controls_layout = new QHBoxLayout(controls);
     controls_layout->setContentsMargins(0, 0, 0, 0);
     controls_layout->setSpacing(8);
+    controls_layout->setSizeConstraint(QLayout::SetMinimumSize);
 
     lock_button_ = new QToolButton(context_menu_);
     lock_button_->setObjectName(QStringLiteral("pinnedLockButton"));
@@ -458,6 +459,7 @@ void PinnedResultWindow::build_context_menu() {
     auto* ghost_layout = new QHBoxLayout(ghost_row);
     ghost_layout->setContentsMargins(0, 0, 0, 0);
     ghost_layout->setSpacing(8);
+    ghost_layout->setSizeConstraint(QLayout::SetMinimumSize);
     ghost_button_ = new QToolButton(context_menu_);
     ghost_button_->setObjectName(QStringLiteral("ghostReticleToggle"));
     ghost_button_->setProperty("pinnedMenuButton", true);
@@ -1287,9 +1289,12 @@ void PinnedResultWindow::show_context_menu() {
 QPoint PinnedResultWindow::context_menu_position() const {
     context_menu_->ensurePolished();
     fit_unlock_editor_height();
-    context_menu_->adjustSize();
+    // adjustSize caps a window at two thirds of the screen height. At high DPI
+    // that can compress these rows below their fixed buttons when text wraps.
+    const QSize menu_size = QLayout::closestAcceptableSize(
+        context_menu_, context_menu_->sizeHint().expandedTo(context_menu_->minimumSizeHint()));
+    context_menu_->resize(menu_size);
     constexpr int gap = 2;
-    const QSize menu_size = context_menu_->sizeHint().expandedTo(context_menu_->size());
     QPoint position = mapToGlobal(QPoint(width() + gap, 0));
     QScreen* screen = QGuiApplication::screenAt(mapToGlobal(rect().center()));
     if (!screen) screen = QGuiApplication::primaryScreen();
