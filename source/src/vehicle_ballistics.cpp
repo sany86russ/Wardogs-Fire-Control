@@ -431,6 +431,11 @@ double sph2_world_mil_for_distance(double distance_m, Arc arc) {
     return interpolate(distance_m, extended, true, "Дальность вне поддерживаемой таблицы SPH-2");
 }
 
+std::pair<double, double> sph2_mil_bounds(Arc arc) {
+    const auto pairs = table_for(arc);
+    return {pairs.front().second, pairs.back().second};
+}
+
 double sph2_distance_for_mil(double mil, Arc arc) {
     auto pairs = table_for(arc);
     return interpolate(mil, pairs, false, "Значение MIL вне поддерживаемой таблицы SPH-2");
