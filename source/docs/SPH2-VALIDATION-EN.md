@@ -20,7 +20,7 @@ Run from the source root without launching the game or application:
 py -3.11 source/tools/analyze_shot_accuracy.py --archive-directory "$env:LOCALAPPDATA/WardogsFireControl/logs" --json --output shot-accuracy.json
 ```
 
-The default closed hit radius is **10 m**. Only explicitly supplied files/directories are read; logs and the screen are untouched. Supply `logs/latest.archive` separately for older records, or provide explicit log paths together. Without `--json`, the output is Markdown.
+The default closed hit radius is **10 m**. Only explicitly supplied files/directories are read; logs and the screen are untouched. Supplying `logs` includes `latest.log`, `latest.previous.log` and `session-*.log` in its `latest.archive`; repeated file paths are read once. Supply `logs/latest.archive` separately to analyze only older records, or provide explicit log paths. Without `--json`, the output is Markdown.
 
 The report includes accepted observation counts, recorded hit rate, mean/median/p95 miss, right/longitudinal bias and RMS spread around the centre. Groups separate sessions, maps, firing positions, arcs and correction modes. Diagnostic records, duplicates and conflicting identities are excluded; corrupt records are reported. Requests and rejections are counted separately, not as physical shots. Legacy records carry weaker provenance.
 

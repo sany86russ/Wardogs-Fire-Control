@@ -213,6 +213,55 @@ class ShotAccuracyTests(unittest.TestCase):
             self.assertEqual(accuracy.main([str(self.root / "latest.log")]), 0)
         self.assertIn("Радиус попадания: 10.00 м", stdout.getvalue())
 
+    def test_runtime_log_directory_includes_only_its_known_session_archive(self):
+        latest = self.log("latest.log", context() + event(index=1))
+        previous = self.log("latest.previous.log", context() + event(index=2))
+        archive = self.root / "latest.archive"
+        archive.mkdir()
+        older = self.log("latest.archive/session-00000000000000000002.log", context() + event(index=4))
+        oldest = self.log("latest.archive/session-00000000000000000001.log", context() + event(index=3))
+        self.log("latest.archive/ignored.log", context() + event(index=5))
+        unrelated = self.root / "other.archive"
+        unrelated.mkdir()
+        self.log("other.archive/session-00000000000000000001.log", context() + event(index=6))
+        output = self.root / "report.json"
+
+        self.assertEqual(accuracy.main(["--archive-directory", str(self.root), "--json", "--output", str(output)]), 0)
+        report = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["count"], 4)
+        self.assertEqual(report["files"], sorted(str(path.resolve()) for path in (latest, previous, oldest, older)))
+        self.assertEqual(report["duplicate_records_excluded"], 0)
+
+        self.assertEqual(accuracy.main(["--archive-directory", str(archive), "--json", "--output", str(output)]), 0)
+        self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["summary"]["count"], 2)
+
+    def test_explicit_files_and_nested_archive_are_read_once_in_stable_order(self):
+        latest = self.log("latest.log", context() + event(index=1))
+        (self.root / "latest.archive").mkdir()
+        older = self.log("latest.archive/session-00000000000000000001.log", context() + event(index=2))
+        output = self.root / "report.json"
+        arguments = [str(older), str(latest), str(older), "--archive-directory", str(self.root),
+                     "--json", "--output", str(output)]
+        self.assertEqual(accuracy.main(arguments), 0)
+        report = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["count"], 2)
+        self.assertEqual(report["recorded_events"], 2)
+        self.assertEqual(report["duplicate_records_excluded"], 0)
+        self.assertEqual(report["files"], sorted(str(path.resolve()) for path in (latest, older)))
+        self.assertEqual(accuracy.analyze_logs([latest, older]), accuracy.analyze_logs([older, latest, older]))
+
+    def test_missing_directory_or_explicit_file_reports_an_error_without_traceback(self):
+        latest = self.log("latest.log", context() + event())
+        for arguments in (["--archive-directory", str(self.root / "missing")],
+                          ["--archive-directory", str(latest)],
+                          [str(self.root / "missing.log")]):
+            with self.subTest(arguments=arguments), contextlib.redirect_stderr(io.StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as error:
+                    accuracy.main(arguments)
+                self.assertEqual(error.exception.code, 2)
+            self.assertIn("Cannot analyze accuracy:", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
