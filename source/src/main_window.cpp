@@ -2292,6 +2292,25 @@ public:
         check("SPH2_mini_expiry_guard_clears_green_without_waiting_for_OCR_poll",
             freshness_guard_armed && !hud_reading_ && !hud_freshness_timer_->isActive() &&
             !hud_busy_ && aim_label && aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        seed_alignment(0.0, 0.0);
+        observed_shots_ = wardogs::ShotObservationSession{};
+        const auto second_capture = GetTickCount64();
+        wardogs::AcceptedSightFrame expired_first;
+        expired_first.id = 1; expired_first.timestamp_ms = second_capture - 1300;
+        expired_first.epoch = hud_epoch_; expired_first.context = *hud_context_;
+        expired_first.foreground_verified = true; expired_first.stabilized = true;
+        expired_first.firing_snapshot = {*target_, wardogs::Arc::high,
+            alignment_command.bearing_deg, alignment_command.mil, target_height_delta(*target_)};
+        expired_first.bearing_uncertainty_deg = 0.05; expired_first.mil_uncertainty = 0.2;
+        observed_shots_.begin_context(*hud_context_, hud_epoch_, expired_first.timestamp_ms - 1);
+        (void)observed_shots_.observe(expired_first, expired_first.timestamp_ms);
+        hud_reading_at_ms_ = expired_first.timestamp_ms;
+        refresh_hud_freshness();
+        expired_first.id = 2; expired_first.timestamp_ms = second_capture;
+        (void)observed_shots_.observe(expired_first, second_capture);
+        check("SPH2_mini_visual_expiry_preserves_the_separate_frame_agreement_window",
+            !hud_reading_ && observed_shots_.has_stable_sight() && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown"));
         clear_hud_reading();
         exit_game_mode();
         reset_continuous_calibration(); show_result(*target_);
@@ -4890,7 +4909,11 @@ private:
         if (alignment.reason == wardogs::AimAlignmentReason::invalid_context ||
             alignment.reason == wardogs::AimAlignmentReason::future_capture ||
             alignment.reason == wardogs::AimAlignmentReason::stale_capture) {
-            observed_shots_.invalidate_sight(GetTickCount64());
+            // Expired display evidence must turn neutral immediately, while
+            // the first frame may still form a pair within the session's
+            // separate 2.5-second agreement window. Fire intent validates age.
+            if (alignment.reason != wardogs::AimAlignmentReason::stale_capture)
+                observed_shots_.invalidate_sight(GetTickCount64());
             clear_hud_reading();
             return;
         }
