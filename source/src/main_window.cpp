@@ -1587,6 +1587,44 @@ public:
                 handle_hotkey(8);
                 check("native_pause_shortcut_can_resume_even_in_manual_only_mode",
                     !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_);
+                {
+                    // Reproduce an external reservation appearing while the
+                    // full set is released. The paused three-action fallback
+                    // must not steal a released capture chord, nor lose resume.
+                    unregister_hotkeys();
+                    settings_.game_integration_enabled = true;
+                    settings_.base_hotkey = L"Ctrl+Alt+Q";
+                    settings_.pinned_card.unlock_hotkey = L"Alt+Q";
+                    const auto occupied_unlock = wardogs::parse_hotkey(L"Alt+Q");
+                    struct OwnedHotkeyProbe {
+                        int id;
+                        bool owned;
+                        ~OwnedHotkeyProbe() { if (owned) UnregisterHotKey(nullptr, id); }
+                    } occupied{0x6011, RegisterHotKey(nullptr, 0x6011,
+                        occupied_unlock.modifiers, occupied_unlock.virtual_key) != FALSE};
+                    if (!occupied.owned) throw std::runtime_error("CI occupied-unlock reservation unavailable");
+                    const auto preserved_target = target_;
+                    handle_hotkey(8);
+                    const bool resume_reserved = RegisterHotKey(nullptr, 0x6012,
+                        pause_hotkey_.modifiers, pause_hotkey_.virtual_key) != FALSE;
+                    const DWORD resume_error = resume_reserved ? ERROR_SUCCESS : GetLastError();
+                    if (resume_reserved) UnregisterHotKey(nullptr, 0x6012);
+                    const auto released_capture = wardogs::parse_hotkey(settings_.base_hotkey);
+                    const bool capture_free = RegisterHotKey(nullptr, 0x6013,
+                        released_capture.modifiers, released_capture.virtual_key) != FALSE;
+                    if (capture_free) UnregisterHotKey(nullptr, 0x6013);
+                    check("native_occupied_unlock_cannot_steal_capture_or_remove_independent_resume",
+                        application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() &&
+                        !resume_reserved && resume_error == ERROR_HOTKEY_ALREADY_REGISTERED && capture_free &&
+                        target_ == preserved_target && !busy_ &&
+                        status_->text().contains(qtext(pause_hotkey_.display)));
+                    dispatch_registered_hotkey(8, hotkey_listener_epoch_.load());
+                    const auto effective_unlock = wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey);
+                    check("native_independent_resume_recovers_full_set_around_the_still_occupied_unlock",
+                        !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_ &&
+                        target_ == preserved_target && effective_unlock.virtual_key == 'Q' &&
+                        (effective_unlock.modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == (MOD_ALT | MOD_SHIFT));
+                }
             } catch (const std::exception& error) {
                 set_status(QString::fromUtf8(error.what()), true);
                 check("native_pause_registration_contract", false);
@@ -6352,15 +6390,23 @@ private:
             // Failure to register the active set cannot leave captures half
             // enabled. Pause stays safe; controls remain usable to retry.
             application_paused_ = true;
+            wardogs::log_error("pause.hotkeys_failed error=" + std::string(error.what()));
             ++mouse_listener_epoch_;
             mouse_listener_.stop();
             try { register_hotkeys(settings_, false); }
             catch (const std::exception& recovery) {
                 wardogs::log_error("pause.resume_shortcuts_unavailable error=" + std::string(recovery.what()));
+                try { register_resume_only_hotkey(); }
+                catch (const std::exception& resume_error) {
+                    wardogs::log_error("pause.resume_only_failed error=" + std::string(resume_error.what()));
+                }
             }
             update_readiness();
             sync_pinned_status();
-            set_status(wardogs::i18n::text(QStringLiteral("Захват на паузе. Горячие клавиши недоступны: ")) + error_text(error), true);
+            set_status(hotkey_listener_.active()
+                ? wardogs::i18n::text(QStringLiteral("Захват на паузе · возобновить: %1"))
+                    .arg(qtext(pause_hotkey_.display)) + QStringLiteral("\n") + error_text(error)
+                : wardogs::i18n::text(QStringLiteral("Захват на паузе. Горячие клавиши недоступны: ")) + error_text(error), true);
             return;
         }
         if (!application_paused_ && ghost_window_) {
@@ -6412,6 +6458,55 @@ private:
             return;
         }
         if (!notice.isEmpty()) set_status(notice, notice_error);
+    }
+
+    void register_resume_only_hotkey() {
+        const std::array configured{
+            wardogs::parse_hotkey(settings_.region_hotkey),
+            wardogs::parse_hotkey(settings_.base_hotkey),
+            wardogs::parse_hotkey(settings_.target_hotkey),
+            wardogs::parse_hotkey(settings_.quick_target_hotkey),
+            wardogs::parse_hotkey(settings_.impact_hotkey),
+            wardogs::parse_hotkey(settings_.ghost_arc_hotkey),
+            wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey),
+            wardogs::parse_hotkey(settings_.exit_game_mode_hotkey)};
+        wardogs::validate_unique_hotkeys(configured);
+        std::vector<wardogs::Hotkey> attempted(configured.begin(), configured.end());
+        const QPointer<MainWindow> self(this);
+        // Each retry here follows a registered but incompatible modifier
+        // fallback, never an unrelated OS/resource failure. Every chosen key
+        // must remain distinct from the complete, currently released set.
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            const auto candidate = available_pause_hotkey(attempted, pause_hotkey_);
+            attempted.push_back(candidate);
+            const auto listener_epoch = ++hotkey_listener_epoch_;
+            const auto callback = [self, listener_epoch](std::size_t index) {
+                if (!self || index != 0) return;
+                QMetaObject::invokeMethod(self, [self, listener_epoch] {
+                    if (self) self->dispatch_registered_hotkey(8, listener_epoch);
+                }, Qt::QueuedConnection);
+            };
+            const std::array values{candidate};
+            const auto actual = hotkey_listener_.start_with_conflict_fallback(values, callback);
+            if (actual.size() != 1) {
+                unregister_hotkeys();
+                throw std::invalid_argument("Windows вернула неполный набор горячих клавиш");
+            }
+            auto complete = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+            complete.push_back(actual.front());
+            try { wardogs::validate_unique_hotkeys(complete); }
+            catch (const std::invalid_argument&) {
+                unregister_hotkeys();
+                wardogs::log_warning("pause.resume_only_candidate_conflicts key=" +
+                    one_line_utf8(qtext(actual.front().display)));
+                continue;
+            }
+            pause_hotkey_ = actual.front();
+            wardogs::log_info("pause.resume_only_registered key=" +
+                one_line_utf8(qtext(pause_hotkey_.display)));
+            return;
+        }
+        throw std::invalid_argument("Нет свободного сочетания для паузы захвата");
     }
 
     QString register_hotkeys(wardogs::AppSettings& settings, bool recover_conflicts = true) {
