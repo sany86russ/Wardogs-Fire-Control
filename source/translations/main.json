@@ -1626,5 +1626,9 @@
   {
     "ru": "Прогноз азимута: ",
     "en": "Bearing prediction: "
+  },
+  {
+    "ru": "Прицел считан: %1° · MIL %2",
+    "en": "Sight read: %1° · MIL %2"
   }
 ]

@@ -1211,8 +1211,14 @@
     "ru": "Подписи X/Y не образуют одну пару координат рядом с отметкой.",
     "en": "The X/Y labels do not form a single coordinate pair near the marker."
   },
-  {"ru": "Автоматическая история требует отдельного файла recent-fire-missions.json", "en": "Automatic history requires a separate recent-fire-missions.json file"},
-  {"ru": "Некорректные данные пристрелки", "en": "Invalid ranging data"},
+  {
+    "ru": "Автоматическая история требует отдельного файла recent-fire-missions.json",
+    "en": "Automatic history requires a separate recent-fire-missions.json file"
+  },
+  {
+    "ru": "Некорректные данные пристрелки",
+    "en": "Invalid ranging data"
+  },
   {
     "ru": "Азимут должен быть конечным числом",
     "en": "The bearing must be a finite number"
@@ -1240,5 +1246,45 @@
   {
     "ru": "Неверный размер буфера изображения Windows OCR",
     "en": "Invalid Windows OCR image buffer size"
+  },
+  {
+    "ru": "Контекст выстрела изменился",
+    "en": "Shot context has changed"
+  },
+  {
+    "ru": "Выстрел больше не связан однозначно с попаданием",
+    "en": "The shot can no longer be uniquely associated with this impact"
+  },
+  {
+    "ru": "Показания прицела не относятся к сохранённому выстрелу",
+    "en": "The sight readings do not belong to the saved shot"
+  },
+  {
+    "ru": "Сохранённый выстрел устарел. Поправка не применена.",
+    "en": "The saved shot has expired. Correction was not applied."
+  },
+  {
+    "ru": "Выстрел не связан однозначно с показаниями прицела. Поправка не применена.",
+    "en": "The shot is not uniquely associated with sight readings. Correction was not applied."
+  },
+  {
+    "ru": "Для этой пристрелки нужны подтверждённые показания прицела. Поправка не применена.",
+    "en": "This ranging session requires verified sight readings. Correction was not applied."
+  },
+  {
+    "ru": "Ошибка обработки намерения выстрела.",
+    "en": "Fire intention callback failed."
+  },
+  {
+    "ru": "Не указан обработчик мыши.",
+    "en": "No mouse callback was provided."
+  },
+  {
+    "ru": "Не удалось включить обработчик мыши (код Windows ",
+    "en": "Could not enable the mouse listener (Windows code "
+  },
+  {
+    "ru": "Обработчик мыши включён.",
+    "en": "Mouse listener enabled."
   }
 ]

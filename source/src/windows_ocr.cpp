@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cmath>
 #include <mutex>
 #include <stdexcept>
 #include <vector>
@@ -233,6 +234,28 @@ struct WindowsOcr::Impl {
         OcrResult recognized;
         recognized.text = result.Text().c_str();
         recognized.line_count = result.Lines().Size();
+        const auto angle = result.TextAngle();
+        if (angle) recognized.text_angle_deg = angle.Value();
+        recognized.word_geometry_verified = !angle || std::abs(angle.Value()) < 0.0001;
+        if (!recognized.word_geometry_verified) return recognized;
+        for (const auto& line : result.Lines()) {
+            for (const auto& word : line.Words()) {
+                const auto bounds = word.BoundingRect();
+                const auto clamp_x = [&](double value) {
+                    return std::clamp(static_cast<int>(value), 0, image.width);
+                };
+                const auto clamp_y = [&](double value) {
+                    return std::clamp(static_cast<int>(value), 0, image.height);
+                };
+                const ImageRect physical{
+                    clamp_x(std::floor(bounds.X / scale)),
+                    clamp_y(std::floor(bounds.Y / scale)),
+                    clamp_x(std::ceil((bounds.X + bounds.Width) / scale)),
+                    clamp_y(std::ceil((bounds.Y + bounds.Height) / scale))};
+                if (physical.right > physical.left && physical.bottom > physical.top)
+                    recognized.words.push_back({word.Text().c_str(), physical});
+            }
+        }
         return recognized;
     }
 };

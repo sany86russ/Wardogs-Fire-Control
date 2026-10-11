@@ -27,6 +27,7 @@ If shortcuts conflict, the UI shows the combinations actually registered. Weak o
 | [Quick start](docs/QUICKSTART-EN.md) | Launching, coordinates, shortcuts, settings and troubleshooting |
 | [Calculations and limits](docs/CALCULATIONS-EN.md) | Coordinates, L81/SPH-2 tables, interpolation, elevation and local corrections |
 | [Architecture](docs/ARCHITECTURE-EN.md) | Modules, threads, storage, OCR and checks |
+| [SPH-2 sight observation](docs/HUD-OBSERVATION-EN.md) | Actual HUD, shot-to-Alt+I association and evidence limits |
 | [Game interaction](docs/ANTICHEAT-EN.md) | System APIs, integration boundaries and anti-cheat |
 | [Release notes](docs/RELEASE-NOTES-EN.md) | Interface and calculation changes |
 | [Coordinate workflow, Russian](docs/COORDINATE-WORKFLOW-RESEARCH-RU.md) | Visible text sources and stale-result protection |

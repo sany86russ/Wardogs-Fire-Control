@@ -37,6 +37,13 @@ struct MapOcrSearchLayout {
 // Refuses noisy scenes with more than eight lines instead of dropping history.
 std::vector<ImageRect> find_chat_text_lines(const Image& image, std::stop_token stop = {});
 
+struct OcrWord {
+    std::wstring text;
+    // Bounds in physical pixels of the original input image, before the
+    // provider's internal upscaling. Geometry is evidence, not confidence.
+    ImageRect bounds;
+};
+
 struct OcrResult {
     std::wstring text;
     float confidence{};
@@ -62,6 +69,13 @@ struct OcrResult {
     // and the legacy independently captured fields leave them unavailable.
     std::optional<ImageRect> map_x_bounds;
     std::optional<ImageRect> map_y_bounds;
+    // Windows OCR retains word geometry for instrument scales. Ordinary CTC
+    // results leave this empty rather than inventing positions from text.
+    std::vector<OcrWord> words;
+    // Windows OCR rotates its word rectangles when TextAngle is nonzero.
+    // Such rectangles are withheld rather than advertised as capture pixels.
+    bool word_geometry_verified{};
+    std::optional<double> text_angle_deg;
 };
 
 struct OcrCoordinateAssessment {

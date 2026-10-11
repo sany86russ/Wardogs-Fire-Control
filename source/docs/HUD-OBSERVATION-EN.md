@@ -1,0 +1,54 @@
+# SPH-2 sight observation
+
+This document describes the experimental workflow prepared for 2.13. It retains the sight actually read before a fire input and helps associate it with a later Alt+I correction. The owner must verify compatibility with the current game build in the field. This workflow does not measure a hit percentage.
+
+## When observation runs
+
+Observation requires enabled game integration, SPH-2, a confirmed map, accepted gun and target coordinates, an available arc, and a foreground WARDOGS window. Capture and recognition run on a worker with one HUD frame in flight. Observation is disabled in the standalone manual calculator, diagnostic mode, while paused, and for L81. Showing manual coordinate fields does not itself change the operating mode.
+
+The observer uses screen pixels and text recognition. It does not aim, generate input, or read game-process memory. Window caption and class checks restrict capture but do not authenticate a game process. Screen capture uses standard [Microsoft GDI APIs](https://learn.microsoft.com/en-us/windows/win32/gdi/capturing-an-image).
+
+## What is measured
+
+The reader accepts a supported optic layout with actual reticle strokes, matching left and right tick rows, numeric labels, and the inner bearing ruler. The left ladder is RNG in metres; the right ladder is MIL. The reader checks the printed 10-MIL and 15-degree grids and interpolates at detected pixel anchors. RNG remains a displayed range reading; it is not converted into a fallback MIL value.
+
+[Windows OCR](https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrengine?view=winrt-26100) returns text and word positions. OCR geometry needs independent validation: nonzero `TextAngle` can place coordinates in a rotated image, as explained by [BoundingRect](https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrword.boundingrect?view=winrt-26100). Ambiguous labels, unverified geometry, and excessive uncertainty cause refusal. Screen centre and the calculator's last command cannot substitute for a missing sight.
+
+Ammunition is a separate channel beneath an identified SPH-2 single-shell icon. The machine-gun counter is excluded. Available stabilization and ASL labels remain separate observations. MIL is the HUD reading, not a verified physical barrel angle. Bearing, MIL, and reticle position are not measurements of chassis attitude.
+
+## Fire input and Alt+I
+
+1. Two distinct fresh frames must agree on the sight and context. Time is recorded before capture, rather than after recognition.
+2. A physical left-button press freezes an available sight captured **before the press**. The click alone cannot create an observed discharge. Later aiming changes cannot overwrite the frozen values.
+3. A verified counter decrement of exactly one needs a second independent frame with the same count. This is an observed association between input and HUD. The counter may change during reload; its relationship to the physical firing instant is unverified. When reload hides the reticle, a separate counter reading can corroborate an already frozen sight but cannot provide a new one.
+4. Alt+I requires one uniquely eligible outstanding observation with the same map, base, arc, HUD generation, target, and target height. Multiple observations, a new unresolved press, or a changed target prohibit substituting the latest shot.
+5. Capture retains observation identity; recording validates it again. A failed correction releases the reservation. The observation is consumed only after an accepted correction, and repeated completion cannot consume it twice.
+
+## Time limits
+
+These are application policies, not measured flight or reload times.
+
+| Check | Default limit |
+| --- | --- |
+| Age of latest HUD capture | 1 second |
+| Separation of agreeing frames | 40 milliseconds to 2.5 seconds |
+| Agreement of readings | 0.05 degrees and 0.5 MIL |
+| Input confirmation window | 15 seconds |
+| Outstanding impact association | 120 seconds |
+| Queue capacity | 8 observations |
+
+Absolute bearing and MIL reading uncertainties are retained without reduction. Missing uncertainty remains unknown. Frame agreement does not establish coordinate accuracy or a landing within 10 metres.
+
+## Refusal and reset
+
+Pause, disabled integration, a map/base/arc change, a ranging reset, or switching to L81 cancels the old session. Foreground loss, region selection, busy coordinate recognition, or a missing HUD forbids new sight snapshots while retaining already frozen observations. An unreadable ammunition value is unknown evidence. Conflicting counts, replenishment, or multiple possible presses create ambiguity. One previous HUD frame cannot reliably distinguish a rapid map click from a firing intention; a click alone never confirms firing.
+
+Before HUD observations exist, the legacy path records `command_source=displayed_unverified`. An accepted correction using actual HUD readings starts a separate history. Assumed commands and HUD measurements are not mixed. After transition to HUD evidence, a missing sight cannot be replaced by an assumed command. An unknown layout or incompatible HUD version does not receive verified-reading status.
+
+## Evidence limits
+
+The log separates `sight_verified`, `discharge_observed`, and `physical_shot_verified`. For this HUD/counter association the last flag remains `0`: the application does not authenticate a physical shot, the identity of a selected impact, or a hit probability. Earlier `displayed_unverified` records do not prove that the player entered the displayed command or establish “99% within 10 metres.”
+
+The measured [MZ scale](https://github.com/Firepanda415/MZ-Wardogs/blob/5a60171796a24eb650e2202a9773a9890a17c48c/docs/sph2-scale.md) documents 73 screenshots and 264 pixels per 10 MIL at 3840×2160. This is HUD observation; the author explicitly limits conclusions about barrel angle and landings. Reader checks use individual retained public-video frames covering a limited set of layouts. Some frames have no visible game build number. These frames, synthetic tests, and a controlled test window do not establish current game physics or compatibility across all resolutions, FOV settings, and versions.
+
+The technical contract is in [shot_observation.hpp](../include/wardogs/shot_observation.hpp); pixel and label interpretation is in [sph_hud.cpp](../src/sph_hud.cpp). Field verification needs linked actual pre-press sight → observed counter transition → selected impact under an unchanged context, retaining uncertainty and capture timestamps.
