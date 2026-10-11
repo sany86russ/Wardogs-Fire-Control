@@ -27,6 +27,7 @@
 #include "wardogs/windows_ocr.hpp"
 #include "wardogs/sph_hud_ocr.hpp"
 #include "wardogs/shot_observation.hpp"
+#include "wardogs/aim_alignment.hpp"
 
 #include "pinned_result_window.hpp"
 #include "vehicle_solution_widget.hpp"
@@ -2210,6 +2211,76 @@ public:
         check("SPH2_cross_window_press_batch_preserves_ambiguity_when_first_press_is_outside_game",
               hud_context_ && cross_window_capture_rejected && observation_count() == 0);
         reset_continuous_calibration(); show_result(*target_);
+        // Explicit synthetic diagnostic evidence checks UI integration only.
+        // It is not a captured game reading or a field accuracy measurement.
+        enter_pinned_mode();
+        const auto alignment_geometry = pinned_window_->geometry();
+        const auto alignment_command = wardogs::displayed_firing_command(*high_result_);
+        const auto seed_alignment = [&](double bearing_delta, double mil_delta) {
+            observed_shots_ = wardogs::ShotObservationSession{};
+            hud_context_ = *current_shot_context();
+            ++hud_epoch_;
+            const auto captured = GetTickCount64() - 100;
+            observed_shots_.begin_context(*hud_context_, hud_epoch_, captured - 101);
+            wardogs::AcceptedSightFrame frame;
+            frame.id = 1; frame.timestamp_ms = captured - 100; frame.epoch = hud_epoch_;
+            frame.context = *hud_context_; frame.foreground_verified = true;
+            frame.firing_snapshot = {*target_, wardogs::Arc::high,
+                alignment_command.bearing_deg + bearing_delta, alignment_command.mil + mil_delta,
+                target_height_delta(*target_)};
+            frame.stabilized = true; frame.ammo = 40; frame.ammo_channel = "synthetic_shell";
+            frame.bearing_uncertainty_deg = 0.05; frame.mil_uncertainty = 0.2;
+            (void)observed_shots_.observe(frame, frame.timestamp_ms);
+            frame.id = 2; frame.timestamp_ms = captured;
+            (void)observed_shots_.observe(frame, captured);
+            wardogs::SphHudReading reading;
+            reading.refusal = wardogs::SphHudRefusal::none;
+            reading.pose = wardogs::SphHudPose{frame.firing_snapshot.mil,
+                frame.firing_snapshot.bearing_deg, 0.2, 0.05, {0.5, 0.5}};
+            reading.stabilized = true;
+            hud_reading_ = reading; hud_reading_at_ms_ = captured;
+            hud_reading_target_ = target_; hud_reading_epoch_ = hud_epoch_;
+            sync_pinned_status();
+        };
+        const auto aim_snapshot = [&](const char* name) {
+            const auto directory = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("Testing/aim-alignment"));
+            QDir().mkpath(directory);
+            QApplication::processEvents();
+            const auto path = QDir(directory).filePath(QStringLiteral("%1-%2-%3.png")
+                .arg(settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru"),
+                     QGuiApplication::platformName(), QString::fromUtf8(name)));
+            return pinned_window_->grab().save(path, "PNG");
+        };
+        const auto aim_label = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedAimAlignment"));
+        seed_alignment(0.0, 0.0);
+        check("SPH2_mini_green_requires_fresh_stable_stabilized_actual_sight",
+            current_aim_alignment().state == wardogs::AimAlignmentState::aligned && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("aligned") &&
+            !aim_label->text().isEmpty() && !aim_label->toolTip().isEmpty() && aim_snapshot("aligned"));
+        seed_alignment(0.4, 2.0);
+        check("SPH2_mini_orange_shows_small_actual_command_difference",
+            current_aim_alignment().state == wardogs::AimAlignmentState::close && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("close") && aim_snapshot("close"));
+        seed_alignment(4.0, 20.0);
+        check("SPH2_mini_red_shows_verified_large_actual_command_difference",
+            current_aim_alignment().state == wardogs::AimAlignmentState::misaligned && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("misaligned") && aim_snapshot("misaligned"));
+        seed_alignment(0.0, 0.0);
+        hud_reading_at_ms_ = GetTickCount64() - 1001;
+        sync_pinned_status();
+        check("SPH2_mini_stale_reading_cannot_keep_green_or_move_card",
+            current_aim_alignment().state == wardogs::AimAlignmentState::unknown && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown") &&
+            pinned_window_->geometry() == alignment_geometry && aim_snapshot("unknown"));
+        seed_alignment(0.0, 0.0);
+        ++hud_reading_epoch_;
+        sync_pinned_status();
+        check("SPH2_mini_old_context_cannot_keep_a_green_ready_border",
+            current_aim_alignment().state == wardogs::AimAlignmentState::unknown && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        clear_hud_reading();
+        exit_game_mode();
+        reset_continuous_calibration(); show_result(*target_);
         settings_.ghost_reticle.preferred_arc = wardogs::Arc::low;
         base_input_->setText(QStringLiteral("80 80")); manual_base();
         // Map changes deliberately clear earlier history. Seed this assertion
@@ -2947,6 +3018,8 @@ private:
     std::uintptr_t hud_window_{};
     std::optional<wardogs::SphHudReading> hud_reading_;
     std::uint64_t hud_reading_at_ms_{};
+    std::optional<wardogs::Point> hud_reading_target_;
+    std::uint64_t hud_reading_epoch_{};
     std::string hud_error_;
     std::atomic_bool busy_{false};
     SelectionOverlay selector_;
@@ -4779,6 +4852,8 @@ private:
 
     void clear_hud_reading() {
         hud_reading_.reset();
+        hud_reading_target_.reset();
+        hud_reading_epoch_ = 0;
         if (fire_control_compact_) fire_control_compact_->setToolTip({});
         sync_pinned_status();
     }
@@ -4983,6 +5058,8 @@ private:
                 self->hud_error_.clear();
                 self->hud_reading_ = *reading;
                 self->hud_reading_at_ms_ = captured_at;
+                self->hud_reading_target_ = target;
+                self->hud_reading_epoch_ = epoch;
                 self->hud_window_ = reinterpret_cast<std::uintptr_t>(window);
                 const auto& pose = *reading->pose;
                 wardogs::AcceptedSightFrame frame;
@@ -5729,6 +5806,67 @@ private:
         sync_pinned_status();
     }
 
+    wardogs::AimAlignment current_aim_alignment() const {
+        wardogs::AimAlignmentInput input;
+        input.now_ms = GetTickCount64();
+        const auto arc = effective_vehicle_arc();
+        const auto context = current_shot_context();
+        input.current_context_valid = vehicle_mode_ && settings_.game_integration_enabled &&
+            !application_paused_ && !busy_ && !selecting_ && !failure_state_ && !ocr_hold_ &&
+            !QApplication::activeModalWidget() && context && hud_context_ && *context == *hud_context_ &&
+            hud_reading_epoch_ == hud_epoch_ && hud_reading_target_ == target_ &&
+            (diagnostic_ || (wardogs_is_foreground() && GetForegroundWindow() ==
+                reinterpret_cast<HWND>(hud_window_)));
+        if (!arc || !hud_reading_ || !hud_reading_->accepted()) return wardogs::evaluate_aim_alignment(input);
+        const auto& desired = *arc == wardogs::Arc::high ? high_result_ : low_result_;
+        if (!desired) return wardogs::evaluate_aim_alignment(input);
+        const auto command = wardogs::displayed_firing_command(*desired);
+        input.desired_bearing_deg = command.bearing_deg;
+        input.desired_mil = command.mil;
+        input.actual_sight_verified = true;
+        input.actual_bearing_deg = hud_reading_->pose->bearing_deg;
+        input.actual_mil = hud_reading_->pose->sight_mil;
+        input.bearing_uncertainty_deg = hud_reading_->pose->bearing_uncertainty_deg;
+        input.mil_uncertainty = hud_reading_->pose->mil_uncertainty;
+        input.captured_at_ms = hud_reading_at_ms_;
+        input.stable_pair = observed_shots_.has_stable_sight();
+        input.stabilized = hud_reading_->stabilized;
+        return wardogs::evaluate_aim_alignment(input);
+    }
+
+    void sync_pinned_aim_alignment() {
+        if (!pinned_window_) return;
+        const auto alignment = current_aim_alignment();
+        QString label = wardogs::i18n::text(QStringLiteral("Прицел: нет данных"));
+        if (alignment.state == wardogs::AimAlignmentState::aligned)
+            label = wardogs::i18n::text(QStringLiteral("Наводка совпадает"));
+        else if (alignment.state == wardogs::AimAlignmentState::misaligned)
+            label = wardogs::i18n::text(QStringLiteral("Наводка не совпадает"));
+        else if (alignment.state == wardogs::AimAlignmentState::close)
+            label = wardogs::i18n::text(alignment.reason == wardogs::AimAlignmentReason::unstabilized
+                ? QStringLiteral("Стабилизируйте орудие") : QStringLiteral("Уточните наводку"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::awaiting_stable_sight)
+            label = wardogs::i18n::text(QStringLiteral("Проверяем прицел"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::unknown_stabilization)
+            label = wardogs::i18n::text(QStringLiteral("Стабилизация не считана"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::stale_capture)
+            label = wardogs::i18n::text(QStringLiteral("Обновляем прицел"));
+        QString details = wardogs::i18n::text(QStringLiteral("Сравнение с текущей командой · не прогноз попадания"));
+        if (alignment.bearing_delta_deg && alignment.mil_delta) {
+            const auto signed_value = [](double value, int decimals) {
+                const auto result = QString::number(value, 'f', decimals);
+                return value > 0.0 ? QStringLiteral("+") + result : result;
+            };
+            details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("До команды: азимут %1° · MIL %2"))
+                .arg(signed_value(*alignment.bearing_delta_deg, 2), signed_value(*alignment.mil_delta, 1));
+            if (hud_reading_ && hud_reading_->pose)
+                details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("Чтение: ±%1° · ±%2 MIL"))
+                    .arg(hud_reading_->pose->bearing_uncertainty_deg, 0, 'f', 2)
+                    .arg(hud_reading_->pose->mil_uncertainty, 0, 'f', 2);
+        }
+        pinned_window_->set_aim_alignment(alignment.state, label, details);
+    }
+
     void sync_pinned_status() {
         if (!pinned_window_) return;
         const auto arc = effective_vehicle_arc();
@@ -5786,6 +5924,7 @@ private:
                 workflow += QStringLiteral("\n") + fire_control_compact_->text();
         }
         pinned_window_->set_workflow_status(workflow, status_->text());
+        sync_pinned_aim_alignment();
     }
 
     void set_ghost_enabled(bool enabled) {

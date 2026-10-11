@@ -69,6 +69,7 @@ target_compile_definitions(ocr_preprocessing_benchmark PRIVATE UNICODE _UNICODE 
 target_compile_options(ocr_preprocessing_benchmark PRIVATE /W4 /permissive- /utf-8)
 
 add_library(wardogs_core
+    src/aim_alignment.cpp
     src/calculator.cpp
     src/continuous_calibration.cpp
     src/firing_analysis.cpp
@@ -195,6 +196,10 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASE-NOTES-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/ARCHITECTURE-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/ANTICHEAT-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/HUD-OBSERVATION-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/HUD-OBSERVATION-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/OCR-MODEL-EVALUATION-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/OCR-MODEL-EVALUATION-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/SUPPORT-APPROVAL-DRAFT-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/CALCULATIONS-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/COORDINATE-WORKFLOW-RESEARCH-RU.md"
@@ -230,7 +235,7 @@ install(FILES
 
 enable_testing()
 
-foreach(hud_test IN ITEMS sph_hud shot_observation)
+foreach(hud_test IN ITEMS sph_hud shot_observation aim_alignment)
     add_executable(wardogs_${hud_test}_tests tests/${hud_test}_tests.cpp)
     target_link_libraries(wardogs_${hud_test}_tests PRIVATE wardogs_core)
     if(MSVC)

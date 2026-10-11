@@ -43,7 +43,22 @@ Absolute bearing and MIL reading uncertainties are retained without reduction. M
 
 Pause, disabled integration, a map/base/arc change, a ranging reset, or switching to L81 cancels the old session. Foreground loss, region selection, busy coordinate recognition, or a missing HUD forbids new sight snapshots while retaining already frozen observations. An unreadable ammunition value is unknown evidence. Conflicting counts, replenishment, or multiple possible presses create ambiguity. One previous HUD frame cannot reliably distinguish a rapid map click from a firing intention; a click alone never confirms firing.
 
-Before HUD observations exist, the legacy path records `command_source=displayed_unverified`. An accepted correction using actual HUD readings starts a separate history. Assumed commands and HUD measurements are not mixed. After transition to HUD evidence, a missing sight cannot be replaced by an assumed command. An unknown layout or incompatible HUD version does not receive verified-reading status.
+Until the first complete sight is accepted, the legacy correction remains available with `command_source=displayed_unverified`. Partially read ammunition or stabilization does not activate strict shot association or block that path. The first complete sight starts a fresh counter sequence. An accepted correction using actual HUD readings starts a separate history. Assumed commands and HUD measurements are not mixed. After transition to HUD evidence, a missing sight cannot be replaced by an assumed command until an explicit context reset. An unknown layout or incompatible HUD version does not receive verified-reading status.
+
+## Mini-card border
+
+The border compares a fresh observed sight with the calculator's current rounded command, including accepted ranging corrections. It does not predict a hit or control the gun. No additional user setting is required.
+
+| Colour | Condition |
+| --- | --- |
+| Green | Two agreeing frames and known enabled stabilization; difference including absolute OCR uncertainty is at most 0.2 degrees and 1 MIL |
+| Orange | A reliably read smaller difference, or known disabled stabilization |
+| Red | Even after allowing for OCR uncertainty, difference exceeds 1 degree or 10 MIL |
+| Neutral | No complete sight, unknown stabilization or uncertainty, a frame older than one second, changed context, paused application, or lost game focus |
+
+A label repeats the colour state. Its tooltip shows bearing and MIL adjustments toward the command; positive values mean an increase from the current reading. Border updates do not change the card's dimensions or position. Changing the target, map, or arc clears an old green state.
+
+Inner-compass labels require verified individual OCR-word coordinates and alignment with the corresponding major tick within 3 pixels at a 720-pixel client height. Recognition-region geometry is never presented as word position. The top navigation ruler cannot replace the inner compass. Labels with a different phase relative to the ticks cause refusal.
 
 ## Evidence limits
 

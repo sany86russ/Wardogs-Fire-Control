@@ -1630,5 +1630,49 @@
   {
     "ru": "Прицел считан: %1° · MIL %2",
     "en": "Sight read: %1° · MIL %2"
+  },
+  {
+    "ru": "Прицел: нет данных",
+    "en": "Sight: unavailable"
+  },
+  {
+    "ru": "Наводка совпадает",
+    "en": "Aim matches"
+  },
+  {
+    "ru": "Наводка не совпадает",
+    "en": "Aim differs"
+  },
+  {
+    "ru": "Стабилизируйте орудие",
+    "en": "Stabilize the gun"
+  },
+  {
+    "ru": "Уточните наводку",
+    "en": "Adjust the aim"
+  },
+  {
+    "ru": "Проверяем прицел",
+    "en": "Checking sight"
+  },
+  {
+    "ru": "Стабилизация не считана",
+    "en": "Stabilization unread"
+  },
+  {
+    "ru": "Обновляем прицел",
+    "en": "Refreshing sight"
+  },
+  {
+    "ru": "Сравнение с текущей командой · не прогноз попадания",
+    "en": "Agreement with the current command · no hit prediction"
+  },
+  {
+    "ru": "До команды: азимут %1° · MIL %2",
+    "en": "To command: bearing %1° · MIL %2"
+  },
+  {
+    "ru": "Чтение: ±%1° · ±%2 MIL",
+    "en": "Reading: ±%1° · ±%2 MIL"
   }
 ]

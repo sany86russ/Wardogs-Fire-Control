@@ -50,6 +50,49 @@ constexpr double maximum_font_scale = 2.5;
 constexpr int header_height = 28;
 constexpr int header_extra = header_height + 6;
 
+QString aim_alignment_color(wardogs::AimAlignmentState state) {
+    switch (state) {
+    case wardogs::AimAlignmentState::aligned: return QStringLiteral("#4ade80");
+    case wardogs::AimAlignmentState::close: return QStringLiteral("#fbbf24");
+    case wardogs::AimAlignmentState::misaligned: return QStringLiteral("#f87171");
+    default: return QStringLiteral("#94a8c1");
+    }
+}
+
+QString aim_alignment_name(wardogs::AimAlignmentState state) {
+    switch (state) {
+    case wardogs::AimAlignmentState::aligned: return QStringLiteral("aligned");
+    case wardogs::AimAlignmentState::close: return QStringLiteral("close");
+    case wardogs::AimAlignmentState::misaligned: return QStringLiteral("misaligned");
+    default: return QStringLiteral("unknown");
+    }
+}
+
+// Paint inside the existing transparent border. Keeping the stylesheet's
+// border allocation unchanged preserves the card canvas and child geometry.
+class AimAlignmentFrame final : public QFrame {
+public:
+    void set_alignment(wardogs::AimAlignmentState state) {
+        state_ = state;
+        setProperty("aimAlignment", aim_alignment_name(state));
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QFrame::paintEvent(event);
+        if (state_ == wardogs::AimAlignmentState::unknown || property("error").toBool()) return;
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(aim_alignment_color(state_)), 2.0));
+        painter.drawRoundedRect(QRectF(rect()).adjusted(1.0, 1.0, -1.0, -1.0), 9.0, 9.0);
+    }
+
+private:
+    wardogs::AimAlignmentState state_{wardogs::AimAlignmentState::unknown};
+};
+
 QSize minimum_size(bool vehicle) { return vehicle ? QSize{480, 128 + header_extra} : QSize{320, 96 + header_extra}; }
 QSize default_size(bool vehicle) { return vehicle ? QSize{540, 148 + header_extra} : QSize{430, 112 + header_extra}; }
 
@@ -307,7 +350,7 @@ PinnedResultWindow::PinnedResultWindow(
     setWindowIcon(wardogs_application_icon());
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
-    frame_ = new QFrame;
+    frame_ = new AimAlignmentFrame;
     frame_->setObjectName(QStringLiteral("pinnedFrame"));
     frame_->setProperty("error", false);
     auto* layout = new QVBoxLayout(frame_);
@@ -331,6 +374,12 @@ PinnedResultWindow::PinnedResultWindow(
     lock_hint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     lock_hint_->hide();
     header_layout->addWidget(lock_hint_, 1);
+    aim_alignment_status_ = new QLabel(header);
+    aim_alignment_status_->setObjectName(QStringLiteral("pinnedAimAlignment"));
+    aim_alignment_status_->setTextFormat(Qt::PlainText);
+    aim_alignment_status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    aim_alignment_status_->hide();
+    header_layout->addWidget(aim_alignment_status_, 1);
     const auto header_button = [header, header_layout](const QString& name) {
         auto* button = new QToolButton(header);
         button->setObjectName(name);
@@ -687,6 +736,7 @@ void PinnedResultWindow::configure_pause_control(bool paused, const std::wstring
                                                std::function<void()> toggle) {
     const bool changed = application_paused_ != paused || pause_hotkey_ != hotkey;
     application_paused_ = paused;
+    if (paused) set_aim_alignment(wardogs::AimAlignmentState::unknown, {}, {});
     pause_hotkey_ = hotkey;
     pause_toggle_ = std::move(toggle);
     if (changed) update_header_controls();
@@ -995,6 +1045,7 @@ bool PinnedResultWindow::flush_preferences() {
 }
 
 void PinnedResultWindow::set_mode(bool vehicle_mode) {
+    const bool mode_changed = vehicle_mode != vehicle_mode_;
     mortar_panel_->setVisible(!vehicle_mode);
     vehicle_panel_->setVisible(vehicle_mode);
     if (vehicle_mode != vehicle_mode_) {
@@ -1004,6 +1055,7 @@ void PinnedResultWindow::set_mode(bool vehicle_mode) {
         setMinimumSize(minimum_size(vehicle_mode_) + QSize(0, workflow_status_extra()));
         resize(requested.expandedTo(minimumSize()));
     }
+    if (mode_changed || !vehicle_mode) set_aim_alignment(wardogs::AimAlignmentState::unknown, {}, {});
     update_header_controls();
     apply_font_scale();
 }
@@ -1034,10 +1086,28 @@ void PinnedResultWindow::set_selected_arc(std::optional<wardogs::Arc> arc) {
 void PinnedResultWindow::set_error(bool error) {
     if (frame_->property("error").toBool() == error) return;
     frame_->setProperty("error", error);
+    if (error) set_aim_alignment(wardogs::AimAlignmentState::unknown, {}, {});
     frame_->style()->unpolish(frame_);
     frame_->style()->polish(frame_);
     frame_->update();
     if (vehicle_mode_) apply_font_scale();
+}
+
+void PinnedResultWindow::set_aim_alignment(wardogs::AimAlignmentState state,
+                                           const QString& label, const QString& details) {
+    const bool enabled = vehicle_mode_ && !application_paused_ && !frame_->property("error").toBool();
+    const auto effective = enabled ? state : wardogs::AimAlignmentState::unknown;
+    static_cast<AimAlignmentFrame*>(frame_)->set_alignment(effective);
+    const auto shown_label = enabled ? label : QString{};
+    const auto description = details.isEmpty() ? shown_label : details;
+    aim_alignment_status_->setText(shown_label);
+    aim_alignment_status_->setToolTip(description);
+    aim_alignment_status_->setAccessibleName(shown_label);
+    aim_alignment_status_->setAccessibleDescription(description);
+    aim_alignment_status_->setProperty("aimAlignment", aim_alignment_name(effective));
+    aim_alignment_status_->setStyleSheet(QStringLiteral("color:%1;font-size:11px;font-weight:600;")
+        .arg(aim_alignment_color(effective)));
+    aim_alignment_status_->setVisible(enabled && !shown_label.isEmpty());
 }
 
 int PinnedResultWindow::workflow_status_extra() const {

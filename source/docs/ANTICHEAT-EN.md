@@ -1,6 +1,6 @@
 # WARDOGS Fire Control: system interaction and game rules
 
-Reviewed on October 7, 2026. This document describes the audited 2.5.1 implementation and separately identifies historical dependency checks. Building the application, verifying Windows API behavior and complying with publisher rules are different kinds of validation. BULKHEAD/Team17 approval for this application is unknown; freedom from bans cannot be promised. This is an English translation of the retained audit, not a new review of current publisher policies.
+Passive HUD observation reviewed again on October 12, 2026. This document describes the current source implementation and separately identifies historical dependency checks. Building the application, verifying Windows API behavior and complying with publisher rules are different kinds of validation. BULKHEAD/Team17 approval for this application is unknown; freedom from bans cannot be promised.
 
 ## What was officially published
 
@@ -23,7 +23,7 @@ Embark has primary Elytra installation documentation for THE FINALS and a separa
 | Hotkeys | `RegisterHotKey`, a separate `WM_HOTKEY` message-queue thread, only configured combinations | Windows reserves these combinations; conflicts are visible in the application. It does not monitor all keystrokes |
 | Middle mouse button | With game integration, `WH_MOUSE_LL` serves enabled middle-button capture and, in SPH-2 mode, physical left-button fire intentions | Coordinates are read near the cursor after accepting the gun; a fire intention is separately correlated with HUD evidence and does not verify a physical shot |
 | Screenshot | GDI `GetDC`/`BitBlt`, limited to 16 million pixels. The draft is searched for in the upper-left quarter of the client RECT; both map fields come from one screenshot near the cursor, within the client RECT. A complete row for the required axis is selected in each field; a cursor fragment at the edge is separated from the text. A custom region remains optional | Foreground HWND is checked before/after capture; map reading additionally checks cursor and geometry. Caption/class do not prove process identity; a black/incomplete screenshot is not repaired by bypassing protection |
-| Card and sight | Separate Qt windows over the screen; click transparency changes only on the application's own windows | No injection into the game's graphics engine. The sight itself remains a feature with unknown publisher approval |
+| Card and sight | Separate Qt windows over the screen; click transparency changes only on the application's own windows. Border colours compare the observed HUD with the calculator command | The border updates only the application's own window, without aiming, automatic fire, or graphics-engine injection. Publisher approval remains unknown |
 | Active-window check | WARDOGS/WardogsClient title and UnrealWindow class | This is an approximate window check; it does not prove process identity and is not a security boundary |
 | Files and launch | Own application folder, models/settings/log; user privileges through `asInvoker` | The working application does not modify the game installation or launch anti-cheat/the game as administrator |
 
