@@ -6492,19 +6492,24 @@ private:
                 unregister_hotkeys();
                 throw std::invalid_argument("Windows вернула неполный набор горячих клавиш");
             }
-            auto complete = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
-            complete.push_back(actual.front());
-            try { wardogs::validate_unique_hotkeys(complete); }
-            catch (const std::invalid_argument&) {
+            try {
+                auto complete = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+                complete.push_back(actual.front());
+                try { wardogs::validate_unique_hotkeys(complete); }
+                catch (const std::invalid_argument&) {
+                    unregister_hotkeys();
+                    wardogs::log_warning("pause.resume_only_candidate_conflicts key=" +
+                        one_line_utf8(qtext(actual.front().display)));
+                    continue;
+                }
+                pause_hotkey_ = actual.front();
+                wardogs::log_info("pause.resume_only_registered key=" +
+                    one_line_utf8(qtext(pause_hotkey_.display)));
+                return;
+            } catch (...) {
                 unregister_hotkeys();
-                wardogs::log_warning("pause.resume_only_candidate_conflicts key=" +
-                    one_line_utf8(qtext(actual.front().display)));
-                continue;
+                throw;
             }
-            pause_hotkey_ = actual.front();
-            wardogs::log_info("pause.resume_only_registered key=" +
-                one_line_utf8(qtext(pause_hotkey_.display)));
-            return;
         }
         throw std::invalid_argument("Нет свободного сочетания для паузы захвата");
     }
