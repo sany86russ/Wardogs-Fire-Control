@@ -3,6 +3,7 @@
 #include "wardogs/vehicle_ballistics.hpp"
 
 #include <cstddef>
+#include <array>
 #include <span>
 #include <utility>
 #include <vector>
@@ -55,13 +56,20 @@ struct ObservationAssessment {
     // projected to metres at this range using the sight table's local slope.
     // This describes observed consistency, not a hit radius or probability.
     double empirical_scatter_m{};
+    // A provisional bearing-only prediction from independent targets on this
+    // stationary gun/arc. MIL remains local; this is not a hit probability.
+    bool bearing_prediction_applied{};
+    std::size_t bearing_prediction_target_count{};
+    double bearing_prediction_offset_deg{};
+    double bearing_prediction_residual_m{};
 };
 
 class ContinuousCalibration {
 public:
     ContinuousCalibration(
         Point base, PlatformCalibration baseline,
-        ContinuousCorrectionMode mode = ContinuousCorrectionMode::platform_refinement);
+        ContinuousCorrectionMode mode = ContinuousCorrectionMode::platform_refinement,
+        bool enable_bearing_prediction = false);
 
     [[nodiscard]] CorrectedSolution solution(
         Point target, Arc arc, double height_delta_m = 0.0) const;
@@ -73,6 +81,9 @@ public:
     [[nodiscard]] ObservationAssessment assess(
         Point target, Arc arc, double height_delta_m = 0.0) const;
     void clear();
+    // Keep local observations/history, but require new independent targets
+    // before transferring a prediction after an unobserved change of pose.
+    void invalidate_bearing_prediction() noexcept;
     [[nodiscard]] std::size_t sample_count() const noexcept;
     [[nodiscard]] const PlatformCalibration& global_calibration() const noexcept;
     [[nodiscard]] double global_rotation_adjustment_deg() const noexcept;
@@ -114,6 +125,19 @@ private:
         Point target, Arc arc, double height_delta_m) const;
     void refresh_offsets();
     void refit_global_calibration(std::span<const std::size_t> target_groups);
+    void rebuild_bearing_prediction();
+    [[nodiscard]] double predicted_bearing(Point target, Arc arc,
+        double height_delta_m, ObservationAssessment& assessment) const;
+
+    struct BearingPrior {
+        bool valid{};
+        std::size_t targets{};
+        double offset_deg{};
+        double validation_residual_m{};
+        double bearing_start_deg{}, bearing_span_deg{};
+        double minimum_range_m{}, maximum_range_m{};
+        double minimum_elevation{}, maximum_elevation{};
+    };
 
     Point base_;
     PlatformCalibration baseline_;
@@ -122,6 +146,9 @@ private:
     std::vector<Sample> samples_;
     std::vector<double> confidence_scores_;
     std::vector<std::pair<double, double>> local_confidence_scores_;
+    bool enable_bearing_prediction_{};
+    std::size_t bearing_prediction_start_{};
+    std::array<BearingPrior, 2> bearing_priors_{};
 };
 
 }  // namespace wardogs

@@ -116,8 +116,10 @@ double local_metres_per_mil(const CorrectedSolution& direct) {
 
 ContinuousCalibration::ContinuousCalibration(Point base,
                                              PlatformCalibration baseline,
-                                             ContinuousCorrectionMode mode)
-    : base_(base), baseline_(baseline), active_(baseline), mode_(mode) {
+                                             ContinuousCorrectionMode mode,
+                                             bool enable_bearing_prediction)
+    : base_(base), baseline_(baseline), active_(baseline), mode_(mode),
+      enable_bearing_prediction_(enable_bearing_prediction) {
     require_finite(base.x, "Координаты орудия должны быть конечными числами");
     require_finite(base.y, "Координаты орудия должны быть конечными числами");
     validate_platform_calibration(baseline);
@@ -141,6 +143,13 @@ void ContinuousCalibration::clear() {
     confidence_scores_.clear();
     local_confidence_scores_.clear();
     active_ = baseline_;
+    bearing_prediction_start_ = 0;
+    bearing_priors_ = {};
+}
+
+void ContinuousCalibration::invalidate_bearing_prediction() noexcept {
+    bearing_prediction_start_ = samples_.size();
+    bearing_priors_ = {};
 }
 
 const PlatformCalibration& ContinuousCalibration::global_calibration() const noexcept {
@@ -365,6 +374,7 @@ ObservationAssessment ContinuousCalibration::add_landing(
                 updated.confidence_scores_[index] = updated.confidence(index, neighborhoods[index]);
         }
     }
+    updated.rebuild_bearing_prediction();
     // A valid impact is not enough: the refit or local compensation may push
     // this shot's target outside the supported sight settings. Reject before
     // committing so the displayed target keeps a usable firing solution.
@@ -376,7 +386,141 @@ ObservationAssessment ContinuousCalibration::add_landing(
     samples_.swap(updated.samples_);
     confidence_scores_.swap(updated.confidence_scores_);
     local_confidence_scores_.swap(updated.local_confidence_scores_);
+    bearing_priors_ = updated.bearing_priors_;
     return assessment;
+}
+
+void ContinuousCalibration::rebuild_bearing_prediction() {
+    bearing_priors_ = {};
+    // A common residual is learned only within this neutral, stationary gun
+    // context. It neither identifies a platform rotation nor alters MIL.
+    if (!enable_bearing_prediction_ || mode_ != ContinuousCorrectionMode::local_only ||
+        baseline_.rotation != identity_rotation()) return;
+    const auto median_without = [](const std::vector<double>& sorted, std::size_t omit) {
+        const auto count = sorted.size() - 1;
+        const auto at = [&](std::size_t index) { return sorted[index + (index >= omit ? 1U : 0U)]; };
+        return (at((count - 1) / 2) + at(count / 2)) * 0.5;
+    };
+    const auto fit = [&](std::vector<double> offsets) {
+        std::sort(offsets.begin(), offsets.end());
+        double signal = 0.0, residual = 0.0;
+        for (std::size_t index = 0; index < offsets.size(); ++index) {
+            signal += offsets[index] * offsets[index];
+            const auto error = offsets[index] - median_without(offsets, index);
+            residual += error * error;
+        }
+        const double strength = signal + residual > 0.0 ? signal / (signal + residual) : 0.0;
+        return strength * (offsets[(offsets.size() - 1) / 2] + offsets[offsets.size() / 2]) * 0.5;
+    };
+    for (auto arc : {Arc::low, Arc::high}) {
+        struct Group { Point target; double range, bearing, elevation; std::vector<double> offsets; };
+        std::vector<Group> groups;
+        std::vector<std::pair<Point, std::size_t>> membership;
+        for (std::size_t index = bearing_prediction_start_; index < samples_.size(); ++index) {
+            const auto& sample = samples_[index];
+            if (sample.arc != arc) continue;
+            const auto found = std::find_if(groups.begin(), groups.end(), [&](const auto& group) {
+                return same_target_group(group.target, sample.target);
+            });
+            std::size_t group_index = static_cast<std::size_t>(std::distance(groups.begin(), found));
+            if (found == groups.end()) {
+                const auto direction = impact_direction(base_, sample.target, arc, sample.target_height_delta_m);
+                groups.push_back({sample.target, sample.target_range_m, sample.target_bearing_deg,
+                    std::asin(std::clamp(direction[2], -1.0, 1.0)), {}});
+            }
+            groups[group_index].offsets.push_back(sample.bearing_offset_deg);
+            membership.emplace_back(sample.target, group_index);
+        }
+        if (groups.size() < 3) continue;
+        // Bridging neighbouring targets cannot manufacture independent groups.
+        bool independent = true;
+        for (std::size_t first = 0; first < membership.size() && independent; ++first)
+            for (std::size_t second = 0; second < first; ++second)
+                if (membership[first].second != membership[second].second &&
+                    same_target_group(membership[first].first, membership[second].first)) {
+                    independent = false; break;
+                }
+        if (!independent) continue;
+        std::vector<double> offsets, baseline_errors, validation_errors;
+        for (auto& group : groups) {
+            std::sort(group.offsets.begin(), group.offsets.end());
+            offsets.push_back((group.offsets[(group.offsets.size() - 1) / 2] +
+                               group.offsets[group.offsets.size() / 2]) * 0.5);
+        }
+        const auto same_sign = [&](double value) {
+            return std::abs(value) > 1e-10 && std::abs(value) < 90.0 &&
+                std::signbit(value) == std::signbit(offsets.front());
+        };
+        if (!std::all_of(offsets.begin(), offsets.end(), same_sign)) continue;
+        double baseline_squared = 0.0, validation_squared = 0.0;
+        for (std::size_t held_out = 0; held_out < groups.size(); ++held_out) {
+            std::vector<double> training;
+            for (std::size_t index = 0; index < groups.size(); ++index)
+                if (index != held_out) training.push_back(offsets[index]);
+            // Refit the strength inside EACH fold. A held-out target must not
+            // contribute to its own prediction, even through regularisation.
+            const double predicted = fit(std::move(training));
+            const double to_metres = groups[held_out].range * std::numbers::pi / 180.0;
+            const double before = std::abs(offsets[held_out]) * to_metres;
+            const double after = std::abs(offsets[held_out] - predicted) * to_metres;
+            baseline_errors.push_back(before); validation_errors.push_back(after);
+            baseline_squared += before * before; validation_squared += after * after;
+        }
+        std::sort(baseline_errors.begin(), baseline_errors.end());
+        std::sort(validation_errors.begin(), validation_errors.end());
+        const auto median = [](const auto& values) {
+            return (values[(values.size() - 1) / 2] + values[values.size() / 2]) * 0.5;
+        };
+        if (!(median(validation_errors) < median(baseline_errors) &&
+              validation_squared < baseline_squared &&
+              validation_errors.back() <= baseline_errors.back())) continue;
+        BearingPrior prior;
+        prior.valid = true; prior.targets = groups.size(); prior.offset_deg = fit(offsets);
+        prior.validation_residual_m = std::sqrt(validation_squared / groups.size());
+        prior.minimum_range_m = prior.maximum_range_m = groups.front().range;
+        prior.minimum_elevation = prior.maximum_elevation = groups.front().elevation;
+        std::vector<double> bearings;
+        for (const auto& group : groups) {
+            prior.minimum_range_m = std::min(prior.minimum_range_m, group.range);
+            prior.maximum_range_m = std::max(prior.maximum_range_m, group.range);
+            prior.minimum_elevation = std::min(prior.minimum_elevation, group.elevation);
+            prior.maximum_elevation = std::max(prior.maximum_elevation, group.elevation);
+            bearings.push_back(group.bearing);
+        }
+        std::sort(bearings.begin(), bearings.end());
+        double largest_gap = -1.0;
+        for (std::size_t index = 0; index < bearings.size(); ++index) {
+            const double next = index + 1 < bearings.size() ? bearings[index + 1] : bearings.front() + 360.0;
+            if (next - bearings[index] > largest_gap) {
+                largest_gap = next - bearings[index];
+                prior.bearing_start_deg = std::fmod(next, 360.0);
+            }
+        }
+        prior.bearing_span_deg = 360.0 - largest_gap;
+        // Opposite firing directions cannot support a constant bearing bias.
+        if (prior.bearing_span_deg >= 180.0) continue;
+        bearing_priors_[arc == Arc::low ? 0U : 1U] = prior;
+    }
+}
+
+double ContinuousCalibration::predicted_bearing(Point target, Arc arc,
+        double height_delta_m, ObservationAssessment& assessment) const {
+    const auto& prior = bearing_priors_[arc == Arc::low ? 0U : 1U];
+    if (!prior.valid) return 0.0;
+    const auto [bearing, range] = bearing_and_range(base_, target);
+    const auto direction = impact_direction(base_, target, arc, height_delta_m);
+    const double elevation = std::asin(std::clamp(direction[2], -1.0, 1.0));
+    const double relative = std::fmod(bearing - prior.bearing_start_deg + 360.0, 360.0);
+    constexpr double display_resolution_deg = 0.1;
+    if (range < prior.minimum_range_m - 1e-7 || range > prior.maximum_range_m + 1e-7 ||
+        elevation < prior.minimum_elevation - 1e-12 || elevation > prior.maximum_elevation + 1e-12 ||
+        (relative > prior.bearing_span_deg + display_resolution_deg &&
+         relative < 360.0 - display_resolution_deg)) return 0.0;
+    assessment.bearing_prediction_applied = true;
+    assessment.bearing_prediction_target_count = prior.targets;
+    assessment.bearing_prediction_offset_deg = prior.offset_deg;
+    assessment.bearing_prediction_residual_m = prior.validation_residual_m;
+    return prior.offset_deg;
 }
 
 ObservationAssessment ContinuousCalibration::assess(
@@ -409,7 +553,11 @@ ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
         squared_proximity_sum += near * near;
     }
     estimate.assessment.local_observation_count = local.size();
-    if (local.empty()) return estimate;
+    const double predicted = predicted_bearing(target, arc, height_delta_m, estimate.assessment);
+    if (local.empty()) {
+        estimate.correction.first = predicted;
+        return estimate;
+    }
 
     const double bearing_center = midpoint_weighted_median(bearings);
     const double mil_center = midpoint_weighted_median(mils);
@@ -439,6 +587,7 @@ ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
     };
 
     double bearing_sum = 0.0, mil_sum = 0.0;
+    double local_bearing_strength_sum = 0.0;
     double bearing_weight_sum = 0.0, mil_weight_sum = 0.0;
     double retained_weight_sum = 0.0, squared_retained_weight_sum = 0.0;
     double retained_bearing_sum = 0.0, retained_mil_sum = 0.0;
@@ -459,6 +608,7 @@ ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
         const double mil_weight = (mil_quality + robust_strength *
             (1.0 - mil_quality)) * item.weight * mil_retained;
         bearing_sum += bearing_weight * item.weight * sample.bearing_offset_deg;
+        local_bearing_strength_sum += bearing_weight * item.weight;
         mil_sum += mil_weight * item.weight * sample.mil_offset;
         bearing_weight_sum += bearing_weight;
         mil_weight_sum += mil_weight;
@@ -474,15 +624,20 @@ ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
         confidence_sum += item.weight * confidence_scores_[item.index];
     }
     const double spatial_strength = std::min(1.0, proximity_sum);
+    const double local_bearing_strength = spatial_strength * local_bearing_strength_sum / bearing_weight_sum;
     // Normalize components independently: disagreement must never turn a
     // measured same-sign bias into an unsupported correction toward zero.
     estimate.correction = {
-        spatial_strength * bearing_sum / bearing_weight_sum,
+        (1.0 - local_bearing_strength) * predicted + spatial_strength * bearing_sum / bearing_weight_sum,
         spatial_strength * mil_sum / mil_weight_sum};
+    estimate.assessment.bearing_prediction_offset_deg *= 1.0 - local_bearing_strength;
+    estimate.assessment.bearing_prediction_applied =
+        std::abs(estimate.assessment.bearing_prediction_offset_deg) > 1e-10;
     estimate.assessment.confidence = confidence_sum / proximity_sum;
     const double retained_count = effective_observations(
         retained_weight_sum, squared_retained_weight_sum);
-    estimate.assessment.provisional = retained_count < 3.0 - 1e-9;
+    estimate.assessment.provisional = estimate.assessment.bearing_prediction_applied ||
+        retained_count < 3.0 - 1e-9;
     estimate.assessment.scatter_available = retained_count >= 2.0 - 1e-9;
     if (!estimate.assessment.scatter_available) return estimate;
 
