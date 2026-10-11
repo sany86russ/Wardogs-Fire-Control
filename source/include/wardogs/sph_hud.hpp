@@ -176,6 +176,13 @@ SphHudReading read_sph_hud(const SphHudFrame& frame);
 // useful resolution. Occlusion or an ambiguous pixel pattern returns no layout.
 std::optional<SphHudLayout> extract_sph_hud_layout(const Image& image);
 
+// Bounded numeric-word candidates from separate dark-neutral pixel components
+// inside the supplied compass strip. Bounds are exact original-pixel unions,
+// without OCR padding, inferred values or tick anchoring. These candidates do
+// not verify a word: the provider must still supply actual unrotated OCR bounds.
+// More than twelve candidates or an invalid/oversized strip returns no regions.
+std::vector<ImageRect> extract_sph_hud_compass_word_regions(const Image& image, ImageRect strip);
+
 // Reload animation may hide the reticle while leaving the single-shell icon
 // and its counter intact. This path observes that separate channel only.
 std::optional<SphHudLayout> extract_sph_hud_supplemental_layout(const Image& image);

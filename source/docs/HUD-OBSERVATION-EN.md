@@ -60,6 +60,8 @@ A label repeats the colour state. Its tooltip shows bearing and MIL adjustments 
 
 Inner-compass labels require verified individual OCR-word coordinates and alignment with the corresponding major tick within 3 pixels at a 720-pixel client height. Recognition-region geometry is never presented as word position. The top navigation ruler cannot replace the inner compass. Labels with a different phase relative to the ticks cause refusal.
 
+When Windows OCR finds no words in the full strip, a bounded dark-neutral component search locates candidates in the original pixels. Each candidate is read with two padding variants; text and word coordinates must agree. More than 12 candidates, clipped glyphs or inconsistent readings cause refusal. This path does not infer numbers from ticks or relax ruler validation. A separate timer expires visual indication independently of the next OCR operation; it reads no pixels.
+
 ## Evidence limits
 
 The log separates `sight_verified`, `discharge_observed`, and `physical_shot_verified`. For this HUD/counter association the last flag remains `0`: the application does not authenticate a physical shot, the identity of a selected impact, or a hit probability. Earlier `displayed_unverified` records do not prove that the player entered the displayed command or establish “99% within 10 metres.”

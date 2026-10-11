@@ -32,9 +32,20 @@ int wmain(int argc, wchar_t** argv) {
         if (supplemental.ammunition) std::cout << "partial_shell_count=" << supplemental.ammunition->count
             << " partial_shell_channel=" << static_cast<int>(supplemental.ammunition->kind) << '\n';
         if (supplemental.stabilized) std::cout << "partial_stabilized=" << *supplemental.stabilized << '\n';
+        if (frame.layout.source == wardogs::SphHudLayoutSource::optic_pixel_geometry) {
+            const auto rect = frame.layout.compass.labels;
+            const auto candidates = wardogs::extract_sph_hud_compass_word_regions(image, rect);
+            std::cout << "compass_word_roi=" << rect.left << ',' << rect.top << ',' << rect.right << ',' << rect.bottom
+                      << " ink_groups=" << candidates.size() << '\n';
+            for (const auto candidate : candidates)
+                std::cout << "compass_ink_union=" << candidate.left << ',' << candidate.top << ','
+                          << candidate.right << ',' << candidate.bottom << '\n';
+        }
         for (const auto& token : frame.tokens) std::wcout << L"token=" << token.reading.text
             << L" alternate=" << token.reading.alternate_text << L" bounds=" << token.bounds.left << L','
-            << token.bounds.top << L',' << token.bounds.right << L',' << token.bounds.bottom << '\n';
+            << token.bounds.top << L',' << token.bounds.right << L',' << token.bounds.bottom
+            << L" bounds_source=" << static_cast<int>(token.bounds_source)
+            << L" geometry_verified=" << token.geometry_verified << '\n';
         return 0; // Refusal is an expected diagnostic outcome, not a crash.
     } catch (const winrt::hresult_error& error) {
         std::wcerr << L"Windows OCR failed: " << error.message().c_str() << '\n'; return 1;

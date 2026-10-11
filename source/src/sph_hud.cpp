@@ -485,8 +485,12 @@ std::optional<SphHudScaleLayout> inner_compass(const Image& image, Point centre,
     }
     if (grid.size() < 3 || grid.size() > 8 || ambiguous) return std::nullopt;
     layout.ticks = std::move(grid);
-    layout.labels = bounded_rect(image, layout.ticks.front().position.x - 22.0 * scale,
-        selected_y - 34.0 * scale, layout.ticks.back().position.x + 22.0 * scale, selected_y - 16.0 * scale);
+    // The surviving tick chain may start after an occlusion. Retain the
+    // bounded original ruler-search corridor for actual text detection;
+    // otherwise visible words left of that chain disappear before OCR.
+    // Their word-to-tick phase still has to pass the independent parser.
+    layout.labels = bounded_rect(image, centre.x - 188.0 * scale,
+        selected_y - 34.0 * scale, centre.x + 188.0 * scale, selected_y - 16.0 * scale);
     for (const auto& tick : layout.ticks)
         layout.label_regions.push_back(bounded_rect(image, tick.position.x - 21.0 * scale,
             selected_y - 34.0 * scale, tick.position.x + 21.0 * scale, selected_y - 16.0 * scale));
@@ -677,6 +681,86 @@ void metadata(const SphHudFrame& frame, SphHudReading& result) {
 }
 
 }  // namespace
+
+std::vector<ImageRect> extract_sph_hud_compass_word_regions(const Image& image, ImageRect strip) {
+    if (!valid_image(image) || !valid_rect(strip, image.width, image.height)) return {};
+    const double scale = image.height / 720.0;
+    const int width = strip.right - strip.left, height = strip.bottom - strip.top;
+    const auto area = static_cast<std::size_t>(width) * height;
+    if (width > 500.0 * scale || height > 40.0 * scale || area > 500'000) return {};
+
+    // This mask isolates candidates, never supplies a numeric reading. It is
+    // intentionally local: scenery outside the measured strip is not scanned.
+    std::vector<std::uint8_t> ink(area);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const auto at = (static_cast<std::size_t>(strip.top + y) * image.width + strip.left + x) * 3;
+            const int blue = image.bgr[at], green = image.bgr[at + 1], red = image.bgr[at + 2];
+            ink[static_cast<std::size_t>(y) * width + x] =
+                blue + green + red <= 360 && std::max({blue, green, red}) - std::min({blue, green, red}) <= 24;
+        }
+    }
+    struct Character { ImageRect bounds; bool clipped; };
+    std::vector<Character> characters;
+    std::vector<std::size_t> pending;
+    for (std::size_t first = 0; first < area; ++first) {
+        if (!ink[first]) continue;
+        ink[first] = 0;
+        pending.push_back(first);
+        int left = width, top = height, right{}, bottom{};
+        unsigned pixels{};
+        while (!pending.empty()) {
+            const auto at = pending.back(); pending.pop_back();
+            const int x = static_cast<int>(at % width), y = static_cast<int>(at / width);
+            left = std::min(left, x); top = std::min(top, y);
+            right = std::max(right, x + 1); bottom = std::max(bottom, y + 1); ++pixels;
+            for (int ny = std::max(0, y - 1); ny <= std::min(height - 1, y + 1); ++ny) {
+                for (int nx = std::max(0, x - 1); nx <= std::min(width - 1, x + 1); ++nx) {
+                    const auto next = static_cast<std::size_t>(ny) * width + nx;
+                    if (ink[next]) { ink[next] = 0; pending.push_back(next); }
+                }
+            }
+        }
+        const int cw = right - left, ch = bottom - top;
+        if (ch < 4.5 * scale || ch > 9.0 * scale || cw < 0.75 * scale || cw > 6.5 * scale ||
+            cw > ch || pixels < 4.0 * scale * scale || pixels < cw * ch * 0.15) continue;
+        characters.push_back({{left + strip.left, top + strip.top, right + strip.left, bottom + strip.top},
+                              left == 0 || top == 0 || right == width || bottom == height});
+        if (characters.size() > 64) return {};
+    }
+    std::sort(characters.begin(), characters.end(), [](const auto& first, const auto& second) {
+        if (first.bounds.left != second.bounds.left) return first.bounds.left < second.bounds.left;
+        return first.bounds.top < second.bounds.top;
+    });
+
+    std::vector<ImageRect> regions;
+    for (std::size_t begin = 0; begin < characters.size();) {
+        auto bounds = characters[begin].bounds;
+        auto previous = bounds;
+        bool clipped = characters[begin].clipped;
+        std::size_t end = begin + 1;
+        for (; end < characters.size(); ++end) {
+            const auto& next = characters[end];
+            const int gap = next.bounds.left - previous.right;
+            if (gap < 0 || gap > 3.0 * scale ||
+                std::abs(next.bounds.bottom - bounds.bottom) > scale ||
+                std::abs(next.bounds.top - bounds.top) > 1.5 * scale) break;
+            bounds.left = std::min(bounds.left, next.bounds.left); bounds.top = std::min(bounds.top, next.bounds.top);
+            bounds.right = std::max(bounds.right, next.bounds.right); bounds.bottom = std::max(bounds.bottom, next.bounds.bottom);
+            previous = next.bounds; clipped = clipped || next.clipped;
+        }
+        const auto count = end - begin;
+        // Keep incomplete edge words and crowded scenery out of recognition.
+        // The union remains its measured ink geometry, never the padded crop.
+        if (count >= 2 && count <= 4 && !clipped && bounds.right - bounds.left <= 24.0 * scale &&
+            bounds.left - strip.left >= 6.5 * scale && strip.right - bounds.right >= 6.5 * scale) {
+            regions.push_back(bounds);
+            if (regions.size() > 12) return {};
+        }
+        begin = end;
+    }
+    return regions;
+}
 
 SphHudReading read_sph_hud(const SphHudFrame& frame) {
     SphHudReading result;

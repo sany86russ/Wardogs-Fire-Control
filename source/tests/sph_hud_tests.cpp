@@ -145,9 +145,93 @@ Image optic(bool sight = true, bool scales = true) {
     return image;
 }
 
+void compass_character(Image& image, int left, int top, int factor = 1, std::uint8_t color = 60) {
+    // Separate connected ink shapes test localization, not OCR text or a
+    // fabricated accepted HUD frame. No numeric value is assigned to them.
+    constexpr const char* rows[]{"01110", "10001", "10001", "10001", "10001", "10001", "01110"};
+    for (int y = 0; y < 7; ++y)
+        for (int x = 0; x < 5; ++x)
+            if (rows[y][x] == '1')
+                rect(image, left + x * factor, top + y * factor,
+                     left + (x + 1) * factor, top + (y + 1) * factor, color);
+}
+
+bool same_rect(ImageRect first, ImageRect second) {
+    return first.left == second.left && first.top == second.top &&
+           first.right == second.right && first.bottom == second.bottom;
+}
+
+void compass_word_regions() {
+    const ImageRect strip{200, 180, 420, 205};
+    const auto blank = [] { return Image{1280, 720, std::vector<std::uint8_t>(1280 * 720 * 3, 190)}; };
+    auto image = blank();
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "empty compass pixels invent no words");
+    compass_character(image, 220, 188);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "one component cannot invent a neighbouring character");
+    compass_character(image, 227, 188); compass_character(image, 234, 188);
+    compass_character(image, 300, 188); compass_character(image, 307, 188);
+    compass_character(image, 500, 400); compass_character(image, 507, 400);
+    const auto regions = extract_sph_hud_compass_word_regions(image, strip);
+    check(regions.size() == 2 && same_rect(regions[0], {220, 188, 239, 195}) &&
+          same_rect(regions[1], {300, 188, 312, 195}),
+          "word candidates are exact ink unions in left-to-right order without padding or outside-strip pixels");
+    auto large = Image{2560, 1440, std::vector<std::uint8_t>(2560 * 1440 * 3, 190)};
+    for (const int x : {220, 227, 234, 300, 307}) compass_character(large, x * 2, 376, 2);
+    const auto large_regions = extract_sph_hud_compass_word_regions(large, scaled(strip, 2));
+    check(large_regions.size() == 2 && same_rect(large_regions[0], {440, 376, 478, 390}) &&
+          same_rect(large_regions[1], {600, 376, 624, 390}),
+          "scaled source pixels preserve exact physical unions for separately scaled OCR padding");
+    check(extract_sph_hud_compass_word_regions(image, {224, 180, 260, 205}).empty(),
+          "a clipped leading character cannot become a shorter complete word");
+
+    image = blank(); compass_character(image, 220, 188); compass_character(image, 240, 188);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "distant characters do not manufacture a word across empty pixels");
+    image = blank(); compass_character(image, 220, 188); compass_character(image, 227, 192);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "sloping character baselines are not a horizontal compass word");
+    image = blank(); compass_character(image, 220, 185); compass_character(image, 220, 197);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "vertical character arrangement is not a compass word");
+    image = blank(); compass_character(image, 220, 188); compass_character(image, 227, 188);
+    rect(image, 224, 191, 228, 192, 60);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(),
+          "merged ink is not split into invented independent character components");
+    image = blank(); rect(image, 220, 188, 250, 195, 60); compass_character(image, 252, 188);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "wide scenery fragment cannot become a numeral component");
+    image = blank(); compass_character(image, 220, 188, 1, 121); compass_character(image, 227, 188, 1, 121);
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "bright neutral pixels exceed the observed dark-ink bound");
+    image = blank(); compass_character(image, 220, 188); compass_character(image, 227, 188);
+    for (std::size_t at = 0; at < image.bgr.size(); at += 3) {
+        if (image.bgr[at] != 60) continue;
+        image.bgr[at] = 108; image.bgr[at + 1] = 120; image.bgr[at + 2] = 132;
+    }
+    check(extract_sph_hud_compass_word_regions(image, strip).size() == 1,
+          "dark-neutral mean and chroma bounds are inclusive on actual component pixels");
+    for (std::size_t at = 0; at < image.bgr.size(); at += 3) {
+        if (image.bgr[at] == 108) { image.bgr[at] = 107; image.bgr[at + 2] = 132; }
+    }
+    check(extract_sph_hud_compass_word_regions(image, strip).empty(), "coloured foliage cannot use neutral glyph geometry");
+
+    image = blank();
+    for (int i = 0; i < 12; ++i) {
+        compass_character(image, 210 + i * 29, 188); compass_character(image, 217 + i * 29, 188);
+    }
+    const ImageRect crowded{200, 180, 630, 205};
+    const auto twelve = extract_sph_hud_compass_word_regions(image, crowded);
+    check(twelve.size() == 12 && same_rect(twelve.front(), {210, 188, 222, 195}) &&
+          same_rect(twelve.back(), {529, 188, 541, 195}), "twelve candidates retain deterministic bounded order");
+    compass_character(image, 558, 188); compass_character(image, 565, 188);
+    check(extract_sph_hud_compass_word_regions(image, crowded).empty(),
+          "candidate overflow refuses the strip instead of selecting a convenient subset");
+    check(extract_sph_hud_compass_word_regions(Image{1280, 720, {}}, strip).empty() &&
+          extract_sph_hud_compass_word_regions(image, {-1, 180, 420, 205}).empty() &&
+          extract_sph_hud_compass_word_regions(image, {200, 180, 200, 205}).empty() &&
+          extract_sph_hud_compass_word_regions(image, {0, 0, 1280, 720}).empty(),
+          "invalid storage, bounds and unbounded full-frame scans are refused");
+}
+
 }  // namespace
 
 int main() {
+    compass_word_regions();
     auto frame = fixture();
     const auto first = read_sph_hud(frame);
     check(first.accepted() && close(first.pose->sight_mil, 997.954545, 0.001) &&

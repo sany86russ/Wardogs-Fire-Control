@@ -48,34 +48,58 @@ void read_region(SphHudFrame& frame, const Image& image, WindowsOcr& ocr,
 
 void read_compass_words(SphHudFrame& frame, const Image& image, WindowsOcr& ocr,
                         ImageRect rect, std::stop_token stop) {
-    if (stop.stop_requested()) throw std::runtime_error("HUD recognition canceled");
-    const auto cropped = instrument_crop(image, rect, true);
-    const auto raw = ocr.recognize(cropped, stop);
-    // A recognition-only model locates no glyphs. A crop centred on a ruler
-    // stroke must never stand in for the position of the printed number: real
-    // HUD frames show different phases between labels and long strokes.
-    if (!raw.word_geometry_verified || raw.words.empty()) {
-        if (!raw.text.empty()) frame.tokens.push_back({raw, rect, false,
-                                                      SphHudTokenBoundsSource::recognition_region});
+    const auto recognize_words = [&](ImageRect crop_rect) {
+        if (stop.stop_requested()) throw std::runtime_error("HUD recognition canceled");
+        const auto cropped = instrument_crop(image, crop_rect, true);
+        const auto raw = ocr.recognize(cropped, stop);
+        std::vector<SphHudToken> words;
+        if (!raw.word_geometry_verified) return words;
+        const auto scale = static_cast<double>(cropped.width) / (crop_rect.right - crop_rect.left);
+        for (const auto& word : raw.words) {
+            if (word.text.empty()) continue;
+            const ImageRect bounds{
+                crop_rect.left + static_cast<int>(std::floor(word.bounds.left / scale)),
+                crop_rect.top + static_cast<int>(std::floor(word.bounds.top / scale)),
+                crop_rect.left + static_cast<int>(std::ceil(word.bounds.right / scale)),
+                crop_rect.top + static_cast<int>(std::ceil(word.bounds.bottom / scale))};
+            if (bounds.left < rect.left || bounds.top < rect.top || bounds.right > rect.right ||
+                bounds.bottom > rect.bottom || bounds.right <= bounds.left || bounds.bottom <= bounds.top)
+                continue;
+            OcrResult reading;
+            reading.text = word.text;
+            reading.line_count = 1;
+            reading.word_geometry_verified = true;
+            reading.text_angle_deg = raw.text_angle_deg;
+            words.push_back({std::move(reading), bounds, true, SphHudTokenBoundsSource::ocr_word});
+        }
+        return words;
+    };
+    auto words = recognize_words(rect);
+    if (!words.empty()) {
+        for (auto& word : words) frame.tokens.push_back(std::move(word));
         return;
     }
-    const auto scale = static_cast<double>(cropped.width) / (rect.right - rect.left);
-    for (const auto& word : raw.words) {
-        if (word.text.empty()) continue;
-        const ImageRect bounds{
-            rect.left + static_cast<int>(std::floor(word.bounds.left / scale)),
-            rect.top + static_cast<int>(std::floor(word.bounds.top / scale)),
-            rect.left + static_cast<int>(std::ceil(word.bounds.right / scale)),
-            rect.top + static_cast<int>(std::ceil(word.bounds.bottom / scale))};
-        if (bounds.left < rect.left || bounds.top < rect.top || bounds.right > rect.right ||
-            bounds.bottom > rect.bottom || bounds.right <= bounds.left || bounds.bottom <= bounds.top)
-            continue;
-        OcrResult reading;
-        reading.text = word.text;
-        reading.line_count = 1;
-        reading.word_geometry_verified = true;
-        reading.text_angle_deg = raw.text_angle_deg;
-        frame.tokens.push_back({std::move(reading), bounds, true, SphHudTokenBoundsSource::ocr_word});
+    // A failed full-strip detector can retry independently located ink groups.
+    // Neither a ruler tick nor the calculator command determines these crops.
+    // Two padding variants must agree on both text and original-pixel geometry.
+    for (const auto ink : extract_sph_hud_compass_word_regions(image, rect)) {
+        const auto padded = [&](int padding) {
+            return ImageRect{std::max(rect.left, ink.left - padding), std::max(rect.top, ink.top - padding),
+                             std::min(rect.right, ink.right + padding), std::min(rect.bottom, ink.bottom + padding)};
+        };
+        const auto height = ink.bottom - ink.top;
+        const auto first_padding = std::max(2, static_cast<int>(std::lround(height * 8.0 / 9.0)));
+        const auto second_padding = std::max(first_padding + 1, static_cast<int>(std::lround(height * 10.0 / 9.0)));
+        auto first = recognize_words(padded(first_padding));
+        auto second = recognize_words(padded(second_padding));
+        if (first.size() != 1 || second.size() != 1 || first[0].reading.text != second[0].reading.text) continue;
+        const auto& a = first[0].bounds;
+        const auto& b = second[0].bounds;
+        if (std::abs(a.left - b.left) > 1 || std::abs(a.top - b.top) > 1 ||
+            std::abs(a.right - b.right) > 1 || std::abs(a.bottom - b.bottom) > 1) continue;
+        // Keep the second independent reading, without supplying a score.
+        first[0].reading.alternate_text = second[0].reading.text;
+        frame.tokens.push_back(std::move(first[0]));
     }
 }
 
