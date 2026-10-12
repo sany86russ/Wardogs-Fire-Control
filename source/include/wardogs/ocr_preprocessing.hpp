@@ -9,7 +9,8 @@
 namespace wardogs::detail {
 
 void prepare_ocr_tensor(const Image& image, std::vector<float>& tensor, int& tensor_width,
-                        int crop_top, int crop_bottom, std::stop_token stop);
+                        int crop_top, int crop_bottom, std::stop_token stop,
+                        int minimum_width = 320);
 
 void prepare_windows_ocr_pixels(const Image& image, int scale, bool high_contrast,
                                std::span<std::uint8_t> bgra, std::stop_token stop);

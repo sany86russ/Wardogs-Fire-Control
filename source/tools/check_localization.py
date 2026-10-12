@@ -22,6 +22,9 @@ NON_UI_LITERALS = {
     # OCR recognizes these game inputs; they are not displayed application UI.
     ('src/ocr.cpp', 'ВСЕ'),
     ('src/ocr.cpp', 'xXхХyYуУ'),
+    ('src/sph_hud_ocr.cpp', 'стабилизировано'),
+    ('src/sph_hud_ocr.cpp', 'не стабилизировано'),
+    ('src/sph_hud_ocr.cpp', 'нестабилизировано'),
 }
 
 

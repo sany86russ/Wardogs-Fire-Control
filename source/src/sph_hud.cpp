@@ -31,7 +31,11 @@ std::wstring normalized(std::wstring_view text) {
     while (!text.empty() && std::iswspace(text.back())) text.remove_suffix(1);
     std::wstring value(text);
     for (auto& ch : value) {
-        ch = static_cast<wchar_t>(std::towlower(ch));
+        if (ch >= L'A' && ch <= L'Z') ch = static_cast<wchar_t>(ch + L'a' - L'A');
+        else if (ch >= L'\u0410' && ch <= L'\u042f')
+            ch = static_cast<wchar_t>(ch + L'\u0430' - L'\u0410');
+        else if (ch == L'\u0401') ch = L'\u0451';
+        else ch = static_cast<wchar_t>(std::towlower(ch));
         if (ch == L'\u2212') ch = L'-';
     }
     return value;
@@ -169,8 +173,19 @@ SphHudRefusal collect_labels(const SphHudFrame& frame, const SphHudScaleLayout& 
                 ? SphHudRefusal::ambiguous_range_labels : SphHudRefusal::ambiguous_compass_labels;
             continue;
         }
-        if (!token.geometry_verified || (kind == ScaleKind::compass &&
-            token.bounds_source != SphHudTokenBoundsSource::ocr_word)) return SphHudRefusal::invalid_frame;
+        if (!token.geometry_verified) return SphHudRefusal::invalid_frame;
+        if (kind == ScaleKind::compass && token.bounds_source != SphHudTokenBoundsSource::ocr_word) {
+            const auto measured_digits = [&](std::wstring_view text) {
+                return text.size() == token.observed_glyph_count &&
+                    std::all_of(text.begin(), text.end(), digit);
+            };
+            if (token.bounds_source != SphHudTokenBoundsSource::pixel_glyph_union ||
+                token.observed_glyph_count < 2 || token.observed_glyph_count > 4 ||
+                !measured_digits(token.reading.text) || !measured_digits(token.reading.alternate_text) ||
+                token.reading.text != token.reading.alternate_text ||
+                token.reading.confidence <= 0.0F || token.reading.minimum_confidence <= 0.0F)
+                return SphHudRefusal::invalid_frame;
+        }
         if (!unit_matches(*parsed, kind) || (kind == ScaleKind::compass &&
             (parsed->value < 0.0 || parsed->value > 360.0)) ||
             (kind == ScaleKind::range && parsed->value <= 0.0)) return kind == ScaleKind::mil
@@ -234,6 +249,9 @@ bool verified_grid(const SphHudScaleLayout& scale, const SphHudScaleReading& rea
     // The observed SPH optic's labelled major grid is 10 MIL and 15 degrees.
     // This verifies printed grid semantics; it never converts MIL to bore angle.
     const double step = vertical ? 10.0 : 15.0;
+    if (kind == ScaleKind::compass)
+        for (const auto& label : reading.labels)
+            if (std::abs(std::remainder(label.value, step)) > 0.01) return false;
     for (std::size_t i = 1; i < reading.labels.size(); ++i) {
         const auto& before = reading.labels[i - 1];
         const auto& after = reading.labels[i];
@@ -309,7 +327,9 @@ SphHudRefusal interpolate(SphHudScaleReading& reading, ScaleKind kind, double co
 }
 
 bool valid_scale(const SphHudScaleLayout& scale, int width, int height) {
-    if (!valid_rect(scale.labels, width, height) || scale.ticks.size() < 3 || scale.ticks.size() > 32)
+    if (!valid_rect(scale.labels, width, height) || scale.ticks.size() < 3 || scale.ticks.size() > 32 ||
+        !std::isfinite(scale.tick_uncertainty_px) || scale.tick_uncertainty_px < 0.0 ||
+        scale.tick_uncertainty_px > 4.0)
         return false;
     return std::all_of(scale.ticks.begin(), scale.ticks.end(), [&](const auto& tick) {
         return finite_point(tick.position) && tick.position.x >= 0.0 && tick.position.x < width &&
@@ -349,7 +369,101 @@ StrokeScore stroke(const Image& image, Point from, Point to, bool vertical, doub
 
 struct ReticleObservation { Point point; double uncertainty_px; };
 
-std::optional<ReticleObservation> reticle(const Image& image, double scale) {
+struct AxisInterval { double low; double high; };
+
+std::optional<AxisInterval> measure_stroke_axis(const Image& image, int first, int last,
+                                              double hint, double coarse_uncertainty,
+                                              bool vertical, double scale) {
+    struct Sample { double position; double contrast; double positive_fraction; };
+    std::vector<Sample> profile;
+    const int begin = static_cast<int>(std::floor(hint - 6.0 * scale));
+    const int end = static_cast<int>(std::ceil(hint + 6.0 * scale));
+    for (int axis = begin; axis <= end; ++axis) {
+        std::vector<double> contrasts;
+        unsigned positive{};
+        for (int along = first; along <= last; ++along) {
+            const auto foreground = vertical ? gray(image, axis, along) : gray(image, along, axis);
+            const auto background = vertical
+                ? (gray(image, axis - 4.0 * scale, along) + gray(image, axis + 4.0 * scale, along)) / 2.0
+                : (gray(image, along, axis - 4.0 * scale) + gray(image, along, axis + 4.0 * scale)) / 2.0;
+            const auto contrast = foreground - background;
+            contrasts.push_back(contrast);
+            if (contrast > 12.0) ++positive;
+        }
+        if (contrasts.empty()) return std::nullopt;
+        std::sort(contrasts.begin(), contrasts.end());
+        const auto median = (contrasts[(contrasts.size() - 1) / 2] + contrasts[contrasts.size() / 2]) / 2.0;
+        profile.push_back({static_cast<double>(axis), median,
+            static_cast<double>(positive) / static_cast<double>(contrasts.size())});
+    }
+    std::optional<std::size_t> peak;
+    for (std::size_t i = 0; i < profile.size(); ++i) {
+        if (std::abs(profile[i].position - hint) > coarse_uncertainty) continue;
+        if (!peak || profile[i].contrast > profile[*peak].contrast) peak = i;
+    }
+    if (!peak || profile[*peak].contrast < 24.0 || profile[*peak].positive_fraction < 0.80)
+        return std::nullopt;
+    const auto run = [&](double threshold) -> std::optional<std::pair<std::size_t, std::size_t>> {
+        auto left = *peak, right = *peak;
+        while (left > 0 && profile[left - 1].contrast >= threshold) --left;
+        while (right + 1 < profile.size() && profile[right + 1].contrast >= threshold) ++right;
+        if (left == 0 || right + 1 == profile.size()) return std::nullopt;
+        for (std::size_t i = 0; i < profile.size(); ++i) {
+            if (i >= left && i <= right) continue;
+            if (std::abs(profile[i].position - hint) <= coarse_uncertainty &&
+                profile[i].contrast >= profile[*peak].contrast * 0.90 &&
+                profile[i].positive_fraction >= 0.80) return std::nullopt;
+        }
+        return std::pair{left, right};
+    };
+    const auto outer = run(std::max(12.0, profile[*peak].contrast * 0.30));
+    const auto inner = run(profile[*peak].contrast * 0.70);
+    if (!outer || !inner || profile[outer->second].position - profile[outer->first].position + 1.0 > 4.0 * scale)
+        return std::nullopt;
+    // Both threshold edges are observed. Keep the entire outer ink run,
+    // including a weaker secondary island, plus half-pixel edge sampling.
+    const AxisInterval interval{
+        (profile[outer->first].position + profile[inner->second].position) / 2.0 - 0.5,
+        (profile[inner->first].position + profile[outer->second].position) / 2.0 + 0.5};
+    if (interval.low < hint - coarse_uncertainty || interval.high > hint + coarse_uncertainty)
+        return std::nullopt;
+    return interval;
+}
+
+std::optional<ReticleObservation> refine_reticle(const Image& image,
+                                               ReticleObservation coarse, double scale) {
+    const auto cx = coarse.point.x, cy = coarse.point.y;
+    const auto measure = [&](double first, double last, double hint, bool vertical) {
+        return measure_stroke_axis(image, static_cast<int>(first), static_cast<int>(last),
+            hint, coarse.uncertainty_px, vertical, scale);
+    };
+    const auto upper_stem = measure(cy - 66.0 * scale, cy - 43.0 * scale, cx, true);
+    const auto lower_stem = measure(cy + 43.0 * scale, cy + 66.0 * scale, cx, true);
+    const auto upper_left = measure(cx - 10.0 * scale, cx - 3.0 * scale, cy - 40.0 * scale, false);
+    const auto upper_right = measure(cx + 3.0 * scale, cx + 10.0 * scale, cy - 40.0 * scale, false);
+    const auto lower_left = measure(cx - 10.0 * scale, cx - 3.0 * scale, cy + 40.0 * scale, false);
+    const auto lower_right = measure(cx + 3.0 * scale, cx + 10.0 * scale, cy + 40.0 * scale, false);
+    if (!upper_stem || !lower_stem || !upper_left || !upper_right || !lower_left || !lower_right)
+        return std::nullopt;
+    const auto unite = [](AxisInterval first, AxisInterval second) -> std::optional<AxisInterval> {
+        if (first.low > second.high || second.low > first.high) return std::nullopt;
+        return AxisInterval{std::min(first.low, second.low), std::max(first.high, second.high)};
+    };
+    const auto x = unite(*upper_stem, *lower_stem);
+    const auto upper = unite(*upper_left, *upper_right);
+    const auto lower = unite(*lower_left, *lower_right);
+    if (!x || !upper || !lower || lower->low - upper->high > 80.0 * scale ||
+        lower->high - upper->low < 80.0 * scale) return std::nullopt;
+    const AxisInterval y{(upper->low + lower->low) / 2.0, (upper->high + lower->high) / 2.0};
+    if (x->low < cx - coarse.uncertainty_px || x->high > cx + coarse.uncertainty_px ||
+        y.low < cy - coarse.uncertainty_px || y.high > cy + coarse.uncertainty_px) return std::nullopt;
+    const auto uncertainty = std::max({0.75, (x->high - x->low) / 2.0, (y.high - y.low) / 2.0});
+    if (uncertainty >= coarse.uncertainty_px) return std::nullopt;
+    return ReticleObservation{{(x->low + x->high) / 2.0, (y.low + y.high) / 2.0}, uncertainty};
+}
+
+std::optional<ReticleObservation> reticle(const Image& image, double scale,
+                                       SphHudLayoutDiagnostics* diagnostics = nullptr) {
     struct Candidate { Point point; double score; };
     std::vector<Candidate> candidates;
     const Point hint{(image.width - 1) / 2.0, (image.height - 1) / 2.0};
@@ -374,23 +488,48 @@ std::optional<ReticleObservation> reticle(const Image& image, double scale) {
                 top_stem.contrast, bottom_stem.contrast})});
         }
     }
+    if (diagnostics) diagnostics->reticle_candidates = static_cast<std::uint32_t>(candidates.size());
     if (candidates.empty()) return std::nullopt;
     const auto best = std::max_element(candidates.begin(), candidates.end(), [](const auto& first, const auto& second) {
         return first.score < second.score;
     });
     double left = best->point.x, right = left, top = best->point.y, bottom = top;
+    std::vector<const Candidate*> cloud;
     for (const auto& candidate : candidates) {
         if (candidate.score < best->score * 0.90) continue;
+        cloud.push_back(&candidate);
         left = std::min(left, candidate.point.x); right = std::max(right, candidate.point.x);
         top = std::min(top, candidate.point.y); bottom = std::max(bottom, candidate.point.y);
     }
-    // An occlusion can shift the winning template without hiding all strokes.
-    // Keep its measured localisation interval, and refuse a wide competing
-    // interval rather than assigning the nominal screen centre as a fix.
-    if (right - left > 1.5 * scale || bottom - top > 1.5 * scale) return std::nullopt;
+    // Rasterized thick stems can make several adjacent one-pixel samples
+    // equally credible. Keep that whole measured interval, but never merge
+    // separate competing localisations into a counterfeit middle reticle.
+    std::vector<bool> reached(cloud.size());
+    std::vector<std::size_t> pending{0};
+    reached[0] = true;
+    for (std::size_t current = 0; current < pending.size(); ++current) {
+        const auto point = cloud[pending[current]]->point;
+        for (std::size_t next = 0; next < cloud.size(); ++next) {
+            if (reached[next] || std::abs(point.x - cloud[next]->point.x) > 1.0 ||
+                std::abs(point.y - cloud[next]->point.y) > 1.0) continue;
+            reached[next] = true;
+            pending.push_back(next);
+        }
+    }
+    if (pending.size() != cloud.size()) return std::nullopt;
     const Point centre{(left + right) / 2.0, (top + bottom) / 2.0};
     const double uncertainty = std::max(right - left, bottom - top) / 2.0 + 0.5 * scale;
-    return ReticleObservation{centre, std::max(0.75, uncertainty)};
+    // This is the same absolute pixel ceiling enforced by the strict parser.
+    // It preserves uncertainty instead of demanding an artificially narrow
+    // cloud or declaring the nominal screen centre to be observed geometry.
+    if (uncertainty > 4.0) return std::nullopt;
+    const ReticleObservation coarse{centre, std::max(0.75, uncertainty)};
+    if (const auto refined = refine_reticle(image, coarse, scale)) {
+        if (diagnostics) diagnostics->reticle_uncertainty_px = refined->uncertainty_px;
+        return refined;
+    }
+    if (diagnostics) diagnostics->reticle_uncertainty_px = coarse.uncertainty_px;
+    return coarse;
 }
 
 ImageRect bounded_rect(const Image& image, double left, double top, double right, double bottom) {
@@ -400,7 +539,8 @@ ImageRect bounded_rect(const Image& image, double left, double top, double right
             std::clamp(static_cast<int>(std::ceil(bottom)), 0, image.height)};
 }
 
-std::vector<SphHudTick> side_ticks(const Image& image, Point centre, double scale, bool right) {
+std::vector<SphHudTick> side_ticks(const Image& image, Point centre, double scale, bool right,
+                                 std::uint32_t* measured_count = nullptr) {
     std::vector<Point> candidates;
     const double hint = centre.x + (right ? 180.0 : -176.0) * scale;
     const int radius = std::max(3, static_cast<int>(std::ceil(8.0 * scale)));
@@ -430,6 +570,7 @@ std::vector<SphHudTick> side_ticks(const Image& image, Point centre, double scal
         }
         ticks.push_back({{sum.x / count, sum.y / count}});
     }
+    if (measured_count) *measured_count = static_cast<std::uint32_t>(ticks.size());
     if (ticks.size() != 3) return {};
     const auto first_gap = ticks[1].position.y - ticks[0].position.y;
     const auto second_gap = ticks[2].position.y - ticks[1].position.y;
@@ -440,51 +581,131 @@ std::vector<SphHudTick> side_ticks(const Image& image, Point centre, double scal
     return ticks;
 }
 
-std::optional<SphHudScaleLayout> inner_compass(const Image& image, Point centre, double scale) {
+std::optional<SphHudScaleLayout> inner_compass(const Image& image, Point centre, double scale,
+                                             SphHudLayoutDiagnostics* diagnostics = nullptr) {
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::compass_baseline;
     int selected_y{};
-    double best{};
+    double best{}, best_positive_fraction{};
     for (int y = static_cast<int>(centre.y - 155.0 * scale);
          y <= static_cast<int>(centre.y - 135.0 * scale); ++y) {
         const auto score = stroke(image, {centre.x - 150.0 * scale, static_cast<double>(y)},
             {centre.x + 150.0 * scale, static_cast<double>(y)}, false, scale);
         if (score.matching_fraction >= 0.85 && score.contrast > best) {
-            selected_y = y; best = score.contrast;
+            selected_y = y; best = score.contrast; best_positive_fraction = score.matching_fraction;
         }
     }
-    if (best < 50.0) return std::nullopt;
-    std::vector<int> columns;
+    if (diagnostics) diagnostics->compass_baseline_contrast = best;
+    const bool weak_baseline = best < 50.0;
+    if (best < 20.0 || (weak_baseline && best_positive_fraction < 0.95)) return std::nullopt;
+    if (diagnostics) diagnostics->compass_weak_baseline = weak_baseline;
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::compass_ticks;
+    std::vector<int> columns, faint_columns;
     for (int x = static_cast<int>(centre.x - 166.0 * scale);
          x <= static_cast<int>(centre.x + 166.0 * scale); ++x) {
         const auto score = stroke(image, {static_cast<double>(x), selected_y - 14.0 * scale},
             {static_cast<double>(x), selected_y - 3.0 * scale}, true, scale);
         if (score.contrast >= 50.0 && score.matching_fraction >= 0.80) columns.push_back(x);
+        if (score.contrast >= 20.0 && score.matching_fraction >= 0.90) faint_columns.push_back(x);
     }
-    SphHudScaleLayout layout;
-    for (std::size_t i = 0; i < columns.size();) {
-        const int first = columns[i];
-        int last = first;
-        while (++i < columns.size() && columns[i] - last <= 2.0 * scale) last = columns[i];
-        layout.ticks.push_back({{(first + last) / 2.0, static_cast<double>(selected_y)}});
+    if (diagnostics) {
+        diagnostics->compass_strong_columns = static_cast<std::uint32_t>(columns.size());
+        diagnostics->compass_faint_columns = static_cast<std::uint32_t>(faint_columns.size());
     }
+    struct MeasuredTick { SphHudTick tick; double uncertainty; bool strong; };
+    const auto group_columns = [&](const std::vector<int>& selected) {
+        std::vector<MeasuredTick> ticks;
+        for (std::size_t i = 0; i < selected.size();) {
+            const int first = selected[i];
+            int last = first;
+            while (++i < selected.size() && selected[i] - last <= 2.0 * scale) last = selected[i];
+            const auto strong = std::lower_bound(columns.begin(), columns.end(), first);
+            ticks.push_back({{{(first + last) / 2.0, static_cast<double>(selected_y)}},
+                (last - first) / 2.0 + 0.5 * scale, strong != columns.end() && *strong <= last});
+        }
+        return ticks;
+    };
     // Trees and small UI ticks can produce isolated vertical strokes. Keep a
     // unique longest measured major-grid chain; a competing full chain is an
     // ambiguity, never an opportunity to prefer one set of numeric readings.
-    std::vector<SphHudTick> grid;
-    bool ambiguous{};
-    for (std::size_t start = 0; start < layout.ticks.size(); ++start) {
-        std::vector<SphHudTick> chain{layout.ticks[start]};
-        for (std::size_t i = start + 1; i < layout.ticks.size(); ++i) {
-            const auto distance = layout.ticks[i].position.x - chain.back().position.x;
-            if (std::abs(distance - 55.5 * scale) <= 3.0 * scale) chain.push_back(layout.ticks[i]);
-            else if (distance > 58.5 * scale) break;
+    struct MeasuredGrid { std::vector<MeasuredTick> ticks; bool ambiguous{}; };
+    const auto select_grid = [&](const std::vector<MeasuredTick>& ticks) {
+        MeasuredGrid grid;
+        for (std::size_t start = 0; start < ticks.size(); ++start) {
+            std::vector<MeasuredTick> chain{ticks[start]};
+            for (std::size_t i = start + 1; i < ticks.size(); ++i) {
+                const auto distance = ticks[i].tick.position.x - chain.back().tick.position.x;
+                if (std::abs(distance - 55.5 * scale) <= 3.0 * scale) chain.push_back(ticks[i]);
+                else if (distance > 58.5 * scale) break;
+            }
+            if (chain.size() > grid.ticks.size()) { grid.ticks = std::move(chain); grid.ambiguous = false; }
+            else if (chain.size() == grid.ticks.size() && chain.size() >= 3 &&
+                     std::abs(chain.front().tick.position.x - grid.ticks.front().tick.position.x) > 3.0 * scale)
+                grid.ambiguous = true;
         }
-        if (chain.size() > grid.size()) { grid = std::move(chain); ambiguous = false; }
-        else if (chain.size() == grid.size() && chain.size() >= 3 &&
-                 std::abs(chain.front().position.x - grid.front().position.x) > 3.0 * scale)
-            ambiguous = true;
+        return grid;
+    };
+    auto grid = select_grid(group_columns(columns));
+    if (diagnostics) {
+        diagnostics->compass_grid_ticks = static_cast<std::uint32_t>(grid.ticks.size());
+        diagnostics->compass_grid_ambiguous = grid.ambiguous;
     }
-    if (grid.size() < 3 || grid.size() > 8 || ambiguous) return std::nullopt;
-    layout.ticks = std::move(grid);
+    if (grid.ambiguous) return std::nullopt;
+    if (grid.ticks.size() < (weak_baseline ? 5U : 3U)) {
+        // White stems against bright sky have weaker contrast while retaining
+        // their measured shape. Rescue only a unique longer real grid with
+        // at least two independently strong anchors; never fill missing ticks.
+        grid = select_grid(group_columns(faint_columns));
+        if (diagnostics) {
+            diagnostics->compass_faint_rescue = true;
+            diagnostics->compass_grid_ticks = static_cast<std::uint32_t>(grid.ticks.size());
+            diagnostics->compass_grid_ambiguous = grid.ambiguous;
+        }
+        if (grid.ambiguous || grid.ticks.size() < (weak_baseline ? 5U : 4U) ||
+            std::count_if(grid.ticks.begin(), grid.ticks.end(), [](const auto& tick) { return tick.strong; }) <
+                (weak_baseline ? 1 : 2))
+            return std::nullopt;
+    }
+    if (grid.ticks.size() > 8) return std::nullopt;
+    // A wide column-correlation cloud describes possible samples across a fat
+    // stem. Two disjoint sections can independently locate its actual ink
+    // midline; preserve both edge intervals instead of capping that cloud.
+    const int stem_first = static_cast<int>(selected_y - 14.0 * scale);
+    const int stem_last = static_cast<int>(selected_y - 3.0 * scale);
+    const int stem_middle = stem_first + (stem_last - stem_first) / 2;
+    auto precise_grid = grid.ticks;
+    bool all_measured = true;
+    for (auto& tick : precise_grid) {
+        const auto first = measure_stroke_axis(image, stem_first, stem_middle,
+            tick.tick.position.x, tick.uncertainty, true, scale);
+        const auto second = measure_stroke_axis(image, stem_middle + 1, stem_last,
+            tick.tick.position.x, tick.uncertainty, true, scale);
+        if (!first || !second || first->low > second->high || second->low > first->high) {
+            all_measured = false;
+            break;
+        }
+        const auto low = std::min(first->low, second->low), high = std::max(first->high, second->high);
+        tick.tick.position.x = (low + high) / 2.0;
+        tick.uncertainty = std::max(0.75, (high - low) / 2.0);
+    }
+    if (all_measured) {
+        for (std::size_t i = 1; i < precise_grid.size(); ++i) {
+            if (std::abs(precise_grid[i].tick.position.x - precise_grid[i - 1].tick.position.x - 55.5 * scale) >
+                3.0 * scale) { all_measured = false; break; }
+        }
+        if (all_measured) grid.ticks = std::move(precise_grid);
+    }
+    // A faint baseline needs the complete independent stem measurements, not
+    // merely a sequence of low-contrast correlations against bright scenery.
+    if (weak_baseline && (!all_measured || grid.ticks.size() < 5 ||
+        std::count_if(grid.ticks.begin(), grid.ticks.end(), [](const auto& tick) { return tick.strong; }) < 1))
+        return std::nullopt;
+    SphHudScaleLayout layout;
+    for (const auto& tick : grid.ticks) {
+        layout.ticks.push_back(tick.tick);
+        layout.tick_uncertainty_px = std::max(layout.tick_uncertainty_px, tick.uncertainty);
+    }
+    if (diagnostics) diagnostics->compass_tick_uncertainty_px = layout.tick_uncertainty_px;
+    if (layout.tick_uncertainty_px > 4.0) return std::nullopt;
     // The surviving tick chain may start after an occlusion. Retain the
     // bounded original ruler-search corridor for actual text detection;
     // otherwise visible words left of that chain disappear before OCR.
@@ -665,9 +886,16 @@ void metadata(const SphHudFrame& frame, SphHudReading& result) {
             if (!contains(*frame.layout.stabilization, token.bounds)) continue;
             const auto text = normalized(token.reading.text);
             auto score = result.provenance;
-            if (text != L"stabilized" && text != L"unstabilized") { ambiguous = true; continue; }
+            // Exact game labels only. Cyrillic case folding does not depend on
+            // the process's ambient C locale, and no OCR letters are repaired.
+            const bool stabilized = text == L"stabilized" ||
+                text == L"\u0441\u0442\u0430\u0431\u0438\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043e";
+            const bool unstabilized = text == L"unstabilized" ||
+                text == L"\u043d\u0435 \u0441\u0442\u0430\u0431\u0438\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043e" ||
+                text == L"\u043d\u0435\u0441\u0442\u0430\u0431\u0438\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043e";
+            if (!stabilized && !unstabilized) { ambiguous = true; continue; }
             if (state || !token.geometry_verified || !readable(token.reading, score)) { ambiguous = true; continue; }
-            state = text == L"stabilized";
+            state = stabilized;
         }
         if (!ambiguous) result.stabilized = state;
     }
@@ -682,83 +910,219 @@ void metadata(const SphHudFrame& frame, SphHudReading& result) {
 
 }  // namespace
 
-std::vector<ImageRect> extract_sph_hud_compass_word_regions(const Image& image, ImageRect strip) {
+bool sph_hud_numeric_scores_qualified(const OcrResult& reading) noexcept {
+    return !reading.text.empty() && reading.line_count <= 1 &&
+        std::isfinite(reading.confidence) && std::isfinite(reading.minimum_confidence) &&
+        reading.confidence >= 0.90F && reading.confidence <= 1.0F &&
+        reading.minimum_confidence >= 0.70F && reading.minimum_confidence <= 1.0F;
+}
+
+std::optional<ImageRect> extract_sph_hud_numeric_word(const Image& image, ImageRect region) {
+    if (!valid_image(image) || !valid_rect(region, image.width, image.height)) return std::nullopt;
+    const double scale = image.height / 720.0;
+    const int width = region.right - region.left, height = region.bottom - region.top;
+    const auto area = static_cast<std::size_t>(width) * height;
+    if (width > 160.0 * scale || height > 32.0 * scale || area > 100'000) return std::nullopt;
+
+    struct Components { ImageRect bounds; std::vector<ImageRect> glyphs; };
+    const auto extract = [&](int minimum_channel) -> std::optional<Components> {
+        std::vector<std::uint8_t> ink(area);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const auto at = (static_cast<std::size_t>(region.top + y) * image.width + region.left + x) * 3;
+                const int blue = image.bgr[at], green = image.bgr[at + 1], red = image.bgr[at + 2];
+                ink[static_cast<std::size_t>(y) * width + x] =
+                    std::min({blue, green, red}) >= minimum_channel &&
+                    std::max({blue, green, red}) - std::min({blue, green, red}) <= 24;
+            }
+        }
+        std::vector<ImageRect> glyphs, small_components;
+        std::vector<std::size_t> pending;
+        for (std::size_t first = 0; first < area; ++first) {
+            if (!ink[first]) continue;
+            ink[first] = 0;
+            pending.push_back(first);
+            int left = width, top = height, right{}, bottom{};
+            unsigned pixels{};
+            while (!pending.empty()) {
+                const auto at = pending.back(); pending.pop_back();
+                const int x = static_cast<int>(at % width), y = static_cast<int>(at / width);
+                left = std::min(left, x); top = std::min(top, y);
+                right = std::max(right, x + 1); bottom = std::max(bottom, y + 1); ++pixels;
+                for (int ny = std::max(0, y - 1); ny <= std::min(height - 1, y + 1); ++ny) {
+                    for (int nx = std::max(0, x - 1); nx <= std::min(width - 1, x + 1); ++nx) {
+                        const auto next = static_cast<std::size_t>(ny) * width + nx;
+                        if (ink[next]) { ink[next] = 0; pending.push_back(next); }
+                    }
+                }
+            }
+            if (pixels < 1.5 * scale * scale) continue;
+            const ImageRect bounds{left + region.left, top + region.top, right + region.left, bottom + region.top};
+            // A bright component cut by the recognition region may be a lost
+            // leading digit. Do not silently isolate the surviving suffix.
+            if (left == 0 || top == 0 || right == width || bottom == height) return std::nullopt;
+            const int cw = right - left, ch = bottom - top;
+            if (cw > 12.0 * scale || ch > 11.5 * scale || pixels < cw * ch * 0.15)
+                return std::nullopt;
+            if (cw >= 0.5 * scale && ch >= 3.5 * scale) glyphs.push_back(bounds);
+            else small_components.push_back(bounds);
+            if (glyphs.size() > 12 || small_components.size() > 24) return std::nullopt;
+        }
+        if (glyphs.size() < 3) return std::nullopt;
+        std::sort(glyphs.begin(), glyphs.end(), [](ImageRect first, ImageRect second) {
+            return first.left < second.left;
+        });
+        auto bounds = glyphs.front();
+        auto previous = bounds;
+        for (std::size_t i = 1; i < glyphs.size(); ++i) {
+            const auto next = glyphs[i];
+            const int gap = next.left - previous.right;
+            if (gap < 0 || gap > 5.0 * scale ||
+                std::abs(next.bottom - glyphs.front().bottom) > scale ||
+                std::abs(next.top - glyphs.front().top) > 3.0 * scale) return std::nullopt;
+            bounds.left = std::min(bounds.left, next.left); bounds.top = std::min(bounds.top, next.top);
+            bounds.right = std::max(bounds.right, next.right); bounds.bottom = std::max(bounds.bottom, next.bottom);
+            previous = next;
+        }
+        // Dots within a glyph union remain untouched in the original RGB crop.
+        // A separate significant prefix/suffix could be a sign or punctuation;
+        // retain the original broad region instead of dropping it from the word.
+        for (const auto small : small_components)
+            if (!contains(bounds, small)) return std::nullopt;
+        return Components{bounds, std::move(glyphs)};
+    };
+    const auto ordinary = extract(160), strict = extract(180);
+    if (!ordinary || !strict || ordinary->glyphs.size() != strict->glyphs.size()) return std::nullopt;
+    const auto same_bounds = [](ImageRect first, ImageRect second) {
+        return std::abs(first.left - second.left) <= 1 && std::abs(first.top - second.top) <= 1 &&
+            std::abs(first.right - second.right) <= 1 && std::abs(first.bottom - second.bottom) <= 1;
+    };
+    if (!same_bounds(ordinary->bounds, strict->bounds)) return std::nullopt;
+    for (std::size_t i = 0; i < ordinary->glyphs.size(); ++i)
+        if (!same_bounds(ordinary->glyphs[i], strict->glyphs[i])) return std::nullopt;
+    return ordinary->bounds;
+}
+
+std::vector<SphHudCompassWord> extract_sph_hud_compass_words(const Image& image, ImageRect strip) {
     if (!valid_image(image) || !valid_rect(strip, image.width, image.height)) return {};
     const double scale = image.height / 720.0;
     const int width = strip.right - strip.left, height = strip.bottom - strip.top;
     const auto area = static_cast<std::size_t>(width) * height;
     if (width > 500.0 * scale || height > 40.0 * scale || area > 500'000) return {};
 
-    // This mask isolates candidates, never supplies a numeric reading. It is
-    // intentionally local: scenery outside the measured strip is not scanned.
-    std::vector<std::uint8_t> ink(area);
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            const auto at = (static_cast<std::size_t>(strip.top + y) * image.width + strip.left + x) * 3;
-            const int blue = image.bgr[at], green = image.bgr[at + 1], red = image.bgr[at + 2];
-            ink[static_cast<std::size_t>(y) * width + x] =
-                blue + green + red <= 360 && std::max({blue, green, red}) - std::min({blue, green, red}) <= 24;
-        }
-    }
-    struct Character { ImageRect bounds; bool clipped; };
-    std::vector<Character> characters;
-    std::vector<std::size_t> pending;
-    for (std::size_t first = 0; first < area; ++first) {
-        if (!ink[first]) continue;
-        ink[first] = 0;
-        pending.push_back(first);
-        int left = width, top = height, right{}, bottom{};
-        unsigned pixels{};
-        while (!pending.empty()) {
-            const auto at = pending.back(); pending.pop_back();
-            const int x = static_cast<int>(at % width), y = static_cast<int>(at / width);
-            left = std::min(left, x); top = std::min(top, y);
-            right = std::max(right, x + 1); bottom = std::max(bottom, y + 1); ++pixels;
-            for (int ny = std::max(0, y - 1); ny <= std::min(height - 1, y + 1); ++ny) {
-                for (int nx = std::max(0, x - 1); nx <= std::min(width - 1, x + 1); ++nx) {
-                    const auto next = static_cast<std::size_t>(ny) * width + nx;
-                    if (ink[next]) { ink[next] = 0; pending.push_back(next); }
-                }
+    const auto extract = [&](int maximum_mean) {
+        // These masks isolate measured ink, never supply a numeric reading. The
+        // independent dark thresholds must agree on the original glyph geometry.
+        std::vector<std::uint8_t> ink(area);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const auto at = (static_cast<std::size_t>(strip.top + y) * image.width + strip.left + x) * 3;
+                const int blue = image.bgr[at], green = image.bgr[at + 1], red = image.bgr[at + 2];
+                ink[static_cast<std::size_t>(y) * width + x] =
+                    blue + green + red <= maximum_mean * 3 &&
+                    std::max({blue, green, red}) - std::min({blue, green, red}) <= 24;
             }
         }
-        const int cw = right - left, ch = bottom - top;
-        if (ch < 4.5 * scale || ch > 9.0 * scale || cw < 0.75 * scale || cw > 6.5 * scale ||
-            cw > ch || pixels < 4.0 * scale * scale || pixels < cw * ch * 0.15) continue;
-        characters.push_back({{left + strip.left, top + strip.top, right + strip.left, bottom + strip.top},
-                              left == 0 || top == 0 || right == width || bottom == height});
-        if (characters.size() > 64) return {};
-    }
-    std::sort(characters.begin(), characters.end(), [](const auto& first, const auto& second) {
-        if (first.bounds.left != second.bounds.left) return first.bounds.left < second.bounds.left;
-        return first.bounds.top < second.bounds.top;
-    });
+        struct Character { ImageRect bounds; bool clipped; std::vector<SphHudInkPixel> ink_pixels; };
+        std::vector<Character> characters;
+        std::vector<ImageRect> rejected_components;
+        std::vector<std::size_t> pending;
+        for (std::size_t first = 0; first < area; ++first) {
+            if (!ink[first]) continue;
+            ink[first] = 0;
+            pending.push_back(first);
+            int left = width, top = height, right{}, bottom{};
+            unsigned pixels{};
+            std::vector<SphHudInkPixel> component;
+            while (!pending.empty()) {
+                const auto at = pending.back(); pending.pop_back();
+                const int x = static_cast<int>(at % width), y = static_cast<int>(at / width);
+                left = std::min(left, x); top = std::min(top, y);
+                right = std::max(right, x + 1); bottom = std::max(bottom, y + 1); ++pixels;
+                component.push_back({x + strip.left, y + strip.top});
+                for (int ny = std::max(0, y - 1); ny <= std::min(height - 1, y + 1); ++ny) {
+                    for (int nx = std::max(0, x - 1); nx <= std::min(width - 1, x + 1); ++nx) {
+                        const auto next = static_cast<std::size_t>(ny) * width + nx;
+                        if (ink[next]) { ink[next] = 0; pending.push_back(next); }
+                    }
+                }
+            }
+            const int cw = right - left, ch = bottom - top;
+            const ImageRect bounds{left + strip.left, top + strip.top, right + strip.left, bottom + strip.top};
+            const bool clipped = left == 0 || top == 0 || right == width || bottom == height;
+            const bool glyph_shape = ch >= 4.5 * scale && ch <= 9.0 * scale &&
+                cw >= 0.75 * scale && cw <= 6.5 * scale && cw <= ch &&
+                pixels >= 3.0 * scale * scale && pixels >= cw * ch * 0.15;
+            // A rejected sparse/merged glyph can still be a leading digit of
+            // a nearby word. Retain its location as counterevidence instead
+            // of certifying the surviving suffix as a complete observation.
+            if ((!glyph_shape || clipped) && pixels >= std::max(2.0, 0.5 * scale * scale) &&
+                std::max(cw, ch) >= 1.5 * scale) rejected_components.push_back(bounds);
+            if (!glyph_shape) continue;
+            characters.push_back({{left + strip.left, top + strip.top, right + strip.left, bottom + strip.top},
+                                  clipped,
+                                  std::move(component)});
+            if (characters.size() > 64) return std::vector<SphHudCompassWord>{};
+        }
+        std::sort(characters.begin(), characters.end(), [](const auto& first, const auto& second) {
+            if (first.bounds.left != second.bounds.left) return first.bounds.left < second.bounds.left;
+            return first.bounds.top < second.bounds.top;
+        });
 
-    std::vector<ImageRect> regions;
-    for (std::size_t begin = 0; begin < characters.size();) {
-        auto bounds = characters[begin].bounds;
-        auto previous = bounds;
-        bool clipped = characters[begin].clipped;
-        std::size_t end = begin + 1;
-        for (; end < characters.size(); ++end) {
-            const auto& next = characters[end];
-            const int gap = next.bounds.left - previous.right;
-            if (gap < 0 || gap > 3.0 * scale ||
-                std::abs(next.bounds.bottom - bounds.bottom) > scale ||
-                std::abs(next.bounds.top - bounds.top) > 1.5 * scale) break;
-            bounds.left = std::min(bounds.left, next.bounds.left); bounds.top = std::min(bounds.top, next.bounds.top);
-            bounds.right = std::max(bounds.right, next.bounds.right); bounds.bottom = std::max(bounds.bottom, next.bounds.bottom);
-            previous = next.bounds; clipped = clipped || next.clipped;
+        std::vector<SphHudCompassWord> words;
+        for (std::size_t begin = 0; begin < characters.size();) {
+            auto bounds = characters[begin].bounds;
+            auto previous = bounds;
+            bool clipped = characters[begin].clipped;
+            std::size_t end = begin + 1;
+            for (; end < characters.size(); ++end) {
+                const auto& next = characters[end];
+                const int gap = next.bounds.left - previous.right;
+                if (gap < 0 || gap > 3.0 * scale ||
+                    std::abs(next.bounds.bottom - bounds.bottom) > scale ||
+                    std::abs(next.bounds.top - bounds.top) > 1.5 * scale) break;
+                bounds.left = std::min(bounds.left, next.bounds.left); bounds.top = std::min(bounds.top, next.bounds.top);
+                bounds.right = std::max(bounds.right, next.bounds.right); bounds.bottom = std::max(bounds.bottom, next.bounds.bottom);
+                previous = next.bounds; clipped = clipped || next.clipped;
+            }
+            const auto count = end - begin;
+            const bool incomplete = std::any_of(rejected_components.begin(), rejected_components.end(),
+                [&](ImageRect rejected) {
+                    const int gap = std::max(bounds.left - rejected.right, rejected.left - bounds.right);
+                    return gap <= 3.0 * scale && rejected.top < bounds.bottom + scale &&
+                        rejected.bottom > bounds.top - scale;
+                });
+            // Keep incomplete edge words and crowded scenery out of recognition.
+            // The union remains its measured ink geometry, never the padded crop.
+            if (count >= 2 && count <= 4 && !clipped && !incomplete && bounds.right - bounds.left <= 24.0 * scale &&
+                bounds.left - strip.left >= 6.5 * scale && strip.right - bounds.right >= 6.5 * scale) {
+                SphHudCompassWord word{bounds, static_cast<std::uint32_t>(count), {}};
+                for (std::size_t glyph = begin; glyph < end; ++glyph)
+                    word.ink_pixels.insert(word.ink_pixels.end(), characters[glyph].ink_pixels.begin(),
+                        characters[glyph].ink_pixels.end());
+                words.push_back(std::move(word));
+                if (words.size() > 12) return std::vector<SphHudCompassWord>{};
+            }
+            begin = end;
         }
-        const auto count = end - begin;
-        // Keep incomplete edge words and crowded scenery out of recognition.
-        // The union remains its measured ink geometry, never the padded crop.
-        if (count >= 2 && count <= 4 && !clipped && bounds.right - bounds.left <= 24.0 * scale &&
-            bounds.left - strip.left >= 6.5 * scale && strip.right - bounds.right >= 6.5 * scale) {
-            regions.push_back(bounds);
-            if (regions.size() > 12) return {};
-        }
-        begin = end;
+        return words;
+    };
+    const auto strict = extract(112);
+    auto ordinary = extract(120);
+    if (strict.size() != ordinary.size()) return {};
+    for (std::size_t i = 0; i < strict.size(); ++i) {
+        if (strict[i].glyph_count != ordinary[i].glyph_count ||
+            std::abs(strict[i].bounds.left - ordinary[i].bounds.left) > 1 ||
+            std::abs(strict[i].bounds.top - ordinary[i].bounds.top) > 1 ||
+            std::abs(strict[i].bounds.right - ordinary[i].bounds.right) > 1 ||
+            std::abs(strict[i].bounds.bottom - ordinary[i].bounds.bottom) > 1) return {};
     }
+    return ordinary;
+}
+
+std::vector<ImageRect> extract_sph_hud_compass_word_regions(const Image& image, ImageRect strip) {
+    std::vector<ImageRect> regions;
+    for (const auto& word : extract_sph_hud_compass_words(image, strip)) regions.push_back(word.bounds);
     return regions;
 }
 
@@ -781,6 +1145,9 @@ SphHudReading read_sph_hud(const SphHudFrame& frame) {
         layout.reticle_uncertainty_px <= 0.0 || layout.tick_uncertainty_px <= 0.0 ||
         layout.compass_pointer_uncertainty_px <= 0.0 || layout.reticle_uncertainty_px > 4.0 ||
         layout.tick_uncertainty_px > 4.0 || layout.compass_pointer_uncertainty_px > 4.0 ||
+        layout.tick_uncertainty_px < layout.mil_scale.tick_uncertainty_px ||
+        layout.tick_uncertainty_px < layout.range_scale.tick_uncertainty_px ||
+        layout.tick_uncertainty_px < layout.compass.tick_uncertainty_px ||
         !valid_scale(layout.mil_scale, width, height) || !valid_scale(layout.range_scale, width, height) ||
         !valid_scale(layout.compass, width, height) || layout.range_scale.labels.right >= layout.reticle.x ||
         layout.mil_scale.labels.left <= layout.reticle.x || layout.compass.labels.bottom >= layout.reticle.y ||
@@ -861,17 +1228,24 @@ SphHudReading read_sph_hud(const SphHudFrame& frame) {
     return result;
 }
 
-std::optional<SphHudLayout> extract_sph_hud_layout(const Image& image) {
+std::optional<SphHudLayout> extract_sph_hud_layout(const Image& image,
+                                                SphHudLayoutDiagnostics* diagnostics) {
+    if (diagnostics) { *diagnostics = {}; diagnostics->stage = SphHudLayoutStage::invalid_image; }
     if (!valid_image(image)) return std::nullopt;
     const double scale = image.height / 720.0;
-    const auto centre = reticle(image, scale);
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::reticle;
+    const auto centre = reticle(image, scale, diagnostics);
     if (!centre) return std::nullopt;
-    auto right = side_ticks(image, centre->point, scale, true);
-    auto left = side_ticks(image, centre->point, scale, false);
-    if (right.empty() || left.empty()) return std::nullopt;
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::left_ticks;
+    auto left = side_ticks(image, centre->point, scale, false, diagnostics ? &diagnostics->left_ticks : nullptr);
+    if (left.empty()) return std::nullopt;
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::right_ticks;
+    auto right = side_ticks(image, centre->point, scale, true, diagnostics ? &diagnostics->right_ticks : nullptr);
+    if (right.empty()) return std::nullopt;
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::paired_rows;
     for (std::size_t i = 0; i < right.size(); ++i)
         if (std::abs(right[i].position.y - left[i].position.y) > 2.0 * scale) return std::nullopt;
-    auto compass = inner_compass(image, centre->point, scale);
+    auto compass = inner_compass(image, centre->point, scale, diagnostics);
     if (!compass) return std::nullopt;
     SphHudLayout layout;
     layout.source = SphHudLayoutSource::optic_pixel_geometry;
@@ -881,6 +1255,7 @@ std::optional<SphHudLayout> extract_sph_hud_layout(const Image& image) {
     layout.compass_pointer_uncertainty_px = layout.reticle_uncertainty_px;
     layout.compass_pointer = {centre->point.x, compass->ticks.front().position.y};
     layout.compass = std::move(*compass);
+    layout.tick_uncertainty_px = std::max(layout.tick_uncertainty_px, layout.compass.tick_uncertainty_px);
     layout.mil_scale.ticks = std::move(right);
     layout.range_scale.ticks = std::move(left);
     const auto mil_x = layout.mil_scale.ticks.front().position.x;
@@ -891,17 +1266,43 @@ std::optional<SphHudLayout> extract_sph_hud_layout(const Image& image) {
     layout.range_scale.labels = bounded_rect(image, range_x - 82.0 * scale,
         layout.range_scale.ticks.front().position.y - 10.0 * scale, range_x - 4.0 * scale,
         layout.range_scale.ticks.back().position.y + 10.0 * scale);
-    layout.mil_scale.header = bounded_rect(image, mil_x + 43.0 * scale, centre->point.y - 10.0 * scale,
+    // The central numeric row can share the header's vertical band. Keep the
+    // measured gap between its unit suffix and MIL/RNG out of both OCR crops;
+    // otherwise a complete row becomes "190 mils MIL" or "RNG 1,942m".
+    layout.mil_scale.header = bounded_rect(image, mil_x + 49.0 * scale, centre->point.y - 10.0 * scale,
         mil_x + 85.0 * scale, centre->point.y + 10.0 * scale);
     layout.range_scale.header = bounded_rect(image, range_x - 82.0 * scale, centre->point.y - 10.0 * scale,
-        range_x - 43.0 * scale, centre->point.y + 10.0 * scale);
-    for (const auto& tick : layout.mil_scale.ticks)
-        layout.mil_scale.label_regions.push_back(bounded_rect(image, tick.position.x + 4.0 * scale,
-            tick.position.y - 10.0 * scale, tick.position.x + 78.0 * scale, tick.position.y + 10.0 * scale));
-    for (const auto& tick : layout.range_scale.ticks)
-        layout.range_scale.label_regions.push_back(bounded_rect(image, tick.position.x - 60.0 * scale,
-            tick.position.y - 10.0 * scale, tick.position.x - 4.0 * scale, tick.position.y + 10.0 * scale));
+        range_x - 49.0 * scale, centre->point.y + 10.0 * scale);
+    const int header_gap = std::max(1, static_cast<int>(std::ceil(2.0 * scale)));
+    for (const auto& tick : layout.mil_scale.ticks) {
+        auto region = bounded_rect(image, tick.position.x + 4.0 * scale,
+            tick.position.y - 10.0 * scale, tick.position.x + 78.0 * scale, tick.position.y + 10.0 * scale);
+        if (region.top < layout.mil_scale.header.bottom && region.bottom > layout.mil_scale.header.top)
+            region.right = std::min(region.right, layout.mil_scale.header.left - header_gap);
+        layout.mil_scale.label_regions.push_back(region);
+    }
+    for (const auto& tick : layout.range_scale.ticks) {
+        auto region = bounded_rect(image, tick.position.x - 60.0 * scale,
+            tick.position.y - 10.0 * scale, tick.position.x - 4.0 * scale, tick.position.y + 10.0 * scale);
+        if (region.top < layout.range_scale.header.bottom && region.bottom > layout.range_scale.header.top)
+            region.left = std::max(region.left, layout.range_scale.header.right + header_gap);
+        layout.range_scale.label_regions.push_back(region);
+    }
+    // Each row has its own measured spine. Subpixel jitter plus floor/ceil can
+    // put a valid OCR crop one pixel outside a container based on the first
+    // row, so retain every actual capture box rather than trimming its tokens.
+    const auto include_region = [](ImageRect& bounds, ImageRect region) {
+        bounds.left = std::min(bounds.left, region.left);
+        bounds.top = std::min(bounds.top, region.top);
+        bounds.right = std::max(bounds.right, region.right);
+        bounds.bottom = std::max(bounds.bottom, region.bottom);
+    };
+    for (auto* instrument : {&layout.mil_scale, &layout.range_scale}) {
+        include_region(instrument->labels, instrument->header);
+        for (const auto region : instrument->label_regions) include_region(instrument->labels, region);
+    }
     metadata_regions(image, layout);
+    if (diagnostics) diagnostics->stage = SphHudLayoutStage::ready;
     return layout;
 }
 
@@ -923,9 +1324,10 @@ int sph_hud_poll_delay_ms(std::uint64_t processing_ms,
         return retry;
     const auto spent = capture_age_ms + processing_ms; // Both bounded above.
     constexpr std::uint64_t minimum_delay = 150;
-    // A later completion cannot meet freshness even at the minimum delay.
-    // Keep the old bounded backoff rather than increasing futile CPU work.
-    if (spent + minimum_delay > 1000) return retry;
+    // A slow but currently fresh accepted read still benefits from starting
+    // its next independent capture after a bounded idle interval. Continuous
+    // indication may be impossible; do not add the refusal backoff to that gap.
+    if (spent + minimum_delay > 1000) return static_cast<int>(minimum_delay);
     const auto budget = spent < 900 ? 900 - spent : 0;
     return static_cast<int>(std::clamp<std::uint64_t>(budget, minimum_delay, 700));
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.13.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.13.1 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -94,9 +94,15 @@ target_link_libraries(wardogs_core PRIVATE
     windowscodecs
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.lib"
 )
+add_library(wardogs_game_capture STATIC src/game_client_capture.cpp)
+target_include_directories(wardogs_game_capture PUBLIC include)
+target_compile_definitions(wardogs_game_capture PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_game_capture PRIVATE /W4 /permissive- /utf-8)
+target_link_libraries(wardogs_game_capture PRIVATE wardogs_core d3d11 dwmapi windowsapp)
 if(MSVC)
     target_compile_options(wardogs_core PRIVATE /W4 /permissive- /utf-8)
 endif()
+
 
 add_library(wardogs_missions STATIC src/fire_missions.cpp)
 target_include_directories(wardogs_missions PUBLIC include)
@@ -514,6 +520,11 @@ add_custom_command(TARGET map_ocr_benchmark POST_BUILD
 )
 
 if(WIN32)
+    add_executable(hud_capture_probe tools/hud_capture_probe.cpp src/capture.cpp)
+    target_include_directories(hud_capture_probe PRIVATE include)
+    target_compile_definitions(hud_capture_probe PRIVATE UNICODE _UNICODE NOMINMAX)
+    target_compile_options(hud_capture_probe PRIVATE /W4 /permissive- /utf-8)
+    target_link_libraries(hud_capture_probe PRIVATE user32 gdi32)
     add_executable(sph_hud_probe tools/sph_hud_probe.cpp src/sph_hud_ocr.cpp src/windows_ocr.cpp)
     target_compile_definitions(sph_hud_probe PRIVATE UNICODE _UNICODE NOMINMAX)
     target_compile_options(sph_hud_probe PRIVATE /W4 /permissive- /utf-8)
@@ -572,3 +583,33 @@ set_tests_properties(wardogs_app_english_native_workflow_tests PROPERTIES
 add_executable(terrain_probe tools/terrain_probe.cpp)
 target_compile_options(terrain_probe PRIVATE /W4 /permissive- /utf-8)
 target_link_libraries(terrain_probe PRIVATE wardogs_terrain Qt6::Core)
+
+# Every executable using the GDI region helpers receives the separate fresh
+# HWND compositor backend as well. Map/chat capture remains unchanged.
+foreach(capture_target IN ITEMS WarDogsDistanceCalculator wardogs_capture_tests
+        wardogs_capture_client_overlay_tests wardogs_vehicle_ui_tests
+        wardogs_localization_tests hud_capture_probe)
+    target_link_libraries(${capture_target} PRIVATE wardogs_game_capture)
+endforeach()
+
+# Native HUD qualification is opt-in: personal and third-party game frames
+# remain in a private dataset, and absent positives are never counted as PASS.
+set(WARDOGS_HUD_REPLAY_MANIFEST "" CACHE FILEPATH "Private hash-pinned HUD replay manifest")
+if(Python3_Interpreter_FOUND)
+    add_test(NAME wardogs_hud_replay_contract_tests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_hud_replay.py" --self-test)
+    if(WARDOGS_HUD_REPLAY_MANIFEST)
+        if(NOT WIN32 OR NOT EXISTS "${WARDOGS_HUD_REPLAY_MANIFEST}")
+            message(FATAL_ERROR "Native HUD replay requires Windows and an existing private manifest")
+        endif()
+        add_test(NAME wardogs_hud_native_replay_tests
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_hud_replay.py"
+                --probe "$<TARGET_FILE:sph_hud_probe>"
+                --model "${CMAKE_CURRENT_SOURCE_DIR}/assets/models/PP-OCRv6_rec_small.onnx"
+                --manifest "${WARDOGS_HUD_REPLAY_MANIFEST}"
+                --report "${CMAKE_CURRENT_BINARY_DIR}/Testing/hud-native-replay.json")
+        set_tests_properties(wardogs_hud_native_replay_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200)
+    endif()
+elseif(WARDOGS_HUD_REPLAY_MANIFEST)
+    message(FATAL_ERROR "Native HUD replay requires a Python 3 interpreter")
+endif()

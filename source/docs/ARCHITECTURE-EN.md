@@ -59,7 +59,8 @@ Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_
 | Qt 6.8.3 Widgets | Windows, layouts, QSS, events, QPainter, clipboard |
 | ONNX Runtime 1.29.0 | Local CPU recognition of coordinate rows |
 | C++/WinRT, Windows.Media.Ocr | Alternative system recognition |
-| GDI, USER32, DWM | Region capture, monitors, mouse events, overlays |
+| GDI, USER32, DWM | Coordinate/custom-region capture, monitors, mouse events, overlays |
+| Windows Graphics Capture, D3D11 | HUD development after 2.13: fresh target-HWND frames, QPC verification, complete client readback excluding other-application windows |
 | BCrypt, Zstandard 1.5.7 | Height-map verification and decoding |
 | CMake 3.24+, Ninja, CTest, PowerShell | Build, checks and portable package |
 
@@ -79,6 +80,7 @@ The distributable does not contain community `.wdt` files. Previously obtained l
 | `ocr.cpp`, `RapidOcr` | Text components, BGR preparation, ONNX, CTC, pair/source validation |
 | `windows_ocr.cpp`, `WindowsOcr` | WinRT threads, high-contrast attempt, cancellation and timeout |
 | `capture.cpp`, `SelectionOverlay` | Client-field/monitor geometry, GDI screenshot, selection and cancellation |
+| `game_client_capture.cpp` | HUD development after 2.13: WGC/D3D11, device/item/readback cache, a separately closed session per request, source/receipt time bounds |
 | `hotkeys.cpp`, `GlobalHotkeyListener` | RegisterHotKey, WM_HOTKEY, conflicts and shortcut release |
 | `mouse_trigger.cpp`, `GlobalMouseListener` | Fast hook, event queue outside the hook, shutdown |
 | `settings.cpp`, `AppSettings` | Workflow migration, parameter validation, INI import, atomic write |
@@ -139,7 +141,7 @@ User names are optional for automatic history. Restoration remains explicit afte
 ## Resources and storage
 
 - The ONNX engine and model are not created for each capture; the input buffer and `MemoryInfo` are reused. CTC is decoded from the tensor. Images are limited to 16 megapixels; normalized row width is 4096. Component, row and variant counts are bounded; no whole-image flood-fill queue is used.
-- GDI and COM are released through RAII. Full images are not retained between jobs. The middle button starts one bounded request with at most four separate frames seeking two agreeing observations. A separate [SPH-2 HUD observer](HUD-OBSERVATION-EN.md) runs only with game integration and ready guidance, one job at a time at reduced priority; coordinate OCR suspends it. Keys are not polled: fire intentions come from physical mouse events.
+- GDI, COM, D3D11 and WGC resources are released through RAII. Full-frame CPU copies are not retained between jobs. The middle button starts one bounded GDI request with at most four separate frames seeking two agreeing observations. The [SPH-2 HUD observer developed after 2.13](HUD-OBSERVATION-EN.md) acquires fresh target-HWND frames through WGC/D3D11, verifies QPC and retains separate source-start/receipt time bounds. Its cache holds the device, capture item and GPU readback buffer, but each request closes its session/pool; closed items are recreated. HUD observation runs only with game integration and ready guidance, one job at a time at reduced priority; coordinate OCR suspends it. Keys are not polled: fire intentions come from physical mouse events.
 - Ranging history is limited to 256 records without silent deletion; a new record validates its solution before commit. Nearby-target weighting is bounded separately for each arc; the proximity matrix is calculated once per pair.
 - The high-arc table is sorted once. Terrain is decoded by blocks with an eight-block cache; LRU uses `list::splice`, and grid reconstruction is in place.
 - The standard coordinate parser is linear. Custom regex permits a restricted language; a damaged ANSI version of the standard pattern is repaired automatically.

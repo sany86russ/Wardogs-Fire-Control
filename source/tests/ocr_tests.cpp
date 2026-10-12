@@ -53,6 +53,20 @@ void check_resampling_boundaries() {
             check(reference_width == actual_width && reference.size() == actual.size() &&
                       std::memcmp(reference.data(), actual.data(), reference.size() * sizeof(float)) == 0,
                   "optimized bilinear tensor is bit-identical across enlargement, shrinkage, crop and width limits");
+            std::vector<float> hud_tensor(reference.size(), 17.0F);
+            int hud_width = 0;
+            detail::prepare_ocr_tensor(varied, hud_tensor, hud_width, crop, crop, {}, 128);
+            bool identical_prefix = hud_width >= 128 && hud_width <= reference_width &&
+                hud_tensor.size() == static_cast<std::size_t>(3 * 48 * hud_width);
+            for (int channel = 0; identical_prefix && channel < 3; ++channel)
+                for (int y = 0; identical_prefix && y < 48; ++y) {
+                    const auto* expected = reference.data() + (channel * 48 + y) * reference_width;
+                    const auto* current = hud_tensor.data() + (channel * 48 + y) * hud_width;
+                    identical_prefix = std::memcmp(expected, current,
+                        static_cast<std::size_t>(hud_width) * sizeof(float)) == 0;
+                }
+            check(identical_prefix,
+                  "HUD tensor changes only trailing padding and preserves every visible sample and retained zero column");
         }
     }
     // Different BGR corners make an unintended upper/left-neighbour blend
@@ -64,6 +78,18 @@ void check_resampling_boundaries() {
     detail::prepare_ocr_tensor(corners, tensor, width, 0, 0, {});
     check(width == 320 && tensor.size() == 3 * 48 * 320,
           "tiny OCR image preserves the model's minimum tensor width and planar BGR shape");
+    std::vector<float> hud_tensor;
+    int hud_width = 0;
+    detail::prepare_ocr_tensor(corners, hud_tensor, hud_width, 0, 0, {}, 128);
+    check(hud_width == 128 && hud_tensor.size() == 3 * 48 * 128,
+          "dedicated HUD lines reduce unused tensor padding to the verified dynamic-width minimum");
+    const auto fractional_width = ocr_preprocessing_reference::pixels(226, 47);
+    detail::prepare_ocr_tensor(fractional_width, hud_tensor, hud_width, 0, 0, {}, 128);
+    check(hud_width == 231,
+          "short fractional-width HUD lines keep the legacy ceil sample count instead of changing to floor");
+    rejects([&] {
+        detail::prepare_ocr_tensor(corners, hud_tensor, hud_width, 0, 0, {}, 129);
+    }, "tensor width policies are limited to the fixed default and dedicated HUD modes");
     const auto sample = [&](int x, int y, int channel) {
         return tensor[static_cast<std::size_t>(channel) * 48 * width + y * width + x];
     };

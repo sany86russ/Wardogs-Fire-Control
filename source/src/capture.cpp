@@ -273,18 +273,4 @@ Image capture_screen(const CaptureRegion& region) {
     return capture_dc(nullptr, resolve_capture_region(region), SRCCOPY | CAPTUREBLT);
 }
 
-Image capture_game_client(HWND window) {
-    RECT before{};
-    if (!window || !IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) ||
-        !GetClientRect(window, &before))
-        throw std::runtime_error("Game client is not available for HUD capture");
-    auto image = capture_dc(window, before, SRCCOPY);
-    RECT after{};
-    if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) ||
-        !GetClientRect(window, &after) || before.left != after.left || before.top != after.top ||
-        before.right != after.right || before.bottom != after.bottom)
-        throw std::runtime_error("Game client geometry changed during HUD capture");
-    return image;
-}
-
 }  // namespace wardogs

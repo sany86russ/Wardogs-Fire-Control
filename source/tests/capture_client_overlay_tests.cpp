@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -134,6 +135,22 @@ bool image_pixel_matches(const wardogs::Image& image, int x, int y, COLORREF exp
         image.bgr[index + 2] == GetRValue(expected);
 }
 
+wardogs::Image capture_client(HWND window) {
+    // Device creation can exceed the per-request capture budget on a cold
+    // graphics driver. Production polling retries with the same healthy cache;
+    // model only that initialization retry, never a stale/frame/geometry error.
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        try { return wardogs::capture_game_client(window); }
+        catch (const std::runtime_error& error) {
+            if (attempt == 3 || std::string_view(error.what()).find(
+                    "Fresh game compositor capture exceeded 250 ms stage=init ") == std::string_view::npos)
+                throw;
+            std::cerr << "capture_warmup_refused attempt=" << attempt << " reason=" << error.what() << '\n';
+        }
+    }
+    throw std::runtime_error("Capture initialization did not produce a fresh fixture frame");
+}
+
 void check_client_pattern(const wardogs::Image& image, RECT client) {
     check(image.width == client.right && image.height == client.bottom,
           "capture returns the exact full physical client dimensions");
@@ -168,7 +185,7 @@ int main() {
         check(GetForegroundWindow() == game.get(), "controlled source fixture owns foreground");
         RECT client{};
         if (!GetClientRect(game.get(), &client)) throw std::runtime_error("Missing fixture client");
-        check_client_pattern(wardogs::capture_game_client(game.get()), client);
+        check_client_pattern(capture_client(game.get()), client);
 
         POINT origin{};
         if (!ClientToScreen(game.get(), &origin)) throw std::runtime_error("Missing fixture origin");
@@ -192,10 +209,10 @@ int main() {
         check(screen_pixel_matches(covered, overlay_color),
               "desktop really contains the opaque overlay at the tested client pixel");
         check(GetForegroundWindow() == game.get(), "passive overlay does not steal source foreground");
-        check_client_pattern(wardogs::capture_game_client(game.get()), client);
+        check_client_pattern(capture_client(game.get()), client);
         const auto gdi_before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         for (int iteration = 0; iteration < 32; ++iteration)
-            check_client_pattern(wardogs::capture_game_client(game.get()), client);
+            check_client_pattern(capture_client(game.get()), client);
         const auto gdi_after = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         check(gdi_before != 0 && gdi_after <= gdi_before,
               "repeated client captures release their GDI buffers and contexts");
@@ -213,7 +230,7 @@ int main() {
         UpdateWindow(game.get());
         pump_messages();
         GetClientRect(game.get(), &client);
-        check_client_pattern(wardogs::capture_game_client(game.get()), client);
+        check_client_pattern(capture_client(game.get()), client);
         ShowWindow(game.get(), SW_HIDE);
         rejects([&] { (void)wardogs::capture_game_client(game.get()); },
                 "hidden source windows cannot supply HUD evidence");
@@ -222,6 +239,19 @@ int main() {
                 "destroyed source HWND cannot reuse an earlier captured client");
         rejects([] { (void)wardogs::capture_game_client(nullptr); },
                 "null source HWND is refused before GDI acquisition");
+        // Replacing the source must bind a new capture item even when process,
+        // thread, size and position match the previous window. Different ink
+        // proves that a cached previous source surface was not reused.
+        TestWindow replacement(CreateWindowExW(0, FixtureClass::name, L"Recreated capture source",
+            WS_POPUP, work.left + 20, work.top + 20, 720, 400,
+            nullptr, nullptr, GetModuleHandleW(nullptr), reinterpret_cast<void*>(1)));
+        ShowWindow(replacement.get(), SW_SHOWNORMAL);
+        UpdateWindow(replacement.get());
+        pump_messages();
+        const auto replacement_frame = capture_client(replacement.get());
+        check(replacement_frame.width == 720 && replacement_frame.height == 400 &&
+              image_pixel_matches(replacement_frame, 360, 200, overlay_color),
+              "a replaced source window returns its own fresh content, never the cached previous item");
     } catch (const std::exception& error) {
         ++failures;
         std::cerr << "FAIL: " << error.what() << '\n';
