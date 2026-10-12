@@ -135,15 +135,39 @@ bool image_pixel_matches(const wardogs::Image& image, int x, int y, COLORREF exp
         image.bgr[index + 2] == GetRValue(expected);
 }
 
-wardogs::Image capture_client(HWND window) {
-    // Device creation can exceed the per-request capture budget on a cold
-    // graphics driver. Production polling retries with the same healthy cache;
-    // model only that initialization retry, never a stale/frame/geometry error.
+std::uint64_t current_qpc_100ns() {
+    LARGE_INTEGER counter{}, frequency{};
+    if (!QueryPerformanceCounter(&counter) || !QueryPerformanceFrequency(&frequency) ||
+        counter.QuadPart <= 0 || frequency.QuadPart <= 0)
+        throw std::runtime_error("Cannot verify the returned fixture frame clock");
+    return static_cast<std::uint64_t>(static_cast<long double>(counter.QuadPart) *
+                                      10'000'000 / frequency.QuadPart);
+}
+
+wardogs::GameClientCapture capture_client(HWND window) {
+    // Cold initialization can consume the budget or leave too little time for
+    // the first frame. Production polling retries with the same healthy cache.
+    // Each attempt must still prove fresh pixels; never retry stale frames,
+    // invalid clocks, parser/geometry errors or a readback failure.
     for (int attempt = 1; attempt <= 3; ++attempt) {
-        try { return wardogs::capture_game_client(window); }
+        try {
+            auto captured = wardogs::capture_game_client_frame(window);
+            check(captured.system_relative_time_100ns > 0 &&
+                  captured.system_relative_time_100ns <= current_qpc_100ns(),
+                  "every fixture frame source clock has been reached before its return");
+            check(captured.acquisition_started_at_ms <= captured.captured_at_ms &&
+                  captured.captured_at_ms <= GetTickCount64(),
+                  "fixture acquisition and availability stamps retain their real chronological bounds");
+            return captured;
+        }
         catch (const std::runtime_error& error) {
-            if (attempt == 3 || std::string_view(error.what()).find(
-                    "Fresh game compositor capture exceeded 250 ms stage=init ") == std::string_view::npos)
+            const std::string_view reason{error.what()};
+            const bool cold_init = reason.starts_with(
+                "Fresh game compositor capture exceeded 250 ms stage=init ");
+            const bool cold_frame = reason.starts_with(
+                "Fresh game compositor capture exceeded 250 ms stage=frame ") &&
+                reason.find(" frames_received=0 stale_frames=0 ") != std::string_view::npos;
+            if (attempt == 3 || (!cold_init && !cold_frame))
                 throw;
             std::cerr << "capture_warmup_refused attempt=" << attempt << " reason=" << error.what() << '\n';
         }
@@ -185,7 +209,7 @@ int main() {
         check(GetForegroundWindow() == game.get(), "controlled source fixture owns foreground");
         RECT client{};
         if (!GetClientRect(game.get(), &client)) throw std::runtime_error("Missing fixture client");
-        check_client_pattern(capture_client(game.get()), client);
+        check_client_pattern(capture_client(game.get()).image, client);
 
         POINT origin{};
         if (!ClientToScreen(game.get(), &origin)) throw std::runtime_error("Missing fixture origin");
@@ -209,10 +233,17 @@ int main() {
         check(screen_pixel_matches(covered, overlay_color),
               "desktop really contains the opaque overlay at the tested client pixel");
         check(GetForegroundWindow() == game.get(), "passive overlay does not steal source foreground");
-        check_client_pattern(capture_client(game.get()), client);
+        const auto covered_frame = capture_client(game.get());
+        check_client_pattern(covered_frame.image, client);
         const auto gdi_before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
-        for (int iteration = 0; iteration < 32; ++iteration)
-            check_client_pattern(capture_client(game.get()), client);
+        auto previous_source_qpc = covered_frame.system_relative_time_100ns;
+        for (int iteration = 0; iteration < 32; ++iteration) {
+            const auto repeated_frame = capture_client(game.get());
+            check(repeated_frame.system_relative_time_100ns > previous_source_qpc,
+                  "successive same-window fixture captures have strictly increasing compositor source clocks");
+            previous_source_qpc = repeated_frame.system_relative_time_100ns;
+            check_client_pattern(repeated_frame.image, client);
+        }
         const auto gdi_after = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         check(gdi_before != 0 && gdi_after <= gdi_before,
               "repeated client captures release their GDI buffers and contexts");
@@ -230,7 +261,7 @@ int main() {
         UpdateWindow(game.get());
         pump_messages();
         GetClientRect(game.get(), &client);
-        check_client_pattern(capture_client(game.get()), client);
+        check_client_pattern(capture_client(game.get()).image, client);
         ShowWindow(game.get(), SW_HIDE);
         rejects([&] { (void)wardogs::capture_game_client(game.get()); },
                 "hidden source windows cannot supply HUD evidence");
@@ -249,8 +280,8 @@ int main() {
         UpdateWindow(replacement.get());
         pump_messages();
         const auto replacement_frame = capture_client(replacement.get());
-        check(replacement_frame.width == 720 && replacement_frame.height == 400 &&
-              image_pixel_matches(replacement_frame, 360, 200, overlay_color),
+        check(replacement_frame.image.width == 720 && replacement_frame.image.height == 400 &&
+              image_pixel_matches(replacement_frame.image, 360, 200, overlay_color),
               "a replaced source window returns its own fresh content, never the cached previous item");
     } catch (const std::exception& error) {
         ++failures;

@@ -5110,7 +5110,7 @@ private:
         }
         if (!detail.empty()) {
             // Error messages are bounded and kept on a single log line.
-            detail.resize(std::min(detail.size(), std::size_t{160}));
+            detail.resize(std::min(detail.size(), std::size_t{384}));
             for (auto& character : detail)
                 if (character == '\r' || character == '\n' || character == '"') character = ' ';
             log << " detail=\"" << detail << '"';

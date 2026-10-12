@@ -33,8 +33,8 @@ struct CaptureAttempt {
     std::chrono::steady_clock::time_point started{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point stage_started{started};
     std::string_view stage{"identity"};
-    std::uint32_t frames_received{}, stale_frames{}, gpu_waits{};
-    std::int64_t requested_qpc{}, source_qpc{};
+    std::uint32_t frames_received{}, stale_frames{}, gpu_waits{}, sourceclock_waits{};
+    std::int64_t requested_qpc{}, source_qpc{}, received_qpc{}, current_qpc{};
 
     void enter(std::string_view next) {
         stage = next; stage_started = std::chrono::steady_clock::now();
@@ -48,8 +48,11 @@ struct CaptureAttempt {
             " stage_elapsed_ms=" + std::to_string(stage_elapsed) +
             " frames_received=" + std::to_string(frames_received) +
             " stale_frames=" + std::to_string(stale_frames) + " gpu_waits=" + std::to_string(gpu_waits) +
+            " sourceclock_waits=" + std::to_string(sourceclock_waits) +
             " request_qpc_100ns=" + std::to_string(requested_qpc) +
-            " source_qpc_100ns=" + std::to_string(source_qpc);
+            " source_qpc_100ns=" + std::to_string(source_qpc) +
+            " received_qpc_100ns=" + std::to_string(received_qpc) +
+            " current_qpc_100ns=" + std::to_string(current_qpc);
     }
 };
 
@@ -311,12 +314,26 @@ GameClientCapture capture_game_client_frame(HWND window, std::stop_token stop) {
             attempt.enter("sourceclock");
             const auto source_qpc = frame.SystemRelativeTime().count();
             attempt.source_qpc = source_qpc;
-            const auto acquired_qpc = qpc_100ns();
+            attempt.received_qpc = qpc_100ns();
+            attempt.current_qpc = attempt.received_qpc;
+            if (source_qpc <= 0)
+                throw std::runtime_error("Invalid compositor frame clock; freshness cannot be verified" + attempt.describe());
             if (source_qpc < requested_qpc) {
                 ++attempt.stale_frames; frame.Close(); attempt.enter("frame"); continue;
             }
-            if (source_qpc <= 0 || source_qpc > acquired_qpc)
-                throw std::runtime_error("Invalid compositor frame clock; freshness cannot be verified" + attempt.describe());
+            // A compositor can deliver a surface before its rendering-clock
+            // stamp is reached. Do not grant it an early availability time or
+            // invent clock tolerance: wait for the actual QPC within the same
+            // request budget before readback and the pre-press receipt stamp.
+            while (source_qpc > attempt.current_qpc) {
+                check_request(stop, deadline, attempt);
+                if (resources->closed->load(std::memory_order_acquire))
+                    throw std::runtime_error("Game capture item closed while awaiting its source clock" + attempt.describe());
+                ++attempt.sourceclock_waits;
+                Sleep(1);
+                attempt.current_qpc = qpc_100ns();
+            }
+            check_request(stop, deadline, attempt);
             auto image = read_client_pixels(*resources, frame, stop, deadline, attempt);
             frame.Close();
             attempt.enter("geometry_verify");
