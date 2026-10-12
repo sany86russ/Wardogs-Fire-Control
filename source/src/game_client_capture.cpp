@@ -33,6 +33,7 @@ struct CaptureAttempt {
     std::chrono::steady_clock::time_point started{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point stage_started{started};
     std::string_view stage{"identity"};
+    std::string_view init_operation{"not_started"};
     std::uint32_t frames_received{}, stale_frames{}, gpu_waits{}, sourceclock_waits{};
     std::int64_t requested_qpc{}, source_qpc{}, received_qpc{}, current_qpc{};
 
@@ -52,7 +53,8 @@ struct CaptureAttempt {
             " request_qpc_100ns=" + std::to_string(requested_qpc) +
             " source_qpc_100ns=" + std::to_string(source_qpc) +
             " received_qpc_100ns=" + std::to_string(received_qpc) +
-            " current_qpc_100ns=" + std::to_string(current_qpc);
+            " current_qpc_100ns=" + std::to_string(current_qpc) +
+            " init_operation=" + std::string(init_operation);
     }
 };
 
@@ -171,29 +173,37 @@ struct CaptureResources {
     winrt::Windows::Graphics::SizeInt32 size{};
     RECT crop{};
 
-    explicit CaptureResources(WindowGeometry geometry) : source(geometry) {
+    CaptureResources(WindowGeometry geometry, CaptureAttempt& attempt) : source(geometry) {
+        attempt.init_operation = "support";
         if (!ApiInformation::IsMethodPresent(
                 L"Windows.Graphics.Capture.Direct3D11CaptureFramePool", L"CreateFreeThreaded") ||
             !GraphicsCaptureSession::IsSupported())
             throw std::runtime_error("Windows Graphics Capture is unavailable; fresh HUD evidence cannot be captured");
+        attempt.init_operation = "device";
         winrt::check_hresult(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
             D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION,
             device.put(), nullptr, context.put()));
         context.as<ID3D11Multithread>()->SetMultithreadProtected(TRUE);
+        attempt.init_operation = "dxgi_device";
         const auto dxgi = device.as<IDXGIDevice>();
         winrt::com_ptr<IInspectable> inspectable;
         winrt::check_hresult(CreateDirect3D11DeviceFromDXGIDevice(dxgi.get(), inspectable.put()));
         graphics_device = inspectable.as<IDirect3DDevice>();
+        attempt.init_operation = "factory";
         const auto factory = winrt::get_activation_factory<GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
+        attempt.init_operation = "create_item";
         winrt::check_hresult(factory->CreateForWindow(source.window, winrt::guid_of<GraphicsCaptureItem>(),
                                                      winrt::put_abi(item)));
         // Some games replace the captured window without an apparent visual
         // close. The callback owns only a flag; it never dereferences this
         // cache, whose lifetime can end on another capture worker.
+        attempt.init_operation = "subscribe";
         closed_subscription = item.Closed(winrt::auto_revoke,
             [state = closed](const auto&, const auto&) noexcept { state->store(true, std::memory_order_release); });
+        attempt.init_operation = "item_geometry";
         size = item.Size();
         crop = client_crop(source, size);
+        attempt.init_operation = "staging";
         D3D11_TEXTURE2D_DESC descriptor{};
         descriptor.Width = static_cast<UINT>(source.client.right);
         descriptor.Height = static_cast<UINT>(source.client.bottom);
@@ -284,8 +294,13 @@ GameClientCapture capture_game_client_frame(HWND window, std::stop_token stop) {
     try {
         attempt.enter("init");
         if (!resources || resources->closed->load(std::memory_order_acquire) ||
-            !same_geometry(resources->source, before))
-            resources = std::make_unique<CaptureResources>(before);
+            !same_geometry(resources->source, before)) {
+            // Assignment would construct the replacement before releasing the
+            // old item/device. An invalid cache must not overlap its successor,
+            // particularly when the same HWND changes geometry or closes.
+            resources.reset();
+            resources = std::make_unique<CaptureResources>(before, attempt);
+        } else attempt.init_operation = "cached";
         check_request(stop, deadline, attempt);
         if (resources->closed->load(std::memory_order_acquire))
             throw std::runtime_error("Game capture item closed during initialization" + attempt.describe());

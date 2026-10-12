@@ -193,6 +193,18 @@ void check_client_pattern(const wardogs::Image& image, RECT client) {
 int main() {
     // This creates only isolated native CI fixtures. Never run this test on
     // the owner's desktop when GUI/game interaction is prohibited.
+    std::string_view phase{"setup"};
+    const auto enter_phase = [&](std::string_view next) {
+        phase = next;
+        std::cout << "capture.phase phase=" << phase << std::endl;
+    };
+    const auto phase_success = [&](const wardogs::GameClientCapture& frame) {
+        if (failures) return;
+        std::cout << "capture.phase_success phase=" << phase << " captures=1"
+            << " source_qpc_100ns=" << frame.system_relative_time_100ns
+            << " acquisition_started_at_ms=" << frame.acquisition_started_at_ms
+            << " availability_ms=" << frame.captured_at_ms << std::endl;
+    };
     try {
         FixtureClass registered;
         CountingBrush counting_sentinel;
@@ -209,7 +221,10 @@ int main() {
         check(GetForegroundWindow() == game.get(), "controlled source fixture owns foreground");
         RECT client{};
         if (!GetClientRect(game.get(), &client)) throw std::runtime_error("Missing fixture client");
-        check_client_pattern(capture_client(game.get()).image, client);
+        enter_phase("initial");
+        const auto initial_frame = capture_client(game.get());
+        check_client_pattern(initial_frame.image, client);
+        phase_success(initial_frame);
 
         POINT origin{};
         if (!ClientToScreen(game.get(), &origin)) throw std::runtime_error("Missing fixture origin");
@@ -233,11 +248,15 @@ int main() {
         check(screen_pixel_matches(covered, overlay_color),
               "desktop really contains the opaque overlay at the tested client pixel");
         check(GetForegroundWindow() == game.get(), "passive overlay does not steal source foreground");
+        enter_phase("covered");
         const auto covered_frame = capture_client(game.get());
         check_client_pattern(covered_frame.image, client);
+        phase_success(covered_frame);
         const auto gdi_before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         auto previous_source_qpc = covered_frame.system_relative_time_100ns;
+        enter_phase("repeated");
         for (int iteration = 0; iteration < 32; ++iteration) {
+            std::cout << "capture.phase phase=repeated iteration=" << iteration + 1 << std::endl;
             const auto repeated_frame = capture_client(game.get());
             check(repeated_frame.system_relative_time_100ns > previous_source_qpc,
                   "successive same-window fixture captures have strictly increasing compositor source clocks");
@@ -247,6 +266,10 @@ int main() {
         const auto gdi_after = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         check(gdi_before != 0 && gdi_after <= gdi_before,
               "repeated client captures release their GDI buffers and contexts");
+        if (!failures)
+            std::cout << "capture.phase_success phase=repeated captures=32 increasing_source_clocks=32"
+                << " baseline_source_qpc_100ns=" << covered_frame.system_relative_time_100ns
+                << " last_source_qpc_100ns=" << previous_source_qpc << std::endl;
 
         overlay.destroy();
         ShowWindow(game.get(), SW_MINIMIZE);
@@ -254,6 +277,7 @@ int main() {
         check(IsIconic(game.get()) != 0, "controlled source is actually minimized");
         rejects([&] { (void)wardogs::capture_game_client(game.get()); },
                 "minimized game clients cannot produce HUD evidence");
+        enter_phase("resize");
         ShowWindow(game.get(), SW_RESTORE);
         SetWindowPos(game.get(), nullptr, 0, 0, 720, 400,
                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -261,7 +285,9 @@ int main() {
         UpdateWindow(game.get());
         pump_messages();
         GetClientRect(game.get(), &client);
-        check_client_pattern(capture_client(game.get()).image, client);
+        const auto resized_frame = capture_client(game.get());
+        check_client_pattern(resized_frame.image, client);
+        phase_success(resized_frame);
         ShowWindow(game.get(), SW_HIDE);
         rejects([&] { (void)wardogs::capture_game_client(game.get()); },
                 "hidden source windows cannot supply HUD evidence");
@@ -273,6 +299,7 @@ int main() {
         // Replacing the source must bind a new capture item even when process,
         // thread, size and position match the previous window. Different ink
         // proves that a cached previous source surface was not reused.
+        enter_phase("replacement");
         TestWindow replacement(CreateWindowExW(0, FixtureClass::name, L"Recreated capture source",
             WS_POPUP, work.left + 20, work.top + 20, 720, 400,
             nullptr, nullptr, GetModuleHandleW(nullptr), reinterpret_cast<void*>(1)));
@@ -283,9 +310,10 @@ int main() {
         check(replacement_frame.image.width == 720 && replacement_frame.image.height == 400 &&
               image_pixel_matches(replacement_frame.image, 360, 200, overlay_color),
               "a replaced source window returns its own fresh content, never the cached previous item");
+        phase_success(replacement_frame);
     } catch (const std::exception& error) {
         ++failures;
-        std::cerr << "FAIL: " << error.what() << '\n';
+        std::cerr << "FAIL: fixture_phase=" << phase << ' ' << error.what() << '\n';
     }
     if (failures == 0) std::cout << "Client overlay capture tests passed\n";
     return failures == 0 ? 0 : 1;
