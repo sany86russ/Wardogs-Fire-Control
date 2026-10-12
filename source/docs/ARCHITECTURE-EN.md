@@ -1,5 +1,6 @@
 # WARDOGS Fire Control — architecture and development
 
+Current change in 2.13.2: sight HUD reading is removed; calculation and coordinate OCR are preserved. The base 2.11 architecture below retains its history with updated capture mechanisms.
 Version **2.11.0** unifies map confirmation, accepted gun/target coordinates, the selected final command and ranging. Automatic ground assessment and a separate accepted-point history are added; OCR and diagnostic-archive changes developed in 2.10 are included in 2.11. This document describes that version's architecture; results for a particular build are available in GitHub Actions.
 
 **firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores up to 500 named points and separately up to 64 recently accepted points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides additional tools: manual target shifting, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
@@ -60,7 +61,6 @@ Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_
 | ONNX Runtime 1.29.0 | Local CPU recognition of coordinate rows |
 | C++/WinRT, Windows.Media.Ocr | Alternative system recognition |
 | GDI, USER32, DWM | Coordinate/custom-region capture, monitors, mouse events, overlays |
-| Windows Graphics Capture, D3D11 | HUD development after 2.13: fresh target-HWND frames, QPC verification, complete client readback excluding other-application windows |
 | BCrypt, Zstandard 1.5.7 | Height-map verification and decoding |
 | CMake 3.24+, Ninja, CTest, PowerShell | Build, checks and portable package |
 
@@ -80,7 +80,6 @@ The distributable does not contain community `.wdt` files. Previously obtained l
 | `ocr.cpp`, `RapidOcr` | Text components, BGR preparation, ONNX, CTC, pair/source validation |
 | `windows_ocr.cpp`, `WindowsOcr` | WinRT threads, high-contrast attempt, cancellation and timeout |
 | `capture.cpp`, `SelectionOverlay` | Client-field/monitor geometry, GDI screenshot, selection and cancellation |
-| `game_client_capture.cpp` | HUD development after 2.13: WGC/D3D11, device/item/readback cache, a separately closed session per request, source/receipt time bounds |
 | `hotkeys.cpp`, `GlobalHotkeyListener` | RegisterHotKey, WM_HOTKEY, conflicts and shortcut release |
 | `mouse_trigger.cpp`, `GlobalMouseListener` | Fast hook, event queue outside the hook, shutdown |
 | `settings.cpp`, `AppSettings` | Workflow migration, parameter validation, INI import, atomic write |
@@ -141,7 +140,7 @@ User names are optional for automatic history. Restoration remains explicit afte
 ## Resources and storage
 
 - The ONNX engine and model are not created for each capture; the input buffer and `MemoryInfo` are reused. CTC is decoded from the tensor. Images are limited to 16 megapixels; normalized row width is 4096. Component, row and variant counts are bounded; no whole-image flood-fill queue is used.
-- GDI, COM, D3D11 and WGC resources are released through RAII. Full-frame CPU copies are not retained between jobs. The middle button starts one bounded GDI request with at most four separate frames seeking two agreeing observations. The [SPH-2 HUD observer developed after 2.13](HUD-OBSERVATION-EN.md) acquires fresh target-HWND frames through WGC/D3D11, verifies QPC and retains separate source-start/receipt time bounds. Its cache holds the device, capture item and GPU readback buffer, but each request closes its session/pool; closed items are recreated. HUD observation runs only with game integration and ready guidance, one job at a time at reduced priority; coordinate OCR suspends it. Keys are not polled: fire intentions come from physical mouse events.
+- In 2.13.2, automatic sight HUD reading and WGC/D3D11 capture are removed. Coordinates still use bounded GDI requests triggered by a hotkey or middle button, with window, geometry and independent-frame agreement checks. There is no background sight polling, left-button fire observation or coloured sight-agreement border. Calculations, terrain and Alt+I use the accepted calculator command. Pure observation models and saved-image parsing remain for archived diagnostic checks; they do not capture the game in the player application.
 - Ranging history is limited to 256 records without silent deletion; a new record validates its solution before commit. Nearby-target weighting is bounded separately for each arc; the proximity matrix is calculated once per pair.
 - The high-arc table is sorted once. Terrain is decoded by blocks with an eight-block cache; LRU uses `list::splice`, and grid reconstruction is in place.
 - The standard coordinate parser is linear. Custom regex permits a restricted language; a damaged ANSI version of the standard pattern is repaired automatically.

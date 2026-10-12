@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.13.1 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.13.2 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -94,11 +94,6 @@ target_link_libraries(wardogs_core PRIVATE
     windowscodecs
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.lib"
 )
-add_library(wardogs_game_capture STATIC src/game_client_capture.cpp)
-target_include_directories(wardogs_game_capture PUBLIC include)
-target_compile_definitions(wardogs_game_capture PRIVATE UNICODE _UNICODE NOMINMAX)
-target_compile_options(wardogs_game_capture PRIVATE /W4 /permissive- /utf-8)
-target_link_libraries(wardogs_game_capture PRIVATE wardogs_core d3d11 dwmapi windowsapp)
 if(MSVC)
     target_compile_options(wardogs_core PRIVATE /W4 /permissive- /utf-8)
 endif()
@@ -129,7 +124,6 @@ if(WIN32)
         src/direction_plot.cpp
         src/ghost_reticle_window.cpp
         src/main_window.cpp
-        src/sph_hud_ocr.cpp
         src/pinned_result_window.cpp
         src/selection_overlay.cpp
         src/settings.cpp
@@ -339,11 +333,6 @@ endif()
 add_test(NAME wardogs_hotkeys_tests COMMAND wardogs_hotkeys_tests)
 
 add_executable(wardogs_capture_tests tests/capture_tests.cpp src/capture.cpp)
-add_executable(wardogs_capture_client_overlay_tests tests/capture_client_overlay_tests.cpp src/capture.cpp)
-target_link_libraries(wardogs_capture_client_overlay_tests PRIVATE wardogs_core user32 gdi32)
-target_compile_options(wardogs_capture_client_overlay_tests PRIVATE /W4 /permissive- /utf-8)
-add_test(NAME wardogs_capture_client_overlay_tests COMMAND wardogs_capture_client_overlay_tests)
-set_tests_properties(wardogs_capture_client_overlay_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
 target_include_directories(wardogs_capture_tests PRIVATE include)
 target_compile_definitions(wardogs_capture_tests PRIVATE UNICODE _UNICODE NOMINMAX)
 target_compile_options(wardogs_capture_tests PRIVATE /W4 /permissive- /utf-8)
@@ -520,11 +509,6 @@ add_custom_command(TARGET map_ocr_benchmark POST_BUILD
 )
 
 if(WIN32)
-    add_executable(hud_capture_probe tools/hud_capture_probe.cpp src/capture.cpp)
-    target_include_directories(hud_capture_probe PRIVATE include)
-    target_compile_definitions(hud_capture_probe PRIVATE UNICODE _UNICODE NOMINMAX)
-    target_compile_options(hud_capture_probe PRIVATE /W4 /permissive- /utf-8)
-    target_link_libraries(hud_capture_probe PRIVATE user32 gdi32)
     add_executable(sph_hud_probe tools/sph_hud_probe.cpp src/sph_hud_ocr.cpp src/windows_ocr.cpp)
     target_compile_definitions(sph_hud_probe PRIVATE UNICODE _UNICODE NOMINMAX)
     target_compile_options(sph_hud_probe PRIVATE /W4 /permissive- /utf-8)
@@ -583,14 +567,6 @@ set_tests_properties(wardogs_app_english_native_workflow_tests PROPERTIES
 add_executable(terrain_probe tools/terrain_probe.cpp)
 target_compile_options(terrain_probe PRIVATE /W4 /permissive- /utf-8)
 target_link_libraries(terrain_probe PRIVATE wardogs_terrain Qt6::Core)
-
-# Every executable using the GDI region helpers receives the separate fresh
-# HWND compositor backend as well. Map/chat capture remains unchanged.
-foreach(capture_target IN ITEMS WarDogsDistanceCalculator wardogs_capture_tests
-        wardogs_capture_client_overlay_tests wardogs_vehicle_ui_tests
-        wardogs_localization_tests hud_capture_probe)
-    target_link_libraries(${capture_target} PRIVATE wardogs_game_capture)
-endforeach()
 
 # Native HUD qualification is opt-in: personal and third-party game frames
 # remain in a private dataset, and absent positives are never counted as PASS.

@@ -1,5 +1,7 @@
 # SPH-2 sight observation
 
+**Archived experiment. Starting with 2.13.2, automatic sight HUD reading, WGC capture, left-button observation and mini-card colour indicators are removed from the player application. The document below describes the former experiment, not the current game workflow. Calculations and Alt+I corrections work without this reading.**
+
 This document describes HUD-reader development after the published 2.13.0 release. The installed 2.13.0 application was neither replaced nor restarted during qualification; new console-reader results apply to the working source. The workflow retains the sight actually read before a fire input and helps associate it with a later Alt+I correction. The complete installed mini-card → press → counter → Alt+I chain still needs separate verification. This workflow does not measure a hit percentage.
 
 ## When observation runs
