@@ -331,7 +331,6 @@ PinnedResultWindow::PinnedResultWindow(
     lock_hint_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     lock_hint_->hide();
     header_layout->addWidget(lock_hint_, 1);
-    header_layout->addStretch(1);
     const auto header_button = [header, header_layout](const QString& name) {
         auto* button = new QToolButton(header);
         button->setObjectName(name);
