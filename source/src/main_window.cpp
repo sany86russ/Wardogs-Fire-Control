@@ -1635,9 +1635,14 @@ public:
                     const auto effective_unlock = wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey);
                     check("native_independent_resume_recovers_full_set_around_the_still_occupied_unlock",
                         !application_paused_ && hotkey_listener_.active() && vehicle_mode_ &&
-                        !settings_.middle_mouse_enabled && mouse_listener_.active() && !busy_ &&
+                        !settings_.middle_mouse_enabled && !mouse_listener_.active() && !busy_ &&
                         target_ == preserved_target && effective_unlock.virtual_key == 'Q' &&
                         (effective_unlock.modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == (MOD_ALT | MOD_SHIFT));
+                    settings_.middle_mouse_enabled = true;
+                    register_mouse_trigger(settings_);
+                    check("native_resume_middle_button_reenables_coordinate_listener_without_sight_observation",
+                        !application_paused_ && hotkey_listener_.active() && mouse_listener_.active() &&
+                        target_ == preserved_target && !hud_context_ && !hud_reading_ && !hud_busy_);
                 }
             } catch (const std::exception& error) {
                 set_status(QString::fromUtf8(error.what()), true);
