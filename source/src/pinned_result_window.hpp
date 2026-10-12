@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wardogs/pinned_preferences.hpp"
+#include "wardogs/aim_alignment.hpp"
 #include "wardogs/vehicle_ballistics.hpp"
 
 #include <QPoint>
@@ -49,6 +50,10 @@ public:
                             const VehicleSolutionWidget& high);
     void set_selected_arc(std::optional<wardogs::Arc> arc);
     void set_error(bool error);
+    // The owner supplies localized text. This indicates numeric command
+    // agreement only; unknown, pause, errors and L81 retain neutral styling.
+    void set_aim_alignment(wardogs::AimAlignmentState state,
+                           const QString& label, const QString& details = {});
     void set_context_caption(const QString& caption, const QString& detail = {});
     void set_workflow_status(const QString& caption, const QString& detail = {});
     // Restore once on entering pinned mode. Later entries retain the live placement.
@@ -120,6 +125,7 @@ private:
     QWidget* context_menu_{};
     QLabel* weapon_caption_{};
     QLabel* lock_hint_{};
+    QLabel* aim_alignment_status_{};
     QToolButton *header_lock_button_{}, *controls_button_{}, *header_return_button_{};
     QToolButton* pause_button_{};
     bool application_paused_{};

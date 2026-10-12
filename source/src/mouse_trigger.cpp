@@ -17,12 +17,33 @@ bool is_middle_mouse_press(std::uintptr_t message, std::uint32_t flags) noexcept
            (flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED)) == 0;
 }
 
+bool is_fire_mouse_press(std::uintptr_t message, std::uint32_t flags) noexcept {
+    return message == WM_LBUTTONDOWN &&
+           (flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED)) == 0;
+}
+
+void coalesce_fire_intent(FireIntentEvent& pending, const FireIntentEvent& press,
+                          bool already_pending) noexcept {
+    if (already_pending) {
+        pending.multiple_presses = true;
+        pending.foreground_changed = pending.foreground_changed ||
+            press.foreground_window != pending.foreground_window;
+        if (press.timestamp_ms > pending.last_timestamp_ms)
+            pending.last_timestamp_ms = press.timestamp_ms;
+    } else {
+        pending = press;
+        pending.last_timestamp_ms = press.timestamp_ms;
+    }
+}
+
 struct GlobalMouseListener::Impl {
     static constexpr UINT capture_message = WM_APP + 0x57;
+    static constexpr UINT fire_message = WM_APP + 0x58;
     static constexpr DWORD lifecycle_timeout_ms = 2000;
 
     struct State {
         Callback callback;
+        FireCallback fire_callback;
         HANDLE ready{};
         HHOOK hook{};
         std::atomic<DWORD> thread_id{};
@@ -32,8 +53,10 @@ struct GlobalMouseListener::Impl {
         std::atomic<bool> hook_was_installed{};
         std::atomic<bool> hook_uninstalled{};
         std::atomic<bool> capture_pending{};
+        std::atomic<bool> fire_pending{};
         // The hook and message callback run on this same dedicated thread.
         MiddleMouseEvent pending_event;
+        FireIntentEvent pending_fire_event;
 
         ~State() { if (ready) CloseHandle(ready); }
     };
@@ -46,16 +69,30 @@ struct GlobalMouseListener::Impl {
                                       LPARAM data) noexcept {
         State* state = current_state;
         // Mouse movement takes this single comparison path; no allocation,
-        // logging, timestamps, UI, OCR, or callback execution inside the hook.
-        if (code == HC_ACTION && state && message == WM_MBUTTONDOWN &&
+        // logging, UI, OCR, or callback execution inside the hook. Timestamp
+        // collection is restricted to an accepted physical fire intention.
+        if (code == HC_ACTION && state &&
+            (message == WM_MBUTTONDOWN || message == WM_LBUTTONDOWN) &&
             !state->stopping.load(std::memory_order_acquire)) {
             const auto* event = reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
-            if (event && is_middle_mouse_press(message, event->flags) &&
+            if (event && state->callback &&
+                is_middle_mouse_press(message, event->flags) &&
                 !state->capture_pending.exchange(true, std::memory_order_acq_rel)) {
                 state->pending_event = {event->pt.x, event->pt.y,
                     reinterpret_cast<std::uintptr_t>(GetForegroundWindow())};
                 if (!PostThreadMessageW(state->thread_id.load(), capture_message, 0, 0))
                     state->capture_pending.store(false, std::memory_order_release);
+            } else if (event && state->fire_callback &&
+                       is_fire_mouse_press(message, event->flags)) {
+                const bool already_pending = state->fire_pending.exchange(
+                    true, std::memory_order_acq_rel);
+                const FireIntentEvent press{event->pt.x, event->pt.y,
+                    reinterpret_cast<std::uintptr_t>(GetForegroundWindow()),
+                    GetTickCount64()};
+                coalesce_fire_intent(state->pending_fire_event, press, already_pending);
+                if (!already_pending &&
+                    !PostThreadMessageW(state->thread_id.load(), fire_message, 0, 0))
+                    state->fire_pending.store(false, std::memory_order_release);
             }
         }
         return CallNextHookEx(state ? state->hook : nullptr, code, message, data);
@@ -88,12 +125,23 @@ struct GlobalMouseListener::Impl {
                 break;
             }
             if (message.message == capture_message) {
+                const auto event = state->pending_event;
                 state->capture_pending.store(false, std::memory_order_release);
-                if (!state->stopping.load(std::memory_order_acquire)) {
+                if (!state->stopping.load(std::memory_order_acquire) && state->callback) {
                     try {
-                        state->callback(state->pending_event);
+                        state->callback(event);
                     } catch (...) {
                         log_error("Ошибка обработки средней кнопки мыши.");
+                    }
+                }
+            } else if (message.message == fire_message) {
+                const auto event = state->pending_fire_event;
+                state->fire_pending.store(false, std::memory_order_release);
+                if (!state->stopping.load(std::memory_order_acquire) && state->fire_callback) {
+                    try {
+                        state->fire_callback(event);
+                    } catch (...) {
+                        log_error("Ошибка обработки намерения выстрела.");
                     }
                 }
             } else {
@@ -116,12 +164,13 @@ struct GlobalMouseListener::Impl {
 GlobalMouseListener::GlobalMouseListener() : impl_(std::make_unique<Impl>()) {}
 GlobalMouseListener::~GlobalMouseListener() { stop(); }
 
-void GlobalMouseListener::start(Callback callback) {
-    if (!callback)
-        throw std::invalid_argument("Не указан обработчик средней кнопки мыши.");
+void GlobalMouseListener::start(Callback callback, FireCallback fire_callback) {
+    if (!callback && !fire_callback)
+        throw std::invalid_argument("Не указан обработчик мыши.");
     stop();
     auto state = std::make_shared<Impl::State>();
     state->callback = std::move(callback);
+    state->fire_callback = std::move(fire_callback);
     state->ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!state->ready)
         throw std::runtime_error("Не удалось подготовить обработчик мыши.");
@@ -140,10 +189,10 @@ void GlobalMouseListener::start(Callback callback) {
         stop();
         if (ready == WAIT_TIMEOUT)
             throw std::runtime_error("Обработчик мыши не ответил вовремя.");
-        throw std::runtime_error("Не удалось включить среднюю кнопку мыши (код Windows " +
+        throw std::runtime_error("Не удалось включить обработчик мыши (код Windows " +
                                  std::to_string(error) + ").");
     }
-    log_info("Обработчик средней кнопки мыши включён.");
+    log_info("Обработчик мыши включён.");
 }
 
 void GlobalMouseListener::stop() noexcept {

@@ -2,13 +2,13 @@
 
 # WARDOGS Fire Control
 
-**In development — 2.13.0:** a simpler interface with one next action, expandable details, new help and background map verification. This is not a published release; downloads still point to stable 2.12.0. [Changes](source/docs/RELEASE-NOTES-EN.md).
+**Version 2.13.0:** a clearer workflow, persistent mini-card monitor and placement, **Ctrl+Alt+P** capture pause, OCR recovery and a guarded provisional SPH-2 bearing prediction. Experimental sight observation adds command-agreement colours; complete in-game qualification is pending and colours do not establish hits. [Full release EN/RU](docs/releases/v2.13.0.md) · [ChangeLog](source/docs/RELEASE-NOTES-EN.md).
 
-2.13.0 previews from Windows CI: [main window](docs/screenshots/en-main-2.13.png) · [settings (RU)](docs/screenshots/ru-settings-2.13.png) · [help (RU)](docs/screenshots/ru-help-2.13.png). Coordinates in these screenshots are test examples.
+2.13.0 screenshots from Windows CI: [main window](docs/screenshots/en-main-2.13.png) · [settings (RU)](docs/screenshots/ru-settings-2.13.png) · [help (RU)](docs/screenshots/ru-help-2.13.png) · [mini card](docs/screenshots/en-aim-aligned-2.13.png). Coordinates and sight agreement are synthetic test examples.
 
 **A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.
 
-[![Version](https://img.shields.io/badge/version-2.12.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.13.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-launch)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#language-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
@@ -19,7 +19,7 @@ The app transfers map points into an aiming calculation: **Alt+X** reads the gun
 
 **GitHub updates:** check and install new releases inside the app, available since 2.8.0. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
 
-**Version 2.12.0:** consistent integer MIL and bearing rounded to 0.1° across displayed commands, with rounding feedback fixed. Ranging refines a robust series centre without new settings; logs connect displayed commands and impacts, and an offline tool measures the **within 10 m** criterion. **99% in-game hits have not been established; L81 and tables are retained.** [Detailed release EN/RU](docs/releases/v2.12.0.md) · [ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
+**Retained from 2.12.0:** consistent integer MIL and bearing rounded to 0.1° across displayed commands, with rounding feedback fixed. Ranging refines a robust series centre without new settings; logs connect displayed commands and impacts, and an offline tool measures the **within 10 m** criterion. **99% in-game hits have not been established; L81 and tables are retained.** [Detailed release EN/RU](docs/releases/v2.12.0.md) · [ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
 
 The routine remains **map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined command**, retaining planning, improved coordinate capture and log archives developed in 2.9–2.11. [Previous 2.11.0 release](docs/releases/v2.11.0.md).
 
@@ -89,7 +89,7 @@ The app calculates aiming commands. Setting the in-game bearing and MIL, decidin
 **Requirements:** Windows 10/11 x64. Normal use does not require app installation, administrator privileges, the Qt SDK, Visual Studio or Python.
 
 1. Open the [latest release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Download **WardogsFireControl-v2.12.0-win-x64.zip** from **Assets**.
+2. Download **WardogsFireControl-v2.13.0-win-x64.zip** from **Assets**.
 3. **Extract the entire ZIP** into its own folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** inside the extracted package.
 
@@ -102,13 +102,13 @@ Use **borderless windowed mode** for the mini card and sight. Overlays in exclus
 Release archives are accompanied by a SHA-256 checksum file. Compare its entry with:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.12.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.13.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 The checksum checks download integrity. With GitHub CLI installed, you can also verify build provenance through GitHub attestations:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.12.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.13.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Updating inside the app

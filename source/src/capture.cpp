@@ -57,6 +57,7 @@ BOOL CALLBACK find_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM data) noexcept 
 }
 
 struct CaptureGdiResources {
+    HWND source_window{};
     HDC screen{};
     HDC memory{};
     HBITMAP bitmap{};
@@ -69,7 +70,7 @@ struct CaptureGdiResources {
         if (memory && previous) SelectObject(memory, previous);
         if (bitmap) DeleteObject(bitmap);
         if (memory) DeleteDC(memory);
-        if (screen) ReleaseDC(nullptr, screen);
+        if (screen) ReleaseDC(source_window, screen);
     }
 };
 
@@ -218,8 +219,8 @@ RECT resolve_capture_region(const CaptureRegion& region) {
             info.rcMonitor.left + value.right, info.rcMonitor.top + value.bottom};
 }
 
-Image capture_screen(const CaptureRegion& region) {
-    const RECT rect = resolve_capture_region(region);
+namespace {
+Image capture_dc(HWND source_window, RECT rect, DWORD operation) {
     const auto wide_width = static_cast<std::int64_t>(rect.right) - rect.left;
     const auto wide_height = static_cast<std::int64_t>(rect.bottom) - rect.top;
     const auto pixel_count = detail::checked_capture_pixel_count(wide_width, wide_height);
@@ -227,7 +228,8 @@ Image capture_screen(const CaptureRegion& region) {
     const auto height = static_cast<int>(wide_height);
     Image image{width, height, std::vector<std::uint8_t>(pixel_count * 3)};
     CaptureGdiResources resources;
-    resources.screen = GetDC(nullptr);
+    resources.source_window = source_window;
+    resources.screen = GetDC(source_window);
     if (!resources.screen)
         throw std::runtime_error("Не удалось открыть экран для захвата.");
     resources.memory = CreateCompatibleDC(resources.screen);
@@ -251,7 +253,7 @@ Image capture_screen(const CaptureRegion& region) {
         throw std::runtime_error("Не удалось подготовить буфер захвата.");
     resources.previous = previous;
     if (!BitBlt(resources.memory, 0, 0, width, height, resources.screen,
-                rect.left, rect.top, SRCCOPY | CAPTUREBLT)) {
+                rect.left, rect.top, operation)) {
         throw std::runtime_error("Windows не смогла захватить область экрана");
     }
     // Microsoft requires synchronization before accessing DIB pixels directly.
@@ -263,6 +265,25 @@ Image capture_screen(const CaptureRegion& region) {
         image.bgr[j + 1] = bgra[i + 1];
         image.bgr[j + 2] = bgra[i + 2];
     }
+    return image;
+}
+}  // namespace
+
+Image capture_screen(const CaptureRegion& region) {
+    return capture_dc(nullptr, resolve_capture_region(region), SRCCOPY | CAPTUREBLT);
+}
+
+Image capture_game_client(HWND window) {
+    RECT before{};
+    if (!window || !IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) ||
+        !GetClientRect(window, &before))
+        throw std::runtime_error("Game client is not available for HUD capture");
+    auto image = capture_dc(window, before, SRCCOPY);
+    RECT after{};
+    if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) ||
+        !GetClientRect(window, &after) || before.left != after.left || before.top != after.top ||
+        before.right != after.right || before.bottom != after.bottom)
+        throw std::runtime_error("Game client geometry changed during HUD capture");
     return image;
 }
 

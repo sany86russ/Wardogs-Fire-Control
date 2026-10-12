@@ -2,27 +2,27 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
-## 2.13.0 — prepared: clearer interface and more responsive operation
+## 2.13.0 — clearer workflows, mini-card convenience and sight observation · October 12, 2026
 
-**Update 2.13.0 is prepared; the release has not been published. Main-window validation is available in [PR #11](https://github.com/sany86russ/Wardogs-Fire-Control/pull/11); mini-card and capture-recovery checks are in [PR #12](https://github.com/sany86russ/Wardogs-Fire-Control/pull/12).**
+This release combines the interface, responsiveness, mini-card, pause, SPH-2 prediction and experimental HUD work prepared since 2.12.0. [Detailed release EN/RU](../../docs/releases/v2.13.0.md).
 
-- The main window guides **Map → Gun → Target** and shows the next action. Aiming values are more prominent; manual input, history with direction and the complete correction report expand when needed.
-- Settings are split into **General / Shortcuts / Sight / Recognition**. Short help and instructions explain the normal workflow; additional parameter explanations move to tooltips. **Positions and flight** shows a concise result first, with full details and model settings available through disclosure controls.
-- Elevation-pack verification and import run in the background. An unconfirmed map remains unavailable for calculation until verification finishes. The OCR model is also prepared in the background after startup.
-- In a local paired measurement, OCR input-tensor preparation time fell by approximately **69%** and coordinate-mask preparation time by **82%**, with identical preprocessing results. These are individual image-processing stages; the same speedup is not promised for complete OCR or in-game capture.
-- Ordinary planning calculations no longer build the terrain profile twice, and the mini card avoids redundant style updates.
-- The mini card remembers its monitor, position and separate L81/SPH-2 sizes. Returning from the main window, capturing new coordinates and updating results no longer move it to the primary monitor. If the saved display is disconnected, the card becomes reachable on a remaining display.
-- The mini card header exposes locking, controls and return. Its menu can disable **Always on top** for a second monitor. Map and height status remain beside the result; model details and the original status are available in tooltips. Both SPH-2 arcs, the selected command, target range and table range are retained.
+- The main window follows **Map → Gun → Target** and presents one next action. Final guidance is larger; manual input, bearing history and the complete correction report expand on demand.
+- Settings use **General / Shortcuts / Sight / Recognition** tabs. Help and instructions cover getting started, shortcuts and troubleshooting; tooltips explain advanced options. **Positions and flight** presents a concise result before expanded model detail.
+- Terrain verification/import run in the background; unverified maps cannot be used. The OCR model initializes in the background and saving settings does not recreate its session.
+- Paired local measurements improved OCR tensor preparation by about **69%** and green-mask preparation by **82%**, with byte-identical output. These individual stages do not promise the same end-to-end OCR speedup. Duplicate ordinary ground-profile work and unnecessary mini-card style updates are removed.
+- The mini card remembers its monitor, position and separate L81/SPH-2 sizes. Returning, new captures and result updates no longer move it to the main monitor; unavailable displays recover onto a remaining screen.
+- The card header exposes locking, controls and return; **Always on top** is optional. Field clipping and menu-row overlap are fixed at verified 100%, 150% and 200% scales. Both arcs, selected commands, target range and table range remain.
+- Uncertain OCR review can be replaced with a new capture while retaining the original Alt+I firing command. Unconfirmed coordinates are not applied; old figures remain hidden until reading finishes.
+- Cursor movement after two verified agreeing frames with unchanged labels no longer discards the result. New frames still require the original point; window/input changes cancel capture. A single frame requires review; cancellation reasons are logged separately.
+- The old command is no longer briefly displayed before applying an impact. Out-of-bounds corrections report requested MIL and the supported interval while retaining previous valid guidance. Directory log analysis includes nested `latest.archive` automatically.
+- Before the first Alt+I on a new SPH-2 target, a validated bearing offset from at least three different targets of the same position and arc can be used. Training uses only past data, validates held-out targets and coverage, and retains local MIL. Prediction is provisional; pause, weapon or manual arc changes disable transfer.
+- **Ctrl+Alt+P**, the main-window button and mini-card icon pause capture. Capture shortcuts and the middle button are released to the game; unfinished OCR is cancelled while coordinates, history and placement remain. Resume does not capture automatically.
+- Experimental recognition reads inner bearing, MIL, RNG, stabilization and the separate SPH-2 shell counter. Actual pixel ticks, word positions and two distinct agreeing frames are required; ambiguous labels are not replaced with calculator values.
+- Pre-press actual aim is associated with a corroborated counter transition and an unambiguous Alt+I. Assumed commands and HUD readings use separate histories; input alone is not a physically verified discharge. Partial readings before the first complete sight preserve ordinary ranging.
+- The mini-card border compares fresh sight evidence with the current command: green indicates agreement within measured uncertainty and rounding; amber a small difference/disabled stabilization; red a substantial difference; neutral unknown or stale evidence. A label and tooltip duplicate the colour; an independent timer clears stale indication. **Green does not establish a hit.**
+- HUD scheduling accounts for capture age and processing time; slow or incomplete readings use less frequent retries. Four-model evaluation on 15 saved crops did not justify replacing **Paddle PP-OCRv6 Small through RapidOcr/ONNX Runtime**; no new mandatory dependencies are introduced.
 
-- A fresh capture can replace pending OCR review while retaining the original shot command for Alt+I. Unconfirmed coordinates are never applied; old numbers stay hidden until the new reading completes.
-- Moving the cursor after two independently guarded agreeing frames with unchanged axis labels no longer discards their completed result. A new screenshot still requires the original cursor position; changed window or input data still cancels capture. A single frame requires user review. Cancellation reasons are now distinguished in the log.
-- Removed the redundant old aiming display before applying an impact. A boundary-correction error names the required MIL and supported range; the last supported command is retained.
-- Log-directory analysis automatically includes the nested `latest.archive`, so the main command does not omit retained sessions.
-
-- Before the first Alt+I for a new SPH-2 target, a validated common bearing can be learned from three different targets of this gun position. Training uses only past impacts, validates independent targets and the application envelope, and retains local MIL. Predictions are explicitly provisional; pause, weapon or arc changes withdraw transfer. This does not establish a hit percentage.
-- **Ctrl+Alt+P**, the main-window button and the mini-card icon pause capture. Capture shortcuts and the middle button are released to the game, unfinished OCR is cancelled, and accepted coordinates and history remain. Resume does not start capture automatically.
-
-**Tables and height mathematics are preserved:** L81 is unchanged; SPH-2 gains a guarded provisional bearing prediction. OCR quality and two-independent-frame requirements are not relaxed. Profiles, maps, history and shortcuts remain compatible. These changes do not establish an in-game hit percentage; field testing is performed by the player. [Quick start](QUICKSTART-EN.md) · [Workflow](USAGE-EN.md).
+**Evidence limit:** replaying 16 original frames, including three aimed-sight images, produced **0 complete verified AZ+MIL readings**. Colour examples are synthetic interface checks; the current-game path is not yet qualified. **99% hits within 10 m have not been established.** L81, SPH-2 tables and the height model are retained; profiles, maps, saved points and shortcuts remain compatible. [HUD observation](HUD-OBSERVATION-EN.md) · [OCR models](OCR-MODEL-EVALUATION-EN.md) · [Quick start](QUICKSTART-EN.md).
 
 ## 2.12.0 — consistent commands and robust ranging · October 10, 2026
 

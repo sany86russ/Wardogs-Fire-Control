@@ -139,7 +139,7 @@ User names are optional for automatic history. Restoration remains explicit afte
 ## Resources and storage
 
 - The ONNX engine and model are not created for each capture; the input buffer and `MemoryInfo` are reused. CTC is decoded from the tensor. Images are limited to 16 megapixels; normalized row width is 4096. Component, row and variant counts are bounded; no whole-image flood-fill queue is used.
-- GDI and COM are released through RAII. Full images are not retained between jobs. The middle button starts one bounded request with at most four separate frames seeking two agreeing observations; there is no continuous OCR/key polling.
+- GDI and COM are released through RAII. Full images are not retained between jobs. The middle button starts one bounded request with at most four separate frames seeking two agreeing observations. A separate [SPH-2 HUD observer](HUD-OBSERVATION-EN.md) runs only with game integration and ready guidance, one job at a time at reduced priority; coordinate OCR suspends it. Keys are not polled: fire intentions come from physical mouse events.
 - Ranging history is limited to 256 records without silent deletion; a new record validates its solution before commit. Nearby-target weighting is bounded separately for each arc; the proximity matrix is calculated once per pair.
 - The high-arc table is sorted once. Terrain is decoded by blocks with an eight-block cache; LRU uses `list::splice`, and grid reconstruction is in place.
 - The standard coordinate parser is linear. Custom regex permits a restricted language; a damaged ANSI version of the standard pattern is repaired automatically.

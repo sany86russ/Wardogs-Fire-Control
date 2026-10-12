@@ -69,6 +69,7 @@ target_compile_definitions(ocr_preprocessing_benchmark PRIVATE UNICODE _UNICODE 
 target_compile_options(ocr_preprocessing_benchmark PRIVATE /W4 /permissive- /utf-8)
 
 add_library(wardogs_core
+    src/aim_alignment.cpp
     src/calculator.cpp
     src/continuous_calibration.cpp
     src/firing_analysis.cpp
@@ -79,6 +80,8 @@ add_library(wardogs_core
     src/logger.cpp
     src/mouse_trigger.cpp
     src/ocr.cpp
+    src/sph_hud.cpp
+    src/shot_observation.cpp
     src/pinned_placement.cpp
     src/presentation.cpp
     src/vehicle_ballistics.cpp
@@ -120,6 +123,7 @@ if(WIN32)
         src/direction_plot.cpp
         src/ghost_reticle_window.cpp
         src/main_window.cpp
+        src/sph_hud_ocr.cpp
         src/pinned_result_window.cpp
         src/selection_overlay.cpp
         src/settings.cpp
@@ -192,6 +196,10 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASE-NOTES-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/ARCHITECTURE-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/ANTICHEAT-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/HUD-OBSERVATION-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/HUD-OBSERVATION-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/OCR-MODEL-EVALUATION-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/OCR-MODEL-EVALUATION-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/SUPPORT-APPROVAL-DRAFT-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/CALCULATIONS-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/COORDINATE-WORKFLOW-RESEARCH-RU.md"
@@ -226,6 +234,15 @@ install(FILES
 )
 
 enable_testing()
+
+foreach(hud_test IN ITEMS sph_hud shot_observation aim_alignment)
+    add_executable(wardogs_${hud_test}_tests tests/${hud_test}_tests.cpp)
+    target_link_libraries(wardogs_${hud_test}_tests PRIVATE wardogs_core)
+    if(MSVC)
+        target_compile_options(wardogs_${hud_test}_tests PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME wardogs_${hud_test}_tests COMMAND wardogs_${hud_test}_tests)
+endforeach()
 
 add_executable(wardogs_terrain_tasks_tests tests/terrain_tasks_tests.cpp)
 target_link_libraries(wardogs_terrain_tasks_tests PRIVATE wardogs_terrain_tasks)
@@ -316,6 +333,11 @@ endif()
 add_test(NAME wardogs_hotkeys_tests COMMAND wardogs_hotkeys_tests)
 
 add_executable(wardogs_capture_tests tests/capture_tests.cpp src/capture.cpp)
+add_executable(wardogs_capture_client_overlay_tests tests/capture_client_overlay_tests.cpp src/capture.cpp)
+target_link_libraries(wardogs_capture_client_overlay_tests PRIVATE wardogs_core user32 gdi32)
+target_compile_options(wardogs_capture_client_overlay_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_capture_client_overlay_tests COMMAND wardogs_capture_client_overlay_tests)
+set_tests_properties(wardogs_capture_client_overlay_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
 target_include_directories(wardogs_capture_tests PRIVATE include)
 target_compile_definitions(wardogs_capture_tests PRIVATE UNICODE _UNICODE NOMINMAX)
 target_compile_options(wardogs_capture_tests PRIVATE /W4 /permissive- /utf-8)
@@ -492,6 +514,13 @@ add_custom_command(TARGET map_ocr_benchmark POST_BUILD
 )
 
 if(WIN32)
+    add_executable(sph_hud_probe tools/sph_hud_probe.cpp src/sph_hud_ocr.cpp src/windows_ocr.cpp)
+    target_compile_definitions(sph_hud_probe PRIVATE UNICODE _UNICODE NOMINMAX)
+    target_compile_options(sph_hud_probe PRIVATE /W4 /permissive- /utf-8)
+    target_link_libraries(sph_hud_probe PRIVATE wardogs_core windowsapp)
+    add_custom_command(TARGET sph_hud_probe POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/lib/x64/onnxruntime.dll"
+        "$<TARGET_FILE_DIR:sph_hud_probe>/onnxruntime.dll")
     add_executable(windows_ocr_probe
         tools/windows_ocr_probe.cpp
         src/windows_ocr.cpp

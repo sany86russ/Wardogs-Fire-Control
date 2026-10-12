@@ -10,6 +10,7 @@
 #include <exception>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <future>
 #include <iostream>
 #include <limits>
@@ -117,6 +118,16 @@ int run_tests() {
                   "Windows OCR does not invent confidence unsupported by its API");
             check(result.minimum_confidence == 0.0F && result.line_count == 1,
                   "Windows OCR exposes real line count without invented weakest-glyph confidence");
+            check(result.word_geometry_verified ==
+                      (!result.text_angle_deg || std::abs(*result.text_angle_deg) < 0.0001),
+                  "rotated OCR rectangles are never advertised as original capture geometry");
+            check(result.word_geometry_verified || result.words.empty(),
+                  "unverified rotated geometry withholds words while preserving readable text");
+            for (const auto& word : result.words)
+                check(!word.text.empty() && word.bounds.left >= 0 && word.bounds.top >= 0 &&
+                          word.bounds.right <= image.width && word.bounds.bottom <= image.height &&
+                          word.bounds.right > word.bounds.left && word.bounds.bottom > word.bounds.top,
+                      "word boxes refer to the original image after OCR magnification");
         }
         std::stop_source cancellation;
         cancellation.request_stop();

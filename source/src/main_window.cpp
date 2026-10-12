@@ -25,6 +25,9 @@
 #include "wardogs/terrain_tasks.hpp"
 #include "wardogs/vehicle_ballistics.hpp"
 #include "wardogs/windows_ocr.hpp"
+#include "wardogs/sph_hud_ocr.hpp"
+#include "wardogs/shot_observation.hpp"
+#include "wardogs/aim_alignment.hpp"
 
 #include "pinned_result_window.hpp"
 #include "vehicle_solution_widget.hpp"
@@ -452,6 +455,7 @@ struct OcrMessage {
     std::optional<wardogs::CorrectedSolution> impact_computed;
     std::string impact_observation_id;
     std::string impact_command_id;
+    std::optional<wardogs::ShotImpactReservation> impact_hud_reservation;
     std::uint64_t calibration_epoch{};
     std::uint64_t input_epoch{};
     double elapsed_ms{};
@@ -632,6 +636,16 @@ public:
         wardogs::i18n::watch(this);
         start_terrain_tasks();
         start_ocr_warmup();
+        hud_freshness_timer_ = new QTimer(this);
+        hud_freshness_timer_->setSingleShot(true);
+        hud_freshness_timer_->setTimerType(Qt::PreciseTimer);
+        connect(hud_freshness_timer_, &QTimer::timeout, this, [this] { refresh_hud_freshness(); });
+        if (!diagnostic_) {
+            hud_timer_ = new QTimer(this);
+            hud_timer_->setInterval(300);
+            connect(hud_timer_, &QTimer::timeout, this, [this] { poll_sph_hud(); });
+            hud_timer_->start();
+        }
         if (!diagnostic_ && settings_.check_updates_on_start) {
             QTimer::singleShot(0, this, [this] {
                 if (!closing_ && settings_.check_updates_on_start && updates_) updates_->check(false);
@@ -652,6 +666,9 @@ public:
     void stop_background_tasks() {
         if (pinned_window_) pinned_window_->flush_preferences();
         closing_ = true;
+        if (hud_timer_) hud_timer_->stop();
+        if (hud_freshness_timer_) hud_freshness_timer_->stop();
+        if (hud_worker_.joinable()) { hud_worker_.request_stop(); hud_worker_.join(); }
         if (terrain_tasks_) terrain_tasks_->stop();
         if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
         if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
@@ -1621,7 +1638,8 @@ public:
                     dispatch_registered_hotkey(8, hotkey_listener_epoch_.load());
                     const auto effective_unlock = wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey);
                     check("native_independent_resume_recovers_full_set_around_the_still_occupied_unlock",
-                        !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_ &&
+                        !application_paused_ && hotkey_listener_.active() && vehicle_mode_ &&
+                        !settings_.middle_mouse_enabled && mouse_listener_.active() && !busy_ &&
                         target_ == preserved_target && effective_unlock.virtual_key == 'Q' &&
                         (effective_unlock.modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == (MOD_ALT | MOD_SHIFT));
                 }
@@ -2066,6 +2084,246 @@ public:
         check("SPH2_clearing_field_correction_restores_original_973_MIL_command",
               !continuous_calibration_ && high_result_->bearing_deg == field_high_before.bearing_deg &&
               high_result_->mil == field_high_before.mil && !failure_state_);
+        // Feed captured-HUD evidence without reading a desktop or synthesizing
+        // input. The observed sight deliberately differs from our command.
+        const auto prepare_observed_shot = [&](bool hidden_reticle = false, bool outside_selected_arc = false) {
+            observed_shots_ = wardogs::ShotObservationSession{};
+            hud_context_ = *current_shot_context();
+            ++hud_epoch_;
+            const auto stamp = GetTickCount64() - 600;
+            observed_shots_.begin_context(*hud_context_, hud_epoch_, stamp - 1);
+            const auto displayed = wardogs::displayed_firing_command(*high_result_);
+            wardogs::AcceptedSightFrame frame;
+            frame.id = 1; frame.timestamp_ms = stamp; frame.epoch = hud_epoch_;
+            frame.context = *hud_context_; frame.foreground_verified = true;
+            frame.firing_snapshot = {*target_, wardogs::Arc::high, displayed.bearing_deg + 0.3,
+                                     displayed.mil - 2.0, target_height_delta(*target_)};
+            frame.command_id = std::stoull(command_ids_[1]);
+            frame.ammo = 40; frame.ammo_channel = "sph2_single_shell"; frame.stabilized = true;
+            (void)observed_shots_.observe(frame, stamp);
+            frame.id = 2; frame.timestamp_ms = stamp + 80;
+            (void)observed_shots_.observe(frame, stamp + 80);
+            const wardogs::ShotImpactQuery query{*hud_context_, hud_epoch_, *target_, target_height_delta(*target_)};
+            (void)observed_shots_.fire_intent(query, stamp + 120, stamp + 120);
+            if (hidden_reticle) {
+                observed_shots_.invalidate_sight(stamp + 150);
+                wardogs::DischargeFrameEvidence partial;
+                partial.id = 3; partial.timestamp_ms = stamp + 180; partial.epoch = hud_epoch_;
+                partial.context = *hud_context_; partial.foreground_verified = true;
+                partial.ammo = 39; partial.ammo_channel = "sph2_single_shell"; partial.stabilized = true;
+                (void)observed_shots_.observe_discharge(partial, stamp + 180);
+                partial.id = 4; partial.timestamp_ms = stamp + 250;
+                (void)observed_shots_.observe_discharge(partial, stamp + 250);
+            } else {
+                // Player changes aim before the reserve counter updates on screen.
+                frame.firing_snapshot.bearing_deg += 5;
+                frame.firing_snapshot.mil += 30;
+                if (outside_selected_arc) frame.firing_snapshot.mil = 0.0;
+                frame.ammo = 39; frame.id = 3; frame.timestamp_ms = stamp + 180;
+                (void)observe_hud_frame(frame, stamp + 180);
+                frame.id = 4; frame.timestamp_ms = stamp + 250;
+                (void)observe_hud_frame(frame, stamp + 250);
+            }
+            return wardogs::FiringSnapshot{*target_, wardogs::Arc::high, displayed.bearing_deg + 0.3,
+                                          displayed.mil - 2, target_height_delta(*target_)};
+        };
+        const auto actual_sight = prepare_observed_shot();
+        OcrMessage observed_context; observed_context.action = OcrAction::calibration_impact;
+        capture_impact_context(observed_context);
+        check("SPH2_AltI_freezes_actual_prepress_HUD_instead_of_displayed_or_postshot_aim",
+              observed_context.impact_hud_reservation &&
+              observed_context.impact_firing->bearing_deg == actual_sight.bearing_deg &&
+              observed_context.impact_firing->mil == actual_sight.mil &&
+              observed_shots_.outstanding_shots() == 1);
+        const bool observed_recorded = record_continuous_impact(*target_, QStringLiteral("test observed HUD"),
+            *observed_context.impact_firing, &observed_context);
+        check("SPH2_calibration_uses_actual_HUD_and_consumes_only_successfully_accepted_shot",
+              observed_recorded && observation_count() == 1 && observed_shots_.outstanding_shots() == 0 &&
+              std::abs(high_result_->bearing_deg - actual_sight.bearing_deg) < 1e-6 &&
+              std::abs(high_result_->mil - actual_sight.mil) < 1e-6);
+        bool observed_duplicate_rejected{};
+        try { OcrMessage duplicate; capture_impact_context(duplicate); }
+        catch (const std::invalid_argument&) { observed_duplicate_rejected = true; }
+        check("SPH2_duplicate_AltI_cannot_relearn_a_consumed_HUD_shot", observed_duplicate_rejected && observation_count() == 1);
+        reset_continuous_calibration(); show_result(*target_);
+        const auto hidden_sight = prepare_observed_shot(true);
+        OcrMessage hidden_context; hidden_context.action = OcrAction::calibration_impact;
+        capture_impact_context(hidden_context);
+        const bool hidden_recorded = record_continuous_impact(*target_, QStringLiteral("test hidden reload reticle"),
+            *hidden_context.impact_firing, &hidden_context);
+        check("SPH2_reload_shell_counter_confirms_frozen_sight_without_a_postshot_pose",
+              hidden_context.impact_hud_reservation && hidden_recorded && observation_count() == 1 &&
+              hidden_context.impact_firing->bearing_deg == hidden_sight.bearing_deg &&
+              hidden_context.impact_firing->mil == hidden_sight.mil && observed_shots_.outstanding_shots() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        const auto outside_sight = prepare_observed_shot(false, true);
+        OcrMessage outside_context; outside_context.action = OcrAction::calibration_impact;
+        capture_impact_context(outside_context);
+        const bool outside_recorded = record_continuous_impact(*target_, QStringLiteral("test changed postshot arc"),
+            *outside_context.impact_firing, &outside_context);
+        check("SPH2_postshot_aim_outside_selected_arc_keeps_independent_shell_evidence",
+              outside_context.impact_hud_reservation && outside_recorded && observation_count() == 1 &&
+              outside_context.impact_firing->mil == outside_sight.mil && observed_shots_.outstanding_shots() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        (void)prepare_observed_shot();
+        OcrMessage observed_retry; observed_retry.action = OcrAction::calibration_impact;
+        capture_impact_context(observed_retry);
+        const bool observed_bad_rejected = !record_continuous_impact(
+            {97.50,90.44}, QStringLiteral("test bad observed impact"), *observed_retry.impact_firing, &observed_retry);
+        const bool observed_retry_recorded = record_continuous_impact(
+            *target_, QStringLiteral("test retry observed impact"), *observed_retry.impact_firing, &observed_retry);
+        check("SPH2_rejected_impact_releases_HUD_reservation_and_preserves_retry",
+              observed_bad_rejected && observed_retry_recorded && observation_count() == 1 &&
+              observed_shots_.outstanding_shots() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        (void)prepare_observed_shot();
+        OcrMessage observed_stale; observed_stale.action = OcrAction::calibration_impact;
+        capture_impact_context(observed_stale);
+        reset_hud_observation();
+        const bool observed_epoch_rejected = !record_continuous_impact(
+            *target_, QStringLiteral("test canceled HUD"), *observed_stale.impact_firing, &observed_stale);
+        check("SPH2_reset_cancels_frozen_HUD_before_any_calibration_mutation",
+              observed_epoch_rejected && observation_count() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        (void)prepare_observed_shot();
+        OcrMessage delayed_context; delayed_context.action = OcrAction::calibration_impact;
+        capture_impact_context(delayed_context);
+        hud_window_ = 1; // Never dereferenced; deliberately not the foreground HWND.
+        observe_fire_intent({0, 0, 1, GetTickCount64()});
+        const bool delayed_epoch_rejected = !record_continuous_impact(*target_,
+            QStringLiteral("test delayed foreground press"), *delayed_context.impact_firing, &delayed_context);
+        bool delayed_new_capture_rejected{};
+        try { OcrMessage next; capture_impact_context(next); }
+        catch (const std::invalid_argument&) { delayed_new_capture_rejected = true; }
+        check("SPH2_delayed_game_press_after_focus_change_quarantines_old_and_new_AltI",
+              hud_context_ && delayed_new_capture_rejected && delayed_epoch_rejected && observation_count() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        (void)prepare_observed_shot();
+        hud_window_ = 1;
+        observe_fire_intent({0, 0, 1, GetTickCount64(), true});
+        bool coalesced_capture_rejected{};
+        try { OcrMessage next; capture_impact_context(next); }
+        catch (const std::invalid_argument&) { coalesced_capture_rejected = true; }
+        check("SPH2_coalesced_physical_presses_never_leave_an_old_shot_falsely_unique",
+              hud_context_ && coalesced_capture_rejected && observation_count() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        (void)prepare_observed_shot();
+        hud_window_ = 1;
+        observe_fire_intent({0, 0, 2, GetTickCount64(), true, true});
+        bool cross_window_capture_rejected{};
+        try { OcrMessage next; capture_impact_context(next); }
+        catch (const std::invalid_argument&) { cross_window_capture_rejected = true; }
+        check("SPH2_cross_window_press_batch_preserves_ambiguity_when_first_press_is_outside_game",
+              hud_context_ && cross_window_capture_rejected && observation_count() == 0);
+        reset_continuous_calibration(); show_result(*target_);
+        // Explicit synthetic diagnostic evidence checks UI integration only.
+        // It is not a captured game reading or a field accuracy measurement.
+        // Recover through the ordinary accepted-target user path after the
+        // preceding intentionally rejected correction, retaining error gates.
+        accept_manual_target(*target_, "test_alignment_target");
+        check("SPH2_mini_alignment_fixture_has_accepted_target_and_no_prior_error",
+            !failure_state_ && !ocr_hold_ && current_shot_context() && high_result_ &&
+            effective_vehicle_arc() == wardogs::Arc::high);
+        enter_pinned_mode();
+        const auto alignment_geometry = pinned_window_->geometry();
+        const auto alignment_command = wardogs::displayed_firing_command(*high_result_);
+        const auto seed_alignment = [&](double bearing_delta, double mil_delta) {
+            observed_shots_ = wardogs::ShotObservationSession{};
+            hud_context_ = *current_shot_context();
+            ++hud_epoch_;
+            const auto captured = GetTickCount64() - 100;
+            observed_shots_.begin_context(*hud_context_, hud_epoch_, captured - 101);
+            wardogs::AcceptedSightFrame frame;
+            frame.id = 1; frame.timestamp_ms = captured - 100; frame.epoch = hud_epoch_;
+            frame.context = *hud_context_; frame.foreground_verified = true;
+            frame.firing_snapshot = {*target_, wardogs::Arc::high,
+                alignment_command.bearing_deg + bearing_delta, alignment_command.mil + mil_delta,
+                target_height_delta(*target_)};
+            frame.stabilized = true; frame.ammo = 40; frame.ammo_channel = "synthetic_shell";
+            // Still synthetic: exercise interval agreement with the actual
+            // reader's resolution floor, not invented 0.05-degree precision.
+            frame.bearing_uncertainty_deg = 0.6; frame.mil_uncertainty = 0.2;
+            (void)observed_shots_.observe(frame, frame.timestamp_ms);
+            frame.id = 2; frame.timestamp_ms = captured;
+            (void)observed_shots_.observe(frame, captured);
+            wardogs::SphHudReading reading;
+            reading.refusal = wardogs::SphHudRefusal::none;
+            reading.pose = wardogs::SphHudPose{frame.firing_snapshot.mil,
+                frame.firing_snapshot.bearing_deg, 0.2, 0.6, {0.5, 0.5}};
+            reading.stabilized = true;
+            hud_reading_ = reading; hud_reading_at_ms_ = captured;
+            hud_reading_target_ = target_; hud_reading_epoch_ = hud_epoch_;
+            sync_pinned_status();
+            arm_hud_freshness_timer();
+        };
+        const auto aim_snapshot = [&](const char* name) {
+            const auto directory = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("Testing/aim-alignment"));
+            QDir().mkpath(directory);
+            QApplication::processEvents();
+            const auto path = QDir(directory).filePath(QStringLiteral("%1-%2-%3.png")
+                .arg(settings_.language == wardogs::UiLanguage::english ? QStringLiteral("en") : QStringLiteral("ru"),
+                     QGuiApplication::platformName(), QString::fromUtf8(name)));
+            return pinned_window_->grab().save(path, "PNG");
+        };
+        const auto aim_label = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedAimAlignment"));
+        seed_alignment(0.0, 0.0);
+        check("SPH2_mini_green_requires_fresh_stable_stabilized_actual_sight",
+            current_aim_alignment().state == wardogs::AimAlignmentState::aligned && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("aligned") &&
+            aim_label->toolTip().contains(wardogs::i18n::text(
+                QStringLiteral("Команда в пределах погрешности чтения и округления"))) &&
+            !aim_label->text().isEmpty() && !aim_label->toolTip().isEmpty() && aim_snapshot("aligned"));
+        seed_alignment(0.4, 2.0);
+        check("SPH2_mini_orange_shows_small_actual_command_difference",
+            current_aim_alignment().state == wardogs::AimAlignmentState::close && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("close") && aim_snapshot("close"));
+        seed_alignment(4.0, 20.0);
+        check("SPH2_mini_red_shows_verified_large_actual_command_difference",
+            current_aim_alignment().state == wardogs::AimAlignmentState::misaligned && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("misaligned") && aim_snapshot("misaligned"));
+        seed_alignment(0.0, 0.0);
+        hud_reading_at_ms_ = GetTickCount64() - 1001;
+        sync_pinned_status();
+        check("SPH2_mini_stale_reading_cannot_keep_green_or_move_card",
+            current_aim_alignment().state == wardogs::AimAlignmentState::unknown && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown") &&
+            pinned_window_->geometry() == alignment_geometry && aim_snapshot("unknown"));
+        seed_alignment(0.0, 0.0);
+        ++hud_reading_epoch_;
+        sync_pinned_status();
+        check("SPH2_mini_old_context_cannot_keep_a_green_ready_border",
+            current_aim_alignment().state == wardogs::AimAlignmentState::unknown && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        seed_alignment(0.0, 0.0);
+        const bool freshness_guard_armed = hud_freshness_timer_->isActive() &&
+            hud_freshness_timer_->remainingTime() <= 100 && !hud_busy_;
+        hud_reading_at_ms_ = GetTickCount64() - 1001;
+        refresh_hud_freshness();
+        check("SPH2_mini_expiry_guard_clears_green_without_waiting_for_OCR_poll",
+            freshness_guard_armed && !hud_reading_ && !hud_freshness_timer_->isActive() &&
+            !hud_busy_ && aim_label && aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        seed_alignment(0.0, 0.0);
+        observed_shots_ = wardogs::ShotObservationSession{};
+        const auto second_capture = GetTickCount64();
+        wardogs::AcceptedSightFrame expired_first;
+        expired_first.id = 1; expired_first.timestamp_ms = second_capture - 1300;
+        expired_first.epoch = hud_epoch_; expired_first.context = *hud_context_;
+        expired_first.foreground_verified = true; expired_first.stabilized = true;
+        expired_first.firing_snapshot = {*target_, wardogs::Arc::high,
+            alignment_command.bearing_deg, alignment_command.mil, target_height_delta(*target_)};
+        expired_first.bearing_uncertainty_deg = 0.05; expired_first.mil_uncertainty = 0.2;
+        observed_shots_.begin_context(*hud_context_, hud_epoch_, expired_first.timestamp_ms - 1);
+        (void)observed_shots_.observe(expired_first, expired_first.timestamp_ms);
+        hud_reading_at_ms_ = expired_first.timestamp_ms;
+        refresh_hud_freshness();
+        expired_first.id = 2; expired_first.timestamp_ms = second_capture;
+        (void)observed_shots_.observe(expired_first, second_capture);
+        check("SPH2_mini_visual_expiry_preserves_the_separate_frame_agreement_window",
+            !hud_reading_ && observed_shots_.has_stable_sight() && aim_label &&
+            aim_label->property("aimAlignment") == QStringLiteral("unknown"));
+        clear_hud_reading();
+        exit_game_mode();
+        reset_continuous_calibration(); show_result(*target_);
         settings_.ghost_reticle.preferred_arc = wardogs::Arc::low;
         base_input_->setText(QStringLiteral("80 80")); manual_base();
         // Map changes deliberately clear earlier history. Seed this assertion
@@ -2749,6 +3007,7 @@ private:
     bool map_confirmed_{};
     std::optional<wardogs::ContinuousCalibration> continuous_calibration_;
     std::optional<wardogs::ImpactFeedback> last_impact_feedback_;
+    std::optional<bool> continuous_source_hud_;
     double last_impact_consistency_{};
     std::array<std::pair<double,double>, 2> active_aim_offsets_{};
     QLabel *fire_control_summary_{}, *terrain_assistance_{};
@@ -2790,6 +3049,22 @@ private:
     QWinEventNotifier *unlock_notifier_{}, *show_notifier_{};
     HANDLE unlock_event_{};
     std::jthread worker_;
+    std::jthread hud_worker_;
+    std::unique_ptr<wardogs::WindowsOcr> hud_ocr_;
+    std::unique_ptr<wardogs::RapidOcr> hud_rapid_;
+    QTimer* hud_timer_{};
+    QTimer* hud_freshness_timer_{};
+    bool hud_busy_{};
+    wardogs::ShotObservationSession observed_shots_;
+    std::optional<wardogs::ShotEvidenceContext> hud_context_;
+    std::uint64_t hud_epoch_{};
+    std::uint64_t hud_frame_sequence_{};
+    std::uintptr_t hud_window_{};
+    std::optional<wardogs::SphHudReading> hud_reading_;
+    std::uint64_t hud_reading_at_ms_{};
+    std::optional<wardogs::Point> hud_reading_target_;
+    std::uint64_t hud_reading_epoch_{};
+    std::string hud_error_;
     std::atomic_bool busy_{false};
     SelectionOverlay selector_;
     std::unique_ptr<PinnedResultWindow> pinned_window_;
@@ -2904,6 +3179,7 @@ private:
             context.impact_computed = previous.impact_computed;
             context.impact_observation_id = previous.impact_observation_id;
             context.impact_command_id = previous.impact_command_id;
+            context.impact_hud_reservation = previous.impact_hud_reservation;
         }
         wardogs::log_info(std::string("ocr.review_replaced previous_action=") + action_name(previous.action) +
             " action=" + action_name(action) + " epoch=" + std::to_string(input_epoch_));
@@ -3352,7 +3628,8 @@ private:
         const auto listener_epoch = ++mouse_listener_epoch_;
         if (diagnostic_) return;
         mouse_listener_.stop();
-        if (application_paused_ || !settings.game_integration_enabled || !settings.middle_mouse_enabled) return;
+        if (application_paused_ || !settings.game_integration_enabled ||
+            (!settings.middle_mouse_enabled && !vehicle_mode_)) return;
         const QPointer<MainWindow> self(this);
         mouse_listener_.start([self, listener_epoch](wardogs::MiddleMouseEvent event) {
             if (self) QMetaObject::invokeMethod(self, [self, event, listener_epoch] {
@@ -3373,7 +3650,14 @@ private:
                 wardogs::log_info("map.middle_request_accepted");
                 self->start_map_ocr(event, false, OcrAction::target, true);
             }, Qt::QueuedConnection);
-        });
+        }, vehicle_mode_ ? wardogs::GlobalMouseListener::FireCallback{
+            [self, listener_epoch](wardogs::FireIntentEvent event) {
+                if (self) QMetaObject::invokeMethod(self, [self, listener_epoch, event] {
+                    if (!self) return;
+                    if (listener_epoch == self->mouse_listener_epoch_) self->observe_fire_intent(event);
+                    else self->quarantine_fire_intent(event, "listener_restarted");
+                }, Qt::QueuedConnection);
+            }} : wardogs::GlobalMouseListener::FireCallback{});
     }
 
     void enter_game_mode(bool explicit_confirmation = false) {
@@ -4159,6 +4443,7 @@ private:
         button->setToolTip(wardogs::i18n::text(QStringLiteral("Переключить настильную / навесную траекторию")));
         set_arc_button(button, wardogs::Arc::low);
         connect(button, &QPushButton::clicked, this, [this, button] {
+            reset_hud_observation();
             set_arc_button(button, arc_from_button(button) == wardogs::Arc::low
                                        ? wardogs::Arc::high
                                        : wardogs::Arc::low);
@@ -4205,9 +4490,15 @@ private:
     }
 
     void toggle_mode() {
+        reset_hud_observation();
         advance_input_epoch();
         if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
         vehicle_mode_ = !vehicle_mode_;
+        try { register_mouse_trigger(); }
+        catch (const std::exception& error) {
+            wardogs::log_warning("mouse.registration_failed error=" + std::string(error.what()));
+            set_status(error_text(error), true);
+        }
         wardogs::log_info(std::string("weapon.selected weapon=") + (vehicle_mode_ ? "sph2" : "l81"));
         update_mode_button();
         update_action_labels();
@@ -4595,6 +4886,289 @@ private:
         return text;
     }
 
+    std::optional<wardogs::ShotEvidenceContext> current_shot_context() const {
+        const auto arc = effective_vehicle_arc();
+        if (!map_confirmed_ || !vehicle_mode_ || !base_set_ || !target_ || base_capture_pending_ || !arc)
+            return std::nullopt;
+        return wardogs::ShotEvidenceContext{
+            utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)})), base_, *arc};
+    }
+
+    void clear_hud_reading() {
+        if (hud_freshness_timer_) hud_freshness_timer_->stop();
+        hud_reading_.reset();
+        hud_reading_target_.reset();
+        hud_reading_epoch_ = 0;
+        if (fire_control_compact_) fire_control_compact_->setToolTip({});
+        sync_pinned_status();
+    }
+
+    void arm_hud_freshness_timer() {
+        if (!hud_freshness_timer_ || !hud_reading_ || closing_) return;
+        const auto now = GetTickCount64();
+        const auto age = now >= hud_reading_at_ms_ ? now - hud_reading_at_ms_ : 1001ULL;
+        const auto remaining = age <= 1000 ? 1001 - age : 1ULL;
+        // This guard reads no pixels and starts no OCR. Check focus at most
+        // every 100 ms, and wake at the exact sight-expiry deadline.
+        hud_freshness_timer_->start(static_cast<int>(std::min(100ULL, remaining)));
+    }
+
+    void refresh_hud_freshness() {
+        if (!hud_reading_) return;
+        const auto alignment = current_aim_alignment();
+        if (alignment.reason == wardogs::AimAlignmentReason::invalid_context ||
+            alignment.reason == wardogs::AimAlignmentReason::future_capture ||
+            alignment.reason == wardogs::AimAlignmentReason::stale_capture) {
+            // Expired display evidence must turn neutral immediately, while
+            // the first frame may still form a pair within the session's
+            // separate 2.5-second agreement window. Fire intent validates age.
+            if (alignment.reason != wardogs::AimAlignmentReason::stale_capture)
+                observed_shots_.invalidate_sight(GetTickCount64());
+            clear_hud_reading();
+            return;
+        }
+        arm_hud_freshness_timer();
+    }
+
+    void reset_hud_observation() {
+        observed_shots_.cancel(GetTickCount64());
+        ++hud_epoch_;
+        hud_context_.reset();
+        clear_hud_reading();
+        hud_window_ = 0;
+        if (hud_worker_.joinable()) hud_worker_.request_stop();
+    }
+
+    void ensure_hud_context(const wardogs::ShotEvidenceContext& context) {
+        if (!hud_context_ || *hud_context_ != context) {
+            reset_hud_observation();
+            hud_context_ = context;
+            observed_shots_.begin_context(context, ++hud_epoch_, GetTickCount64());
+        }
+    }
+
+    void quarantine_fire_intent(wardogs::FireIntentEvent event, const char* reason) {
+        if (hud_context_ && hud_window_ && (event.foreground_window == hud_window_ ||
+                (event.multiple_presses && event.foreground_changed))) {
+            const auto latest_press = event.multiple_presses && event.last_timestamp_ms
+                ? event.last_timestamp_ms : event.timestamp_ms;
+            observed_shots_.invalidate_correlation(GetTickCount64(), latest_press);
+            clear_hud_reading();
+            wardogs::log_info(std::string("shot.fire_intent_refused reason=") + reason);
+        }
+    }
+
+    void observe_fire_intent(wardogs::FireIntentEvent event) {
+        if (event.multiple_presses) {
+            quarantine_fire_intent(event, "coalesced_physical_presses");
+            return;
+        }
+        if (closing_ || application_paused_ || !settings_.game_integration_enabled ||
+            !vehicle_mode_ || selecting_ || QApplication::activeModalWidget() ||
+            !wardogs_is_foreground() || event.foreground_window !=
+                reinterpret_cast<std::uintptr_t>(GetForegroundWindow())) {
+            // The physical press may precede Alt+Tab or a queued UI callback.
+            // Ignoring a press from our last observed game window would leave
+            // an earlier pending shot falsely unique. Quarantine that link,
+            // preserving HUD history so it cannot fall back to assumed aim.
+            quarantine_fire_intent(event, "foreground_or_mode_changed");
+            return;
+        }
+        const auto context = current_shot_context();
+        if (!context || !target_) return;
+        ensure_hud_context(*context);
+        if (event.foreground_window != hud_window_)
+            observed_shots_.invalidate_sight(GetTickCount64());
+        const wardogs::ShotImpactQuery query{*context, hud_epoch_, *target_, target_height_delta(*target_)};
+        const auto update = observed_shots_.fire_intent(query, event.timestamp_ms, GetTickCount64());
+        wardogs::log_info("shot.fire_intent reason=" + std::to_string(static_cast<int>(update.reason)) +
+            " hud_epoch=" + std::to_string(hud_epoch_) + " pressed_at_ms=" +
+            std::to_string(event.timestamp_ms) + " physical_shot_verified=0");
+        if (update.intent) {
+            const auto& frozen = *update.intent;
+            std::ostringstream log; log.imbue(std::locale::classic()); log.precision(17);
+            log << "shot.sight_frozen intent_id=" << frozen.intent_id << " hud_epoch=" << frozen.epoch
+                << " command_id=" << frozen.command_id << " sight_captured_at_ms=" << frozen.last_sight_capture_ms
+                << " pressed_at_ms=" << frozen.pressed_at_ms << " bearing=" << frozen.firing.bearing_deg
+                << " mil=" << frozen.firing.mil;
+            if (frozen.bearing_uncertainty_deg) log << " bearing_uncertainty_deg=" << *frozen.bearing_uncertainty_deg;
+            if (frozen.mil_uncertainty) log << " mil_uncertainty=" << *frozen.mil_uncertainty;
+            wardogs::log_info(log.str());
+        }
+    }
+
+    wardogs::ShotEvidenceUpdate observe_hud_frame(const wardogs::AcceptedSightFrame& frame,
+                                                 std::uint64_t now_ms) {
+        auto update = observed_shots_.observe(frame, now_ms);
+        if (update.reason == wardogs::ShotEvidenceReason::invalid_frame && frame.ammo &&
+            frame.ammo_channel == "sph2_single_shell") {
+            // A valid HUD can show aim outside the selected ballistic arc
+            // after firing. Its independent counter still corroborates the
+            // frozen pre-press sight; it must never create a fresh sight pose.
+            wardogs::DischargeFrameEvidence partial;
+            partial.id = frame.id; partial.timestamp_ms = frame.timestamp_ms; partial.epoch = frame.epoch;
+            partial.context = frame.context; partial.foreground_verified = frame.foreground_verified;
+            partial.ammo = frame.ammo; partial.ammo_channel = frame.ammo_channel;
+            partial.stabilized = frame.stabilized; partial.shot_camera = frame.shot_camera;
+            update = observed_shots_.observe_discharge(partial, now_ms);
+        }
+        return update;
+    }
+
+    void poll_sph_hud() {
+        if (hud_reading_ && GetTickCount64() - hud_reading_at_ms_ > 1000) clear_hud_reading();
+        // No passive desktop reading in diagnostic/manual/mortar/paused modes.
+        if (closing_ || diagnostic_ || application_paused_ ||
+            !settings_.game_integration_enabled || !vehicle_mode_) {
+            if (hud_context_) reset_hud_observation();
+            return;
+        }
+        const auto context = current_shot_context();
+        if (!context) { if (hud_context_) reset_hud_observation(); return; }
+        ensure_hud_context(*context);
+        if (busy_ || selecting_ || ocr_hold_ || QApplication::activeModalWidget() ||
+            !wardogs_is_foreground()) {
+            observed_shots_.invalidate_sight(GetTickCount64());
+            clear_hud_reading();
+            return;
+        }
+        if (hud_busy_) return; // One in-flight frame; never accumulate a backlog.
+        if (hud_worker_.joinable()) hud_worker_.join(); // Finished worker only.
+        const auto window = GetForegroundWindow();
+        const auto target = *target_;
+        const auto height = target_height_delta(target);
+        const auto command_text = command_ids_[context->arc == wardogs::Arc::low ? 0U : 1U];
+        if (command_text.empty()) return;
+        const auto command_id = std::stoull(command_text);
+        const auto epoch = hud_epoch_;
+        const auto frame_id = ++hud_frame_sequence_;
+        const QPointer<MainWindow> self(this);
+        hud_busy_ = true;
+        hud_worker_ = std::jthread([this, self, window, context = *context, target,
+                                    height, command_id, epoch, frame_id](std::stop_token stop) {
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+            const auto started = GetTickCount64();
+            std::uint64_t captured_at{};
+            std::optional<wardogs::SphHudReading> reading;
+            std::string failure;
+            try {
+                if (stop.stop_requested()) throw std::runtime_error("HUD capture canceled");
+                RECT local{};
+                POINT origin{};
+                if (GetForegroundWindow() != window || !GetClientRect(window, &local) ||
+                    !ClientToScreen(window, &origin) || local.right < 640 || local.bottom < 360)
+                    throw std::runtime_error("HUD client changed or is too small");
+                captured_at = GetTickCount64(); // Capture time, never OCR completion.
+                auto image = wardogs::capture_game_client(window);
+                if (stop.stop_requested()) throw std::runtime_error("HUD capture canceled");
+                if (!hud_ocr_) hud_ocr_ = std::make_unique<wardogs::WindowsOcr>();
+                // A separate recognition engine prevents contention with the
+                // priority map-coordinate worker and its reusable buffers.
+                if (!hud_rapid_) hud_rapid_ = std::make_unique<wardogs::RapidOcr>(
+                    executable_directory() / L"models" / L"PP-OCRv6_rec_small.onnx");
+                const auto frame = wardogs::recognize_sph_hud_frame(
+                    image, *hud_ocr_, frame_id, stop, hud_rapid_.get());
+                reading = wardogs::read_sph_hud(frame);
+                if (!reading->accepted()) {
+                    const auto partial = wardogs::read_sph_hud_supplemental(frame);
+                    reading->ammunition = partial.ammunition;
+                    reading->stabilized = partial.stabilized;
+                    failure = "parser_refusal=" + std::to_string(static_cast<int>(reading->refusal)) +
+                        " partial_shell_channel=" + std::to_string(reading->ammunition.has_value());
+                }
+                RECT after{}; POINT after_origin{};
+                if (GetForegroundWindow() != window || !GetClientRect(window, &after) ||
+                    !ClientToScreen(window, &after_origin) || after.right != local.right ||
+                    after.bottom != local.bottom || after_origin.x != origin.x || after_origin.y != origin.y)
+                    throw std::runtime_error("HUD foreground or client geometry changed");
+            } catch (const std::exception& error) { reading.reset(); failure = error.what(); }
+            catch (const winrt::hresult_error& error) {
+                reading.reset(); failure = "HUD OCR HRESULT=" + std::to_string(static_cast<int>(error.code()));
+            }
+            const auto elapsed = GetTickCount64() - started;
+            if (self) QMetaObject::invokeMethod(self, [self, reading = std::move(reading),
+                    failure = std::move(failure), window, context, target, height, command_id,
+                    epoch, frame_id, captured_at, elapsed, canceled = stop.stop_requested()] {
+                if (!self) return;
+                if (frame_id != self->hud_frame_sequence_) return;
+                self->hud_busy_ = false;
+                if (self->closing_ || canceled || epoch != self->hud_epoch_ || self->application_paused_ ||
+                    !self->settings_.game_integration_enabled || !self->vehicle_mode_) return;
+                const auto active = self->current_shot_context();
+                if (!active || *active != context || !self->target_ || *self->target_ != target ||
+                    GetForegroundWindow() != window || !wardogs_is_foreground() ||
+                    GetTickCount64() < captured_at || GetTickCount64() - captured_at > 1000) {
+                    self->observed_shots_.invalidate_sight(GetTickCount64());
+                    self->clear_hud_reading();
+                    return;
+                }
+                if (self->hud_timer_) self->hud_timer_->setInterval(
+                    wardogs::sph_hud_poll_delay_ms(elapsed, GetTickCount64() - captured_at,
+                        reading && reading->accepted()));
+                if (!reading || !reading->accepted()) {
+                    self->observed_shots_.invalidate_sight(GetTickCount64());
+                    self->clear_hud_reading();
+                    if (reading && reading->ammunition &&
+                        reading->ammunition->kind == wardogs::SphHudAmmoKind::single_shell) {
+                        wardogs::DischargeFrameEvidence partial;
+                        partial.id = frame_id; partial.timestamp_ms = captured_at; partial.epoch = epoch;
+                        partial.context = context; partial.foreground_verified = true;
+                        partial.ammo = static_cast<int>(reading->ammunition->count);
+                        partial.ammo_channel = "sph2_single_shell";
+                        partial.stabilized = reading->stabilized;
+                        const auto update = self->observed_shots_.observe_discharge(partial, GetTickCount64());
+                        if (update.shot) wardogs::log_info("shot.hud_observed shot_id=" +
+                            std::to_string(update.shot->shot_id) + " hud_epoch=" + std::to_string(epoch) +
+                            " correlation_ambiguous=" + std::to_string(update.shot->correlation_ambiguous) +
+                            " partial=1 hud_verified=1 discharge_observed=1 physical_shot_verified=0");
+                    }
+                    if (!failure.empty() && self->hud_error_ != failure) {
+                        self->hud_error_ = failure;
+                        wardogs::log_warning("hud.read_refused reason=" + failure);
+                    }
+                    return;
+                }
+                self->hud_error_.clear();
+                self->hud_reading_ = *reading;
+                self->hud_reading_at_ms_ = captured_at;
+                self->hud_reading_target_ = target;
+                self->hud_reading_epoch_ = epoch;
+                self->hud_window_ = reinterpret_cast<std::uintptr_t>(window);
+                const auto& pose = *reading->pose;
+                wardogs::AcceptedSightFrame frame;
+                frame.id = frame_id; frame.timestamp_ms = captured_at; frame.epoch = epoch;
+                frame.firing_snapshot = {target, context.arc, pose.bearing_deg, pose.sight_mil, height};
+                frame.bearing_uncertainty_deg = pose.bearing_uncertainty_deg;
+                frame.mil_uncertainty = pose.mil_uncertainty;
+                frame.command_id = command_id; frame.context = context;
+                frame.foreground_verified = true; frame.stabilized = reading->stabilized;
+                if (reading->ammunition && reading->ammunition->kind == wardogs::SphHudAmmoKind::single_shell) {
+                    frame.ammo = static_cast<int>(reading->ammunition->count);
+                    frame.ammo_channel = "sph2_single_shell";
+                }
+                const auto update = self->observe_hud_frame(frame, GetTickCount64());
+                if (update.invalidate_learned_prior && self->continuous_calibration_)
+                    self->continuous_calibration_->invalidate_bearing_prediction();
+                if (update.shot) {
+                    const auto& shot = *update.shot;
+                    std::ostringstream log; log.imbue(std::locale::classic()); log.precision(17);
+                    log << "shot.hud_observed shot_id=" << shot.shot_id << " hud_epoch=" << epoch
+                        << " first_frame=" << shot.first_sight_frame_id << " last_frame=" << shot.last_sight_frame_id
+                        << " discharge_frame=" << shot.discharge_frame_id << " bearing=" << shot.firing.bearing_deg
+                        << " mil=" << shot.firing.mil << " target=" << shot.firing.target.x << ',' << shot.firing.target.y
+                        << " correlation_ambiguous=" << shot.correlation_ambiguous
+                        << " hud_verified=1 discharge_observed=1 physical_shot_verified=0";
+                    wardogs::log_info(log.str());
+                }
+                const auto status = wardogs::i18n::text(QStringLiteral("Прицел считан: %1° · MIL %2"))
+                    .arg(pose.bearing_deg, 0, 'f', 2).arg(pose.sight_mil, 0, 'f', 2);
+                if (self->fire_control_compact_) self->fire_control_compact_->setToolTip(status);
+                self->sync_pinned_status();
+                self->arm_hud_freshness_timer();
+            }, Qt::QueuedConnection);
+        });
+    }
+
     void capture_impact_context(OcrMessage& context) {
         const auto arc = effective_vehicle_arc();
         if (!map_confirmed_ || !vehicle_mode_ || !base_set_ || !target_ || base_capture_pending_ || ocr_hold_ || !arc)
@@ -4609,6 +5183,20 @@ private:
         context.impact_computed = solution;
         context.impact_observation_id = std::to_string(++observation_sequence_);
         context.impact_command_id = command_ids_[*arc == wardogs::Arc::low ? 0U : 1U];
+        if (const auto observed_context = current_shot_context(); hud_context_ && observed_context) {
+            const wardogs::ShotImpactQuery query{*observed_context, hud_epoch_, *target_, target_height_delta(*target_)};
+            const auto association = observed_shots_.reserve_impact(query, GetTickCount64());
+            if (association.reservation) {
+                context.impact_hud_reservation = association.reservation;
+                context.impact_firing = association.reservation->shot.firing;
+                context.impact_command_id = std::to_string(association.reservation->shot.command_id);
+                // Freeze identity now; reserve again at commit. OCR retries,
+                // copies and cancellations cannot leak a live reservation.
+                (void)observed_shots_.release(association.reservation->reservation_id, GetTickCount64());
+            } else if (association.reason != wardogs::ShotEvidenceReason::no_hud_evidence) {
+                throw std::invalid_argument("Выстрел не связан однозначно с показаниями прицела. Поправка не применена.");
+            }
+        }
     }
 
     bool restore_failed_impact_guidance(const OcrMessage& context) {
@@ -4644,11 +5232,13 @@ private:
     }
 
     void reset_continuous_calibration() {
+        reset_hud_observation();
         ++calibration_epoch_;
         wardogs::log_info("continuous.reset previous_count=" +
             std::to_string(continuous_calibration_ ? continuous_calibration_->sample_count() : 0U) +
             " calibration_epoch=" + std::to_string(calibration_epoch_));
         continuous_calibration_.reset();
+        continuous_source_hud_.reset();
         last_impact_feedback_.reset();
         continuous_impact_->clear();
         update_continuous_controls();
@@ -4678,16 +5268,41 @@ private:
         const auto observation_id = evidence && !evidence->impact_observation_id.empty()
             ? evidence->impact_observation_id : std::to_string(++observation_sequence_);
         const auto command_id = evidence ? evidence->impact_command_id : std::string{};
-        // Coordinate feedback observes a landing and the displayed command. It
-        // does not observe the physical shot or the game's actual sight values.
-        const auto provenance = " session_id=" + session_id_ + " observation_id=" + observation_id +
+        const bool hud_verified = evidence && evidence->impact_hud_reservation;
+        auto provenance = " session_id=" + session_id_ + " observation_id=" + observation_id +
             " command_id=" + (command_id.empty() ? "unavailable" : command_id) +
-            " command_source=displayed_unverified physical_shot_verified=0 sight_verified=0" +
+            (hud_verified ? " command_source=hud_observed physical_shot_verified=0 sight_verified=1 discharge_observed=1"
+                          : " command_source=displayed_unverified physical_shot_verified=0 sight_verified=0 discharge_observed=0") +
             " diagnostic=" + std::to_string(diagnostic_ ? 1 : 0) +
             " input_epoch=" + std::to_string(evidence ? evidence->input_epoch : input_epoch_) +
             " calibration_epoch=" + std::to_string(calibration_epoch_);
+        if (hud_verified) {
+            const auto& shot = evidence->impact_hud_reservation->shot;
+            std::ostringstream details; details.imbue(std::locale::classic()); details.precision(17);
+            details << " shot_id=" << shot.shot_id << " intent_id=" << shot.intent_id
+                    << " hud_epoch=" << shot.epoch << " first_sight_frame=" << shot.first_sight_frame_id
+                    << " last_sight_frame=" << shot.last_sight_frame_id << " discharge_frame=" << shot.discharge_frame_id
+                    << " sight_captured_at_ms=" << shot.last_sight_capture_ms << " pressed_at_ms=" << shot.pressed_at_ms
+                    << " discharge_observed_at_ms=" << shot.discharged_at_ms;
+            if (shot.bearing_uncertainty_deg) details << " bearing_uncertainty_deg=" << *shot.bearing_uncertainty_deg;
+            if (shot.mil_uncertainty) details << " mil_uncertainty=" << *shot.mil_uncertainty;
+            provenance += details.str();
+        }
         std::optional<double> observed_impact_height;
+        std::optional<wardogs::ShotImpactReservation> live_hud_reservation;
         try {
+            if (hud_verified) {
+                const auto shot_context = current_shot_context();
+                if (!shot_context) throw std::invalid_argument("Контекст выстрела изменился");
+                const wardogs::ShotImpactQuery query{*shot_context, hud_epoch_, firing.target, firing.target_height_delta_m};
+                const auto association = observed_shots_.reserve_impact(query, GetTickCount64());
+                if (!association.reservation) throw std::invalid_argument("Выстрел больше не связан однозначно с попаданием");
+                live_hud_reservation = association.reservation;
+                if (live_hud_reservation->shot.shot_id != evidence->impact_hud_reservation->shot.shot_id ||
+                    observed_shots_.validate_reservation(live_hud_reservation->reservation_id, query, GetTickCount64()) !=
+                        wardogs::ShotEvidenceReason::unique_association)
+                    throw std::invalid_argument("Показания прицела не относятся к сохранённому выстрелу");
+            }
             std::ostringstream request;
             request.imbue(std::locale::classic());
             request.precision(17);
@@ -4717,7 +5332,13 @@ private:
             const auto active_arc = effective_vehicle_arc();
             if (active_arc ? *active_arc != firing.arc : !accepted_frozen_capture)
                 throw std::invalid_argument("Траектория изменилась. Попадание не относится к текущей наводке.");
+            if (!hud_verified && continuous_source_hud_ == true)
+                throw std::invalid_argument("Для этой пристрелки нужны подтверждённые показания прицела. Поправка не применена.");
             auto candidate = continuous_calibration_;
+            // Actual readings and assumed displayed commands have different
+            // error sources. Never fit a shared prior across that boundary.
+            const bool replace_assumed_history = hud_verified && continuous_source_hud_ == false;
+            if (replace_assumed_history) candidate.reset();
             if (!candidate)
                 candidate.emplace(base_, wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0},
                                   wardogs::ContinuousCorrectionMode::local_only, true);
@@ -4733,7 +5354,14 @@ private:
             const double observed_miss_m = wardogs::calculate_shot(firing.target, impact).distance * 100.0;
             const double bearing_change = feedback.bearing_change_deg;
             const double mil_change = feedback.mil_change;
+            if (live_hud_reservation && observed_shots_.commit(live_hud_reservation->reservation_id, GetTickCount64()) !=
+                    wardogs::ShotEvidenceReason::committed)
+                throw std::invalid_argument("Сохранённый выстрел устарел. Поправка не применена.");
+            live_hud_reservation.reset();
             continuous_calibration_ = std::move(candidate);
+            continuous_source_hud_ = hud_verified;
+            if (replace_assumed_history)
+                wardogs::log_info("continuous.evidence_source_changed previous=displayed_unverified current=hud_observed");
             last_impact_feedback_ = feedback;
             last_impact_consistency_ = assessment.confidence;
             ++calibration_epoch_;
@@ -4783,6 +5411,8 @@ private:
                       .arg(QString::number(observed_miss_m, 'f', 0), signed_value(bearing_change), signed_value(mil_change), terrain_status));
             return true;
         } catch (const std::exception& error) {
+            if (live_hud_reservation)
+                (void)observed_shots_.release(live_hud_reservation->reservation_id, GetTickCount64());
             std::ostringstream rejected;
             rejected.imbue(std::locale::classic());
             rejected.precision(17);
@@ -5250,6 +5880,69 @@ private:
         sync_pinned_status();
     }
 
+    wardogs::AimAlignment current_aim_alignment() const {
+        wardogs::AimAlignmentInput input;
+        input.now_ms = GetTickCount64();
+        const auto arc = effective_vehicle_arc();
+        const auto context = current_shot_context();
+        input.current_context_valid = vehicle_mode_ && settings_.game_integration_enabled &&
+            !application_paused_ && !busy_ && !selecting_ && !failure_state_ && !ocr_hold_ &&
+            !QApplication::activeModalWidget() && context && hud_context_ && *context == *hud_context_ &&
+            hud_reading_epoch_ == hud_epoch_ && hud_reading_target_ == target_ &&
+            (diagnostic_ || (wardogs_is_foreground() && GetForegroundWindow() ==
+                reinterpret_cast<HWND>(hud_window_)));
+        if (!arc || !hud_reading_ || !hud_reading_->accepted()) return wardogs::evaluate_aim_alignment(input);
+        const auto& desired = *arc == wardogs::Arc::high ? high_result_ : low_result_;
+        if (!desired) return wardogs::evaluate_aim_alignment(input);
+        const auto command = wardogs::displayed_firing_command(*desired);
+        input.desired_bearing_deg = command.bearing_deg;
+        input.desired_mil = command.mil;
+        input.actual_sight_verified = true;
+        input.actual_bearing_deg = hud_reading_->pose->bearing_deg;
+        input.actual_mil = hud_reading_->pose->sight_mil;
+        input.bearing_uncertainty_deg = hud_reading_->pose->bearing_uncertainty_deg;
+        input.mil_uncertainty = hud_reading_->pose->mil_uncertainty;
+        input.captured_at_ms = hud_reading_at_ms_;
+        input.stable_pair = observed_shots_.has_stable_sight();
+        input.stabilized = hud_reading_->stabilized;
+        return wardogs::evaluate_aim_alignment(input);
+    }
+
+    void sync_pinned_aim_alignment() {
+        if (!pinned_window_) return;
+        const auto alignment = current_aim_alignment();
+        QString label = wardogs::i18n::text(QStringLiteral("Прицел: нет данных"));
+        if (alignment.state == wardogs::AimAlignmentState::aligned)
+            label = wardogs::i18n::text(QStringLiteral("Прицел согласован"));
+        else if (alignment.state == wardogs::AimAlignmentState::misaligned)
+            label = wardogs::i18n::text(QStringLiteral("Наводка не совпадает"));
+        else if (alignment.state == wardogs::AimAlignmentState::close)
+            label = wardogs::i18n::text(alignment.reason == wardogs::AimAlignmentReason::unstabilized
+                ? QStringLiteral("Стабилизируйте орудие") : QStringLiteral("Уточните наводку"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::awaiting_stable_sight)
+            label = wardogs::i18n::text(QStringLiteral("Проверяем прицел"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::unknown_stabilization)
+            label = wardogs::i18n::text(QStringLiteral("Стабилизация не считана"));
+        else if (alignment.reason == wardogs::AimAlignmentReason::stale_capture)
+            label = wardogs::i18n::text(QStringLiteral("Обновляем прицел"));
+        QString details = wardogs::i18n::text(QStringLiteral("Сравнение с текущей командой · не прогноз попадания"));
+        if (alignment.state == wardogs::AimAlignmentState::aligned)
+            details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("Команда в пределах погрешности чтения и округления"));
+        if (alignment.bearing_delta_deg && alignment.mil_delta) {
+            const auto signed_value = [](double value, int decimals) {
+                const auto result = QString::number(value, 'f', decimals);
+                return value > 0.0 ? QStringLiteral("+") + result : result;
+            };
+            details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("До команды: азимут %1° · MIL %2"))
+                .arg(signed_value(*alignment.bearing_delta_deg, 2), signed_value(*alignment.mil_delta, 1));
+            if (hud_reading_ && hud_reading_->pose)
+                details += QStringLiteral("\n") + wardogs::i18n::text(QStringLiteral("Чтение: ±%1° · ±%2 MIL"))
+                    .arg(hud_reading_->pose->bearing_uncertainty_deg, 0, 'f', 2)
+                    .arg(hud_reading_->pose->mil_uncertainty, 0, 'f', 2);
+        }
+        pinned_window_->set_aim_alignment(alignment.state, label, details);
+    }
+
     void sync_pinned_status() {
         if (!pinned_window_) return;
         const auto arc = effective_vehicle_arc();
@@ -5260,6 +5953,10 @@ private:
             : wardogs::i18n::text(QStringLiteral("Карта не подтверждена"));
         QStringList details;
         if (quick_state_) details.append(quick_state_->text());
+        if (hud_reading_ && hud_reading_->pose && GetTickCount64() >= hud_reading_at_ms_ &&
+            GetTickCount64() - hud_reading_at_ms_ <= 1000)
+            details.append(wardogs::i18n::text(QStringLiteral("Прицел считан: %1° · MIL %2"))
+                .arg(hud_reading_->pose->bearing_deg, 0, 'f', 2).arg(hud_reading_->pose->sight_mil, 0, 'f', 2));
         if (map_confirmed_ && vehicle_mode_) {
             caption += terrain_map_ ? wardogs::i18n::text(ready ? QStringLiteral(" · высоты учтены")
                                                              : QStringLiteral(" · высоты подключены"))
@@ -5303,6 +6000,7 @@ private:
                 workflow += QStringLiteral("\n") + fire_control_compact_->text();
         }
         pinned_window_->set_workflow_status(workflow, status_->text());
+        sync_pinned_aim_alignment();
     }
 
     void set_ghost_enabled(bool enabled) {
@@ -5351,6 +6049,7 @@ private:
         settings_.ghost_reticle.preferred_arc =
             settings_.ghost_reticle.preferred_arc == wardogs::Arc::low
                 ? wardogs::Arc::high : wardogs::Arc::low;
+        reset_hud_observation();
         advance_input_epoch();
         ++calibration_epoch_;
         continuous_impact_->clear();
@@ -5928,6 +6627,7 @@ private:
 
     void launch_ocr_worker(wardogs::Image image, OcrMessage context,
                            std::optional<wardogs::MapOcrSearchLayout> map_layout = std::nullopt) {
+        if (hud_worker_.joinable()) hud_worker_.request_stop();
         if (application_paused_) { busy_ = false; return; }
         const auto action = context.action;
         if (worker_.joinable()) worker_.join();
@@ -6355,6 +7055,7 @@ private:
         const bool requested_pause = !application_paused_;
         if (requested_pause) {
             application_paused_ = true;
+            reset_hud_observation();
             if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
             enter_game_after_terrain_ = false;
             // Release capture chords before attempting any new registration:
