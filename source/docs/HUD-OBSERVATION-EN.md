@@ -1,6 +1,6 @@
 # SPH-2 sight observation
 
-This document describes the experimental workflow prepared for 2.13. It retains the sight actually read before a fire input and helps associate it with a later Alt+I correction. The owner must verify compatibility with the current game build in the field. This workflow does not measure a hit percentage.
+This document describes the experimental workflow included in 2.13.0. It retains the sight actually read before a fire input and helps associate it with a later Alt+I correction. The owner must verify compatibility with the current game build in the field. This workflow does not measure a hit percentage.
 
 ## When observation runs
 

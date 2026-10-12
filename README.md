@@ -4,22 +4,22 @@
 
 **Нативный помощник для миномёта L81 и артиллерии SPH-2 в игре WARDOGS.** Координаты → дальность, азимут и MIL → наводка в игре.
 
-[![Version](https://img.shields.io/badge/version-2.12.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.13.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#скачивание-и-запуск)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#язык-и-настройки)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
 
 **Русский** · [English](README.en.md) · [Скачать](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Инструкции](source/docs/QUICKSTART-RU.md) · [Сообщить о проблеме](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
 
-**В разработке — 2.13.0:** упрощённый интерфейс с одним следующим действием, раскрываемые подробности, новая справка и фоновая проверка карт. Это ещё не опубликованный релиз; ссылка загрузки ведёт на стабильную 2.12.0. [Изменения](source/docs/RELEASE-NOTES-RU.md).
+**Версия 2.13.0:** понятный рабочий цикл, мини-карточка с сохранением монитора и положения, общая пауза **Ctrl+Alt+P**, восстановление OCR и ограниченный предварительный прогноз азимута SPH-2. Экспериментальное чтение игрового прицела добавляет цветовое согласование с командой; полный путь требует полевой проверки и не подтверждает попадание. [Полный релиз RU/EN](docs/releases/v2.13.0.md) · [ChangeLog](source/docs/RELEASE-NOTES-RU.md).
 
-Предварительные снимки 2.13.0 из Windows CI: [главное окно](docs/screenshots/ru-main-2.13.png) · [настройки](docs/screenshots/ru-settings-2.13.png) · [справка](docs/screenshots/ru-help-2.13.png). Координаты на снимках — тестовый пример.
+Снимки 2.13.0 из Windows CI: [главное окно](docs/screenshots/ru-main-2.13.png) · [настройки](docs/screenshots/ru-settings-2.13.png) · [справка](docs/screenshots/ru-help-2.13.png) · [мини-карточка](docs/screenshots/ru-aim-aligned-2.13.png). Координаты и согласованный прицел на снимках — синтетический тестовый пример.
 
 Программа помогает быстро перенести точки с карты в расчёт: **Alt+X** читает орудие из активного черновика чата, **средняя кнопка мыши** читает цель рядом с курсором на карте. Результат доступен в основном окне, мини-карточке поверх окон и на вспомогательном прицеле. Можно работать полностью вручную.
 
 **Обновления GitHub:** проверка и установка новых релизов прямо в программе, начиная с 2.8.0. Проверка при запуске, баннер новой версии, загрузка с проверкой SHA-256 и обновление всего переносимого комплекта с перезапуском. Интерфейс и справка доступны на русском и английском; язык переключается без перезапуска.
 
-**Версия 2.12.0:** одинаковые целые MIL и азимут до 0,1° во всех командах; исправлено ложное обучение от округления. Пристрелка уточняет устойчивый центр серии без новых настроек, журналы связывают показанную команду и попадание, отдельный анализ измеряет критерий **не дальше 10 м**. **99% игровых попаданий не подтверждены; L81 и таблицы сохранены.** [Подробный релиз RU/EN](docs/releases/v2.12.0.md) · [ChangeLog RU](source/docs/RELEASE-NOTES-RU.md) · [EN](source/docs/RELEASE-NOTES-EN.md).
+**Сохранено из 2.12.0:** одинаковые целые MIL и азимут до 0,1° во всех командах; исправлено ложное обучение от округления. Пристрелка уточняет устойчивый центр серии без новых настроек, журналы связывают показанную команду и попадание, отдельный анализ измеряет критерий **не дальше 10 м**. **99% игровых попаданий не подтверждены; L81 и таблицы сохранены.** [Подробный релиз RU/EN](docs/releases/v2.12.0.md) · [ChangeLog RU](source/docs/RELEASE-NOTES-RU.md) · [EN](source/docs/RELEASE-NOTES-EN.md).
 
 Сохранён единый цикл **карта → Alt+X: орудие → средняя кнопка: цель → выстрел → Alt+I: попадание → уточнённая команда**, а также планирование, улучшенное чтение координат и архив журналов из 2.9–2.11. [Предыдущий релиз 2.11.0](docs/releases/v2.11.0.md).
 
@@ -90,7 +90,7 @@
 **Требования:** Windows 10/11 x64. Для обычного запуска не нужны установка приложения, права администратора, Qt SDK, Visual Studio или Python.
 
 1. Откройте [последний релиз](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Скачайте **WardogsFireControl-v2.12.0-win-x64.zip** из раздела **Assets**.
+2. Скачайте **WardogsFireControl-v2.13.0-win-x64.zip** из раздела **Assets**.
 3. **Распакуйте ZIP целиком** в отдельную папку.
 4. Запустите **Запустить.cmd**, **Start.cmd** или **WarDogsDistanceCalculator.exe** внутри распакованного комплекта.
 
@@ -103,13 +103,13 @@
 Рядом с архивами релиза публикуется файл контрольных сумм SHA-256. Сравните указанную сумму с результатом:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.12.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.13.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 Контрольная сумма проверяет целостность скачивания. При наличии GitHub CLI происхождение сборки можно дополнительно проверить через GitHub attestations:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.12.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.13.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Обновление из программы
