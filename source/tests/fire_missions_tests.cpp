@@ -275,17 +275,43 @@ int main(int argc, char** argv) {
         write_bytes(recent.path(),history_original);
         const FireMissionRepository first_writer(concurrent_path), second_writer(concurrent_path);
         std::atomic<int> concurrency_failures{};
-        auto write_points = [&](const FireMissionRepository& writer, const wchar_t* prefix) {
+        struct WriterResult {
+            int committed{};
+            int failed_index{-1};
+            std::string error;
+        };
+        WriterResult first_result, second_result;
+        auto write_points = [&](const FireMissionRepository& writer, const wchar_t* prefix, WriterResult& result) {
+            int index{};
             try {
-                for (int index = 0; index < 12; ++index)
+                for (; index < 12; ++index) {
                     (void)writer.create(GameMap::other, FireMissionWeapon::l81, FireMissionKind::target,
                         std::wstring{prefix} + std::to_wstring(index), {100.0 + index, 110.0});
-            } catch (const std::exception&) { ++concurrency_failures; }
+                    ++result.committed;
+                }
+            } catch (const std::exception& error) {
+                result.failed_index = index;
+                result.error = error.what();
+                ++concurrency_failures;
+            }
         };
-        std::thread first(write_points, std::cref(first_writer), L"First ");
-        std::thread second(write_points, std::cref(second_writer), L"Second ");
+        std::thread first(write_points, std::cref(first_writer), L"First ", std::ref(first_result));
+        std::thread second(write_points, std::cref(second_writer), L"Second ", std::ref(second_result));
         first.join(); second.join();
-        check(concurrency_failures == 0 && first_writer.load().size() == 24,
+        const auto report_writer = [](const char* prefix, const WriterResult& result) {
+            if (result.failed_index < 0) return;
+            std::cerr << "concurrent.writer_failure prefix=\"" << prefix << "\" index=" << result.failed_index
+                      << " name=\"" << prefix << result.failed_index << "\" committed=" << result.committed
+                      << " error=\"" << result.error << "\"\n";
+        };
+        report_writer("First ", first_result);
+        report_writer("Second ", second_result);
+        const auto actual_count = first_writer.load().size();
+        std::cout << "concurrent.writer_summary expected_count=24 actual_count=" << actual_count
+                  << " exceptions=" << concurrency_failures.load()
+                  << " first_committed=" << first_result.committed
+                  << " second_committed=" << second_result.committed << '\n';
+        check(concurrency_failures == 0 && actual_count == 24,
               "two independent repositories reload under the shared lock and cannot lose each other's additions");
     } catch (const std::exception& error) {
         ++failures;
