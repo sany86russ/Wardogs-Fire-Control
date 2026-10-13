@@ -155,21 +155,33 @@ struct WindowsOcr::Impl {
     // Engine objects outlive their creating worker. Keep the MTA alive without
     // leaking that worker's CoInitialize count or tying cleanup to its thread.
     std::shared_ptr<MtaRuntime> runtime = std::make_shared<MtaRuntime>();
+    std::wstring requested_language_tag;
+    std::wstring recognizer_language_tag;
     winrt::Windows::Media::Ocr::OcrEngine engine{nullptr};
     std::timed_mutex recognition_mutex;
 
-    Impl() {
+    explicit Impl(std::wstring_view language_tag) : requested_language_tag(language_tag) {
         const MtaApartment apartment;
+        if (requested_language_tag.empty() ||
+            !winrt::Windows::Globalization::Language::IsWellFormed(requested_language_tag))
+            throw std::invalid_argument("Неверный язык Windows OCR: нужен тег BCP-47");
         ensure_engine();
     }
 
     void ensure_engine() {
         if (engine) return;
         engine = winrt::Windows::Media::Ocr::OcrEngine::TryCreateFromLanguage(
-            winrt::Windows::Globalization::Language(L"en-US"));
+            winrt::Windows::Globalization::Language(requested_language_tag));
         if (!engine) {
-            throw std::runtime_error("В Windows не установлен английский пакет OCR (en-US)");
+            if (requested_language_tag == L"en-US")
+                throw std::runtime_error("В Windows не установлен английский пакет OCR (en-US)");
+            throw std::runtime_error("В Windows не установлен пакет OCR для языка " +
+                                     winrt::to_string(requested_language_tag));
         }
+        // Preserve the actual Windows match (e.g. ru-RU -> ru) for diagnostics.
+        // Subsequent engine retirement/recreation never mutates this value.
+        if (recognizer_language_tag.empty())
+            recognizer_language_tag = engine.RecognizerLanguage().LanguageTag().c_str();
     }
 
     OcrResult run(const Image& image, bool high_contrast, std::stop_token stop) {
@@ -260,10 +272,31 @@ struct WindowsOcr::Impl {
     }
 };
 
-WindowsOcr::WindowsOcr() : impl_(std::make_unique<Impl>()) {}
+WindowsOcr::WindowsOcr(std::wstring_view language_tag) : impl_(std::make_unique<Impl>(language_tag)) {}
 WindowsOcr::~WindowsOcr() = default;
 WindowsOcr::WindowsOcr(WindowsOcr&&) noexcept = default;
 WindowsOcr& WindowsOcr::operator=(WindowsOcr&&) noexcept = default;
+
+std::vector<std::wstring> WindowsOcr::available_recognizer_languages() {
+    const MtaApartment apartment;
+    std::vector<std::wstring> languages;
+    for (const auto& language : winrt::Windows::Media::Ocr::OcrEngine::AvailableRecognizerLanguages())
+        languages.emplace_back(language.LanguageTag().c_str());
+    return languages;
+}
+
+bool WindowsOcr::is_language_supported(std::wstring_view language_tag) {
+    if (language_tag.empty()) return false;
+    const MtaApartment apartment;
+    const winrt::hstring tag(language_tag);
+    if (!winrt::Windows::Globalization::Language::IsWellFormed(tag)) return false;
+    return winrt::Windows::Media::Ocr::OcrEngine::IsLanguageSupported(
+        winrt::Windows::Globalization::Language(tag));
+}
+
+std::wstring_view WindowsOcr::language_tag() const noexcept {
+    return impl_ ? std::wstring_view{impl_->recognizer_language_tag} : std::wstring_view{};
+}
 
 OcrResult WindowsOcr::recognize(const Image& image, std::stop_token stop) const {
     if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");

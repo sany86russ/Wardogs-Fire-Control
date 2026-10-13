@@ -22,10 +22,22 @@ bool is_fire_mouse_press(std::uintptr_t message, std::uint32_t flags) noexcept {
            (flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED)) == 0;
 }
 
+std::optional<std::uint64_t> expand_mouse_message_time(
+    std::uint32_t message_time_ms, std::uint64_t now_ms) noexcept {
+    // Unsigned subtraction recovers elapsed time across the native 32-bit wrap.
+    // The small admission window rejects future/native-clock mismatches without
+    // guessing another epoch or granting a delayed hook a fresh press time.
+    const auto elapsed = static_cast<std::uint32_t>(
+        static_cast<std::uint32_t>(now_ms) - message_time_ms);
+    if (elapsed > 1000 || now_ms < elapsed) return std::nullopt;
+    return now_ms - elapsed;
+}
+
 void coalesce_fire_intent(FireIntentEvent& pending, const FireIntentEvent& press,
                           bool already_pending) noexcept {
     if (already_pending) {
         pending.multiple_presses = true;
+        pending.timestamp_verified = pending.timestamp_verified && press.timestamp_verified;
         pending.foreground_changed = pending.foreground_changed ||
             press.foreground_window != pending.foreground_window;
         if (press.timestamp_ms > pending.last_timestamp_ms)
@@ -86,9 +98,11 @@ struct GlobalMouseListener::Impl {
                        is_fire_mouse_press(message, event->flags)) {
                 const bool already_pending = state->fire_pending.exchange(
                     true, std::memory_order_acq_rel);
-                const FireIntentEvent press{event->pt.x, event->pt.y,
+                const auto timestamp = expand_mouse_message_time(event->time, GetTickCount64());
+                FireIntentEvent press{event->pt.x, event->pt.y,
                     reinterpret_cast<std::uintptr_t>(GetForegroundWindow()),
-                    GetTickCount64()};
+                    timestamp.value_or(0)};
+                press.timestamp_verified = timestamp.has_value();
                 coalesce_fire_intent(state->pending_fire_event, press, already_pending);
                 if (!already_pending &&
                     !PostThreadMessageW(state->thread_id.load(), fire_message, 0, 0))

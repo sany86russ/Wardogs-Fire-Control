@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace wardogs {
 
@@ -11,6 +12,11 @@ namespace wardogs {
                                         std::uint32_t flags) noexcept;
 [[nodiscard]] bool is_fire_mouse_press(std::uintptr_t message,
                                       std::uint32_t flags) noexcept;
+// Expand the native 32-bit input clock against its current 64-bit tick clock.
+// A callback delayed by more than one second, a future event, or a time before
+// system startup is unavailable evidence; never replace it with callback time.
+[[nodiscard]] std::optional<std::uint64_t> expand_mouse_message_time(
+    std::uint32_t message_time_ms, std::uint64_t now_ms) noexcept;
 
 struct MiddleMouseEvent {
     int x{};
@@ -31,6 +37,8 @@ struct FireIntentEvent {
     bool foreground_changed{};
     // The last press can fall inside a newer HUD context than the first one.
     std::uint64_t last_timestamp_ms{};
+    // False if any press in this dispatch batch has an unavailable native time.
+    bool timestamp_verified{true};
 };
 
 // Retain the first pre-press identity while exposing any additional physical

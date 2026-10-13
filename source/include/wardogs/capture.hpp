@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 #include <string>
+#include <string_view>
 
 namespace wardogs {
 
@@ -37,9 +38,4 @@ MapCoordinateSearch make_map_coordinate_search_rects(RECT client_rect, POINT cur
                                                      double scale = 1.0);
 RECT resolve_capture_region(const CaptureRegion& region);
 Image capture_screen(const CaptureRegion& region);
-// Client DC only, without CAPTUREBLT. Layered calculation overlays must not
-// become evidence about the game's actual sight. Refuses hidden/minimized or
-// changing clients; never silently clips a client to a selected monitor.
-Image capture_game_client(HWND window);
-
 }  // namespace wardogs

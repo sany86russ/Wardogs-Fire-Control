@@ -26,6 +26,22 @@ bool valid_uncertainty(std::optional<double> interval) {
     return !interval || (std::isfinite(*interval) && *interval >= 0.0);
 }
 
+template <typename Frame>
+std::uint64_t source_started_at(const Frame& frame) {
+    return frame.source_started_at_ms.value_or(frame.timestamp_ms);
+}
+
+bool bounded_capture_pair(std::uint64_t previous_source, std::uint64_t previous_receipt,
+                          std::uint64_t current_source, std::uint64_t current_receipt,
+                          const ShotObservationPolicy& policy) {
+    // Intervals prove separation only when the next frame's earliest possible
+    // source time is later than the previous frame's latest possible time.
+    return current_source >= previous_receipt &&
+        current_source - previous_receipt >= policy.minimum_frame_separation_ms &&
+        current_receipt >= previous_source &&
+        current_receipt - previous_source <= policy.maximum_stable_frame_gap_ms;
+}
+
 }  // namespace
 
 ShotObservationSession::ShotObservationSession(ShotObservationPolicy policy)
@@ -63,6 +79,7 @@ void ShotObservationSession::clear_inputs() {
     candidate_pose_.clear();
     candidate_pose_frame_id_ = 0;
     candidate_pose_time_ms_ = 0;
+    candidate_pose_source_ms_ = 0;
 }
 
 void ShotObservationSession::begin_context(
@@ -136,7 +153,7 @@ void ShotObservationSession::expire(std::uint64_t now_ms) {
         unassociated_discharge_at_ms_.reset();
         expired_shot_ = true;
     }
-    if (stable_ && now_ms - stable_->timestamp_ms > policy_.maximum_hud_age_ms) {
+    if (stable_ && now_ms - source_started_at(*stable_) > policy_.maximum_hud_age_ms) {
         stable_.reset();
         stable_first_frame_id_ = 0;
     }
@@ -194,7 +211,8 @@ ShotEvidenceUpdate ShotObservationSession::observe(
         frame.firing_snapshot.mil < minimum_mil || frame.firing_snapshot.mil > maximum_mil ||
         !std::isfinite(frame.firing_snapshot.target_height_delta_m) ||
         (frame.ammo && *frame.ammo < 0) || frame.ammo_channel.size() > 128 ||
-        frame.body_attitude_fingerprint.size() > 256 || frame.timestamp_ms > now_ms) {
+        frame.body_attitude_fingerprint.size() > 256 || frame.timestamp_ms > now_ms ||
+        source_started_at(frame) > frame.timestamp_ms) {
         invalidate_sight(now_ms);
         result.reason = ShotEvidenceReason::invalid_frame;
         return result;
@@ -204,8 +222,8 @@ ShotEvidenceUpdate ShotObservationSession::observe(
         result.reason = ShotEvidenceReason::invalid_frame;
         return result;
     }
-    if (now_ms - frame.timestamp_ms > policy_.maximum_hud_age_ms ||
-        frame.timestamp_ms < context_started_at_ms_ || frame.timestamp_ms < last_capture_ms_ || frame.id < last_frame_id_) {
+    if (now_ms - source_started_at(frame) > policy_.maximum_hud_age_ms ||
+        source_started_at(frame) < context_started_at_ms_ || frame.timestamp_ms < last_capture_ms_ || frame.id < last_frame_id_) {
         result.reason = ShotEvidenceReason::stale_frame;
         return result;
     }
@@ -224,8 +242,8 @@ ShotEvidenceUpdate ShotObservationSession::observe(
             candidate_pose_.clear();
             candidate_pose_frame_id_ = 0;
         } else if (marker == candidate_pose_ && frame.id != candidate_pose_frame_id_ &&
-                   frame.timestamp_ms - candidate_pose_time_ms_ >= policy_.minimum_frame_separation_ms &&
-                   frame.timestamp_ms - candidate_pose_time_ms_ <= policy_.maximum_stable_frame_gap_ms) {
+                   bounded_capture_pair(candidate_pose_source_ms_, candidate_pose_time_ms_,
+                       source_started_at(frame), frame.timestamp_ms, policy_)) {
             const bool changed = !confirmed_pose_.empty();
             confirmed_pose_ = marker;
             candidate_pose_.clear();
@@ -243,6 +261,7 @@ ShotEvidenceUpdate ShotObservationSession::observe(
             candidate_pose_ = marker;
             candidate_pose_frame_id_ = frame.id;
             candidate_pose_time_ms_ = frame.timestamp_ms;
+            candidate_pose_source_ms_ = source_started_at(frame);
         }
     } else {
         // Missing/unverified pose evidence cannot corroborate a body change.
@@ -252,7 +271,7 @@ ShotEvidenceUpdate ShotObservationSession::observe(
 
     const DischargeFrameEvidence discharge_frame{frame.id, frame.timestamp_ms, frame.epoch,
         frame.context, frame.foreground_verified, frame.ammo, frame.ammo_channel,
-        frame.stabilized, frame.shot_camera};
+        frame.stabilized, frame.shot_camera, frame.source_started_at_ms};
     if (auto correlated = correlate_discharge(discharge_frame, now_ms)) {
         stable_.reset();
         stable_first_frame_id_ = 0;
@@ -260,10 +279,12 @@ ShotEvidenceUpdate ShotObservationSession::observe(
         return *correlated;
     }
 
-    if (previous_ && frame.timestamp_ms - previous_->timestamp_ms <= policy_.maximum_stable_frame_gap_ms &&
+    if (previous_ && frame.timestamp_ms >= source_started_at(*previous_) &&
+        frame.timestamp_ms - source_started_at(*previous_) <= policy_.maximum_stable_frame_gap_ms &&
         same_sight(*previous_, frame) && previous_->ammo == frame.ammo &&
         previous_->shot_camera == frame.shot_camera && previous_->ammo_channel == frame.ammo_channel) {
-        if (frame.timestamp_ms - previous_->timestamp_ms >= policy_.minimum_frame_separation_ms) {
+        if (bounded_capture_pair(source_started_at(*previous_), previous_->timestamp_ms,
+                source_started_at(frame), frame.timestamp_ms, policy_)) {
             stable_first_frame_id_ = previous_->id;
             stable_ = frame;
             previous_ = frame;
@@ -305,7 +326,8 @@ std::optional<ShotEvidenceUpdate> ShotObservationSession::correlate_discharge(
         const auto candidate = *discharge_;
         const bool ammo_proof = candidate.evidence != ShotDischargeEvidence::camera_transition;
         const bool camera_proof = candidate.evidence != ShotDischargeEvidence::ammunition_decrement;
-        const bool corroborates = frame.timestamp_ms - candidate.after.timestamp_ms >= policy_.minimum_frame_separation_ms &&
+        const bool corroborates = source_started_at(frame) >= candidate.after.timestamp_ms &&
+            source_started_at(frame) - candidate.after.timestamp_ms >= policy_.minimum_frame_separation_ms &&
             (!ammo_proof || (frame.ammo == candidate.after.ammo &&
                             frame.ammo_channel == candidate.after.ammo_channel)) &&
             (!camera_proof || frame.shot_camera == ShotCameraPhase::firing);
@@ -373,6 +395,14 @@ std::optional<ShotEvidenceUpdate> ShotObservationSession::correlate_discharge(
         const bool decreased = same_channel && before.ammo && frame.ammo && *frame.ammo < *before.ammo;
         const bool camera_transition = before.shot_camera == ShotCameraPhase::idle &&
             frame.shot_camera == ShotCameraPhase::firing;
+        if ((decreased || camera_transition) && source_started_at(frame) <= intent.snapshot.pressed_at_ms) {
+            unassociated_discharge_at_ms_ = frame.timestamp_ms;
+            unassociated_reason_ = ShotEvidenceReason::correlation_ambiguous;
+            intents_.clear();
+            invalidate_sight(now_ms);
+            result.reason = ShotEvidenceReason::correlation_ambiguous;
+            return result;
+        }
         if ((decreased || camera_transition) && intents_.size() > 1) {
             unassociated_discharge_at_ms_ = frame.timestamp_ms;
             unassociated_reason_ = ShotEvidenceReason::multiple_fire_intents;
@@ -443,11 +473,12 @@ ShotEvidenceUpdate ShotObservationSession::observe_discharge(
     else if (frame.epoch != epoch_) result.reason = ShotEvidenceReason::stale_epoch;
     else if (frame.context != context_) result.reason = ShotEvidenceReason::context_changed;
     else if (frame.id == 0 || !frame.foreground_verified || frame.timestamp_ms > now_ms ||
+             source_started_at(frame) > frame.timestamp_ms ||
              (frame.ammo && *frame.ammo < 0) || frame.ammo_channel.size() > 128) {
         invalidate_sight(now_ms);
         result.reason = ShotEvidenceReason::invalid_frame;
-    } else if (now_ms - frame.timestamp_ms > policy_.maximum_hud_age_ms ||
-               frame.timestamp_ms < context_started_at_ms_ || frame.timestamp_ms < last_capture_ms_ ||
+    } else if (now_ms - source_started_at(frame) > policy_.maximum_hud_age_ms ||
+               source_started_at(frame) < context_started_at_ms_ || frame.timestamp_ms < last_capture_ms_ ||
                frame.id < last_frame_id_) result.reason = ShotEvidenceReason::stale_frame;
     else if (frame.id == last_frame_id_) result.reason = ShotEvidenceReason::duplicate_frame;
     else {
@@ -488,8 +519,11 @@ ShotEvidenceUpdate ShotObservationSession::fire_intent(
         else if (!hud_seen_) result.reason = ShotEvidenceReason::no_hud_evidence;
         else if (!stable_ || stable_first_frame_id_ == 0)
             result.reason = ShotEvidenceReason::awaiting_stable_hud;
-        else if (stable_->timestamp_ms > pressed_at_ms ||
-                 pressed_at_ms - stable_->timestamp_ms > policy_.maximum_hud_age_ms)
+        // Acquisition and the physical press share a millisecond clock. Equal
+        // timestamps do not establish which happened first, so that frame is
+        // never advertised as an observed pre-press sight.
+        else if (stable_->timestamp_ms >= pressed_at_ms ||
+                 pressed_at_ms - source_started_at(*stable_) > policy_.maximum_hud_age_ms)
             result.reason = ShotEvidenceReason::stale_frame;
         else if (stable_->stabilized == false)
             result.reason = ShotEvidenceReason::stabilization_not_ready;

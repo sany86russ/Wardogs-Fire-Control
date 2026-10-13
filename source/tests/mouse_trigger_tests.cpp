@@ -52,6 +52,30 @@ int main(int argc, char** argv) {
               !is_fire_mouse_press(WM_MBUTTONDOWN, 0),
           "map capture and fire intention policies remain independent");
 
+    using wardogs::expand_mouse_message_time;
+    check(expand_mouse_message_time(1200, 1800) == 1200 &&
+              expand_mouse_message_time(1200, 2200) == 1200,
+          "delayed hook delivery retains the native physical press time through the one-second boundary");
+    const auto delayed_press = expand_mouse_message_time(1200, 1800);
+    check(delayed_press && *delayed_press < 1500,
+          "a HUD receipt at 1500 cannot become pre-press evidence for a delayed native press at 1200");
+    check(expand_mouse_message_time(0xfffffff0U, 0x1'0000'0005ULL) == 0xfffffff0ULL,
+          "the 32-bit native event clock wraps into the previous 64-bit tick epoch");
+    check(expand_mouse_message_time(450, 0x3'0000'01f4ULL) == 0x3'0000'01c2ULL,
+          "native event timestamps expand correctly after multiple tick-clock wraps");
+    check(!expand_mouse_message_time(1801, 1800) &&
+              !expand_mouse_message_time(50, 0xfffffff0ULL),
+          "future event timestamps are refused both within and across the native clock wrap");
+    check(!expand_mouse_message_time(1200, 2201) &&
+              !expand_mouse_message_time(0xfffff000U, 0x1'0000'0005ULL),
+          "events older than one second never acquire a fallback callback timestamp");
+    check(expand_mouse_message_time(5, 10) == 5 &&
+              expand_mouse_message_time(0, 10) == 0 &&
+              !expand_mouse_message_time(0xffffffffU, 1),
+          "early-boot clocks preserve valid input time and reject impossible pre-startup wrap subtraction");
+    check(expand_mouse_message_time(0xffffffe0U, UINT64_MAX) == UINT64_MAX - 31,
+          "expansion at the maximum tick clock cannot overflow timestamp arithmetic");
+
     wardogs::FireIntentEvent pending;
     const wardogs::FireIntentEvent first{12, 23, 42, 300};
     wardogs::coalesce_fire_intent(pending, first, false);
@@ -86,6 +110,24 @@ int main(int argc, char** argv) {
     wardogs::coalesce_fire_intent(pending, {22, 23, 46, 4000}, true);
     check(pending.last_timestamp_ms == 5000,
           "out-of-order press timestamps cannot move the batch end backward");
+    wardogs::FireIntentEvent invalid_time{24, 25, 46, 0};
+    invalid_time.timestamp_verified = false;
+    wardogs::coalesce_fire_intent(pending, invalid_time, true);
+    check(pending.multiple_presses && !pending.timestamp_verified &&
+              pending.timestamp_ms == 100 && pending.last_timestamp_ms == 5000,
+          "an unavailable native time quarantines the entire coalesced batch without fabricating its end time");
+    wardogs::coalesce_fire_intent(pending, {26, 27, 46, 6000}, true);
+    check(!pending.timestamp_verified && pending.last_timestamp_ms == 6000,
+          "a later verified press cannot erase an earlier unknown time in the same dispatch batch");
+    wardogs::coalesce_fire_intent(pending, invalid_time, false);
+    wardogs::coalesce_fire_intent(pending, {28, 29, 46, 6500}, true);
+    check(pending.multiple_presses && !pending.timestamp_verified &&
+              pending.timestamp_ms == 0 && pending.last_timestamp_ms == 6500,
+          "an unknown first press retains invalidity when a valid physical press joins its batch");
+    wardogs::coalesce_fire_intent(pending, {30, 31, 46, 7000}, false);
+    check(pending.timestamp_verified && !pending.multiple_presses &&
+              pending.timestamp_ms == 7000 && pending.last_timestamp_ms == 7000,
+          "a new independent batch may again carry its own verified native event time");
     if (policy_only) return failures == 0 ? 0 : 1;
 
     wardogs::GlobalMouseListener listener;

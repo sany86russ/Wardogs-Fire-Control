@@ -76,22 +76,26 @@ namespace detail {
 // Kept outside the anonymous namespace so the resampling boundary can be
 // checked exactly without depending on an OCR model's probabilistic output.
 void prepare_ocr_tensor(const Image& image, std::vector<float>& tensor, int& tensor_width,
-                        int crop_top, int crop_bottom, std::stop_token stop) {
+                        int crop_top, int crop_bottom, std::stop_token stop, int minimum_width) {
     validate_ocr_image(image);
+    if (minimum_width != 320 && minimum_width != 128)
+        throw std::invalid_argument("Unsupported OCR tensor minimum width");
     if (crop_top < 0 || crop_bottom < 0 || crop_top >= image.height ||
         crop_bottom >= image.height - crop_top) {
         throw std::invalid_argument("Неверные границы обрезки OCR-изображения");
     }
     constexpr int target_height = 48;
-    constexpr int minimum_width = 320;
     const int source_height = image.height - crop_top - crop_bottom;
     const double ratio = static_cast<double>(image.width) / source_height;
     if (target_height * ratio > 4096)
         throw std::invalid_argument("Область OCR слишком широкая: выделите только строку координат");
-    tensor_width = std::max(minimum_width,
-                            static_cast<int>(target_height * std::max(320.0 / 48.0, ratio)));
+    const int legacy_width = std::max(320,
+        static_cast<int>(target_height * std::max(320.0 / 48.0, ratio)));
     const int resized_width = std::min(
-        tensor_width, static_cast<int>(std::ceil(target_height * ratio)));
+        legacy_width, static_cast<int>(std::ceil(target_height * ratio)));
+    // Preserve the legacy visible sample count exactly. Using floor(natural
+    // width) here would resample short fractional-width lines differently.
+    tensor_width = minimum_width == 320 ? legacy_width : std::max(minimum_width, resized_width);
     tensor.resize(static_cast<std::size_t>(3 * target_height * tensor_width));
 
     const double scale_x = static_cast<double>(image.width) / resized_width;
@@ -831,16 +835,24 @@ RapidOcr& RapidOcr::operator=(RapidOcr&&) noexcept = default;
 std::size_t RapidOcr::character_count() const { return impl_->characters.size(); }
 
 OcrResult RapidOcr::recognize(const Image& image, std::stop_token stop) const {
+    return recognize_line(image, stop, 320);
+}
+
+OcrResult RapidOcr::recognize_hud_line(const Image& image, std::stop_token stop) const {
+    return recognize_line(image, stop, 128);
+}
+
+OcrResult RapidOcr::recognize_line(const Image& image, std::stop_token stop, int minimum_width) const {
     if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
     // A session is retained for the lifetime of the recognizer. Serialize calls
     // so its input buffer can be reused without corrupting another caller.
     std::unique_lock lock(impl_->recognition_mutex, std::defer_lock);
     while (!lock.try_lock_for(std::chrono::milliseconds(10)))
         if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
-    const auto infer = [this, &image, stop](int crop_top, int crop_bottom) {
+    const auto infer = [this, &image, stop, minimum_width](int crop_top, int crop_bottom) {
         if (stop.stop_requested()) throw std::runtime_error("Распознавание отменено");
         int width = 0;
-        detail::prepare_ocr_tensor(image, impl_->input, width, crop_top, crop_bottom, stop);
+        detail::prepare_ocr_tensor(image, impl_->input, width, crop_top, crop_bottom, stop, minimum_width);
         const std::array<std::int64_t, 4> shape{1, 3, 48, width};
         auto tensor = Ort::Value::CreateTensor<float>(impl_->memory,
                                                        impl_->input.data(), impl_->input.size(),

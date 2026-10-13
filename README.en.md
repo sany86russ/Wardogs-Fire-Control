@@ -1,334 +1,214 @@
 ![WARDOGS Fire Control — project cover](docs/screenshots/AVAen.png)
 
-# WARDOGS Fire Control
+# WARDOGS Fire Control — mortar and artillery calculator
 
-**Version 2.13.0:** a clearer workflow, persistent mini-card monitor and placement, **Ctrl+Alt+P** capture pause, OCR recovery and a guarded provisional SPH-2 bearing prediction. Experimental sight observation adds command-agreement colours; complete in-game qualification is pending and colours do not establish hits. [Full release EN/RU](docs/releases/v2.13.0.md) · [ChangeLog](source/docs/RELEASE-NOTES-EN.md).
+**A WARDOGS mortar and artillery calculator for L81 and SPH-2, on Windows 10/11 x64.** Calculate range, bearing and MIL from map coordinates, select an SPH-2 arc and optionally refine aim from an actual impact. Enter coordinates manually or capture them with local OCR; view the solution in the main window or an always-on-top mini card.
 
-2.13.0 screenshots from Windows CI: [main window](docs/screenshots/en-main-2.13.png) · [settings (RU)](docs/screenshots/ru-settings-2.13.png) · [help (RU)](docs/screenshots/ru-help-2.13.png) · [mini card](docs/screenshots/en-aim-aligned-2.13.png). Coordinates and sight agreement are synthetic test examples.
-
-**A native aiming assistant for the L81 mortar and SPH-2 artillery in WARDOGS.** Coordinates → range, bearing and MIL → aim in the game.
-
-[![Version](https://img.shields.io/badge/version-2.13.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
-[![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-launch)
-[![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#language-and-settings)
+[![Version](https://img.shields.io/badge/version-2.13.2-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-update)
+[![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#interface-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
 
-[Русский](README.md) · **English** · [Download](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Quick start](source/docs/QUICKSTART-EN.md) · [Report an issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
+[Русский](README.md) · **English** · [Download for Windows](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Quick start](source/docs/QUICKSTART-EN.md) · [Report an issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
 
-The app transfers map points into an aiming calculation: **Alt+X** reads the gun position from the active chat draft; the **middle mouse button** reads a target beside the map cursor. Results are available in the main window, an always-on-top mini card and an auxiliary sight overlay. Fully manual operation is also available.
+**Version 2.13.2:** periodic reading of the in-game sight display (HUD) and its colour statuses have been removed. Coordinate OCR, calculations, the mini card, auxiliary reticle and **Alt+I** ranging are retained. [Full release EN/RU](docs/releases/v2.13.2.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
 
-**GitHub updates:** check and install new releases inside the app, available since 2.8.0. Startup checks, a new-version banner, SHA-256 verified downloads and a complete portable package update with restart. The interface and help are available in Russian and English; switching languages does not require a restart.
+![WARDOGS Fire Control 2.13.2 main window — SPH-2 calculation and ranging in English](docs/screenshots/en-main-2.13.2.png)
 
-**Retained from 2.12.0:** consistent integer MIL and bearing rounded to 0.1° across displayed commands, with rounding feedback fixed. Ranging refines a robust series centre without new settings; logs connect displayed commands and impacts, and an offline tool measures the **within 10 m** criterion. **99% in-game hits have not been established; L81 and tables are retained.** [Detailed release EN/RU](docs/releases/v2.12.0.md) · [ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
+The screenshot is from the actual app in Windows CI: a synthetic **2200 m** SPH-2 target and a correction example. It demonstrates the interface, not an in-game firing result.
 
-The routine remains **map → Alt+X: gun → middle-click: target → fire → Alt+I: impact → refined command**, retaining planning, improved coordinate capture and log archives developed in 2.9–2.11. [Previous 2.11.0 release](docs/releases/v2.11.0.md).
-
-- **Ranging beside the result:** latest accepted miss in metres, already applied bearing/MIL changes, observation count and reset. Do not add the correction to final values a second time.
-- **One selected command:** main window, mini card, sight and Alt+I share the same final bearing/MIL. Analysis of another arc in additional tools is explicitly shown as baseline.
-- **Three distinct values:** target metres, final MIL and approximate community-table metres; the latter are not promised to match the current game's RNG.
-- **Automatic SPH-2 ground assessment:** the selected baseline model arc, explicit unknown heights/incomplete coverage and another-arc suggestions without automatic switching. Buildings, bridges and trees are not modeled.
-- **Accepted points are retained:** up to 64 recent positions and targets, separate from 500 named records. Naming is optional; restore explicitly after confirming the map.
-- **Additional tools:** manual target shifting, saved points, personal timing observations, ground profile and sources. Manual impact entry is in the main window under Manual input and diagnostics. Moving a target is separate from ranging.
-- **2.10 OCR and diagnostics retained:** labeled X/Y search, agreement between separate screenshots, up to four frames per request and bounded log archives.
-
-Game speed and gravity are unverified; the timing model is disabled by default. Alt+I does not measure flight seconds. Tables are retained; agreement with the current game requires separate verification. [2.11 workflow](source/docs/USAGE-EN.md) · [Detailed calculations](source/docs/CALCULATIONS-EN.md).
-
-![WARDOGS Fire Control 2.11 main window in English](docs/screenshots/en-fire-control-2.11.png)
-
-> This is an unofficial community utility for the **WARDOGS game**. It is not affiliated with BULKHEAD and is not intended for real weapons. Developer approval for OCR, global hotkeys and overlays has not been confirmed; freedom from sanctions is not guaranteed. Read the [interaction limits and rules](source/docs/ANTICHEAT-EN.md) before using game features.
+> An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. The game developer's approval of OCR, shortcuts and overlays has not been established; freedom from sanctions is not guaranteed. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
 
 ## Contents
 
-- [What the app is for](#what-the-app-is-for)
 - [Features](#features)
-- [Download and launch](#download-and-launch)
-- [Your first calculation](#your-first-calculation)
-- [L81 and SPH-2](#l81-and-sph-2)
-- [Controls](#controls)
-- [Language and settings](#language-and-settings)
-- [How the calculations work](#how-the-calculations-work)
+- [Download and update](#download-and-update)
+- [First solution](#first-solution)
+- [L81 and SPH-2: range and MIL](#l81-and-sph-2-range-and-mil)
+- [SPH-2 ranging](#sph-2-ranging)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Interface and settings](#interface-and-settings)
 - [Maps and elevations](#maps-and-elevations)
 - [OCR and coordinate review](#ocr-and-coordinate-review)
+- [How the calculations work](#how-the-calculations-work)
 - [Local data and privacy](#local-data-and-privacy)
-- [Screenshots](#screenshots)
+- [RU and EN screenshots](#ru-and-en-screenshots)
 - [Documentation and building](#documentation-and-building)
 - [Limitations and feedback](#limitations-and-feedback)
 - [Origins and licenses](#origins-and-licenses)
 - [Support the author](#support)
 - [Trouble connecting to WARDOGS](#trouble-connecting-to-wardogs)
 
-## What the app is for
-
-- **Mortar calculations:** obtain range, bearing and tabulated MIL for the L81 from the gun and target positions.
-- **SPH-2 artillery:** compare the available low and high arcs, select an aiming solution and optionally refine it using an observed impact.
-- **Multiple targets from one position:** acquire each new target with a middle click, return to recent points and copy a calculation for coordination.
-- **Training and manual use:** enter coordinates without screen capture, check distances and explore the mathematics in the open source.
-- **Two interface languages:** switch between RU and EN while preserving calculation state.
-
-The app calculates aiming commands. Setting the in-game bearing and MIL, deciding when to fire and checking the result remain the player's actions.
-
 ## Features
 
-| Feature | What it provides |
+| Feature | What the player gets |
 |---|---|
-| **L81** | Interpolation over 71 original samples; 132–684 m range and 850–150 MIL |
-| **SPH-2** | Two game tables, a direct target solution and arc selection |
-| **Quick input** | Gun position from the active chat draft; target from X/Y labels beside the cursor |
-| **Local OCR** | CPU recognition with a bundled model; no cloud service needed |
-| **Uncertain-reading review** | Inspect candidate pairs, edit coordinates, explicitly apply or reject |
-| **Manual mode** | Coordinate entry and paste; game features can be disabled |
-| **Mini card and sight** | Results above other windows, with opacity, size and locking controls |
-| **SPH-2 ranging** | Miss distance in metres, bearing/MIL changes, observation count and reset; correction applies to the selected command |
-| **SPH-2 terrain** | Local elevations and automatic ground checks for the selected baseline model arc; unknown data is explicit |
-| **History and clipboard** | Up to 12 session targets, persisted accepted positions/targets with optional names, and copying the calculation |
-| **RU / EN** | Instant translation of windows, buttons, errors, hints and copied results |
-| **Portable package** | Run from an extracted folder; no SDK or Python required for use |
+| **L81 mortar** | Range, bearing and table-based MIL from gun and target coordinates |
+| **SPH-2 artillery** | Available low and high arcs; one selected command to aim with |
+| **Quick coordinate input** | **Alt+X** reads the gun from the active chat draft; **middle-click** reads a target beside the map cursor |
+| **Local OCR** | Bundled model, CPU processing and review of uncertain coordinates |
+| **Manual input** | Typed or pasted coordinates without game capture |
+| **Mini card and auxiliary reticle** | Aim over other windows; size, opacity and locking; remembered card monitor and placement |
+| **SPH-2 ranging** | Optional **Alt+I** correction, miss distance and the bearing/MIL change already applied |
+| **SPH-2 terrain** | Elevation correction and an approximate ground-intersection assessment with a compatible local pack |
+| **Positions and flight** | Target shifts, saved points, ground profiles and personal flight-time observations |
+| **History** | Up to 12 session targets, 64 recent accepted points and 500 named records |
+| **Capture pause** | **Ctrl+Alt+P** releases capture shortcuts, F4 and middle-click while retaining the solution |
+| **Russian and English** | Interface and help switching without a restart |
+| **GitHub updates** | New-version checks and complete-package installation with SHA-256 verification |
 
-## Download and launch
+The app calculates aiming values. The player sets bearing and MIL, fires and checks the result. No account, API key or cloud subscription is required.
 
-**Requirements:** Windows 10/11 x64. Normal use does not require app installation, administrator privileges, the Qt SDK, Visual Studio or Python.
+## Download and update
 
-1. Open the [latest release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Download **WardogsFireControl-v2.13.0-win-x64.zip** from **Assets**.
-3. **Extract the entire ZIP** into its own folder.
-4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** inside the extracted package.
+**Requirements:** Windows 10/11 x64. Running the app does not require administrator privileges, Qt SDK, Visual Studio or Python.
 
-Keep the EXE together with its DLLs and the <code>platforms</code> and <code>models</code> folders. GitHub's **Source code (zip/tar.gz)** archives contain source code; use the ZIP in Assets to run the ready-made program.
+1. Open the [latest stable release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
+2. Under **Assets**, download **WardogsFireControl-v2.13.2-win-x64.zip**.
+3. **Extract the complete ZIP** to a separate folder.
+4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** from that folder.
 
-Use **borderless windowed mode** for the mini card and sight. Overlays in exclusive fullscreen need separate verification and may be unavailable.
+Do not move only the EXE: the other DLLs and the `platforms` and `models` folders are required. GitHub's **Source code (zip/tar.gz)** archives are for development; the ready-to-run app is in the ZIP under Assets. Use **borderless windowed mode** for overlays; exclusive fullscreen needs separate validation.
 
 ### Verify the download
 
-Release archives are accompanied by a SHA-256 checksum file. Compare its entry with:
+Compare the result with **SHA256SUMS.txt** from the same release:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.13.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.13.2-win-x64.zip -Algorithm SHA256
 ~~~
 
-The checksum checks download integrity. With GitHub CLI installed, you can also verify build provenance through GitHub attestations:
+With GitHub CLI installed, you can also verify the build's origin:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.13.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.13.2-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
-### Updating inside the app
+### Update inside the app
 
-Starting with **2.8.0**, the app checks this repository's latest stable release at startup. The check runs in the background: the calculator keeps working without an internet connection. You can disable startup checks in Settings; the manual **Check for updates** button remains available.
+Stable-release checks run in the background and can be disabled in settings; **Check for updates** remains available. The calculator continues working without an internet connection.
 
-The new-version banner offers **Update**, **What's new** and **Later**. Installation starts only after you click Update: the app downloads the full ZIP, verifies its size, SHA-256 and packaged files, exits, replaces the package and restarts. You can cancel the download before installation. Settings and imported terrain in your Windows profile are preserved; current coordinates and session history do not survive the restart.
+Installation starts after you click **Update**: the app downloads the complete ZIP, verifies its size, SHA-256 and file manifest, closes, replaces the package and restarts. You can cancel the download before installation. Settings, imported elevations, saved points and personal measurements in the Windows profile are preserved. The active solution and session history are not automatically restored after restarting.
 
-**Upgrading from 2.7.0 or earlier:** download the new ZIP manually once and extract it in full. Earlier versions do not include the updater. Automatic installation requires the complete Assets package and write access to its folder. On a replacement error the installer restores previous files; backups and diagnostics remain in <code>.wardogs-update-…</code>. See the [update guide](docs/UPDATES-EN.md) for details, limits and manual recovery.
+To upgrade from **2.7.0 or earlier**, download the new ZIP manually once. Automatic installation requires a complete portable package and write access to its folder. If replacement fails, the updater restores the previous files; its backup and log remain in `.wardogs-update-…`. [Update and recovery details](docs/UPDATES-EN.md).
 
-OCR and calculations run locally. Internet access is used only to check/download updates and open external links. Coordinates, screenshots and terrain are not sent to GitHub.
+## First solution
 
-## Your first calculation
+### Quick in-game workflow
 
-### Quick game workflow
-
-1. **Select the current map** in the app. Confirm the saved selection after restarting. A map must be confirmed before calculating.
+1. **Select and confirm the current map** in the calculator. This is required before calculation and after each launch.
 2. Select **L81 · Mortar** or **SPH-2 · Artillery**.
-3. Open the in-game map with **M**, then **right-click the gun position → Mark Coordinates**. The coordinates appear in the chat input; you do not need to send the message.
-4. Press **Alt+X**. If the only complete pair is read confidently, the app accepts the gun position and displays the mini card.
-5. Point at a target on the map and press the **middle mouse button**. The app reads the separate X/Y labels beside the cursor and displays the solution.
-6. Set the in-game **bearing and final MIL of the selected command**, then fire. For SPH-2, **F4** switches the selected available arc.
-7. To refine SPH-2, point at the **actual impact** on the map and press **Alt+I** while the original target and arc remain selected. The final command is updated for the same target.
-8. Set the updated bearing/MIL. Middle-click for the next target. **Alt+C** reopens the main window.
+3. In game: **M → right-click the gun → Mark Coordinates**. Wait for the complete X/Y pair in the chat input; no message needs to be sent.
+4. Press **Alt+X**. A trustworthy position is accepted and the mini card opens.
+5. Point at the target on the map and press the **middle mouse button**. Keep the cursor near the X/Y labels while reading is in progress.
+6. Set the **bearing and final MIL** in game. For SPH-2, **F4** switches the selected available arc, identified by a check mark.
+7. Fire. Optionally refine SPH-2: cursor over the actual impact → **Alt+I**, before changing the target or arc.
+8. Middle-click again for the next target. **Alt+C** returns to the main window and keeps capture ready.
 
-This workflow is enabled by default. You do not need to select an OCR region, press a separate start button or confirm every confident reading. Alt+X always searches the active chat draft, even when you have saved a custom region.
+You do not need to select a custom OCR region for this workflow. Middle-click is passed through to the game and still places its marker. **Capture the gun coordinates again after moving it.** A map change clears current coordinates, session history and corrections; the map name is not read automatically.
 
-Middle-click still places the in-game marker. Once the gun position has been accepted, target acquisition is available with either the main window or the mini card; Alt+C does not disable it. To disable acquisition completely, select standalone mode, turn off the middle mouse button in settings or exit the app.
-
-**Set the gun position again after moving it.** Changing the map clears coordinates, history and corrections. The app does not detect the map name automatically.
-
-The **2.11** workflow is **confirm map → Alt+X: gun → middle click: target → fire → Alt+I: impact → refined guidance**. Recording an impact is optional; the first solution is available immediately. The detailed [English guide](source/docs/USAGE-EN.md) and [Russian guide](source/docs/USAGE-RU.md) cover ranging, saved points and additional tools.
-
-**2.11 interface — unified workflow and ranging.** This screenshot of the actual app from a GitHub runner shows a demonstration target at **2200 m**.
-
-![WARDOGS Fire Control 2.11 unified workflow and ranging](docs/screenshots/en-fire-control-2.11.png)
+**Ctrl+Alt+P** or **Pause / Resume** temporarily disables capture and hides the auxiliary reticle. Gun, target, corrections and history are retained; unfinished OCR is cancelled. Resuming does not take a screenshot by itself. [Complete workflow](source/docs/USAGE-EN.md).
 
 ### Manual workflow
 
-Expand **Manual input and diagnostics**, enter the gun and target coordinates or click **Paste**. For example:
+Expand **Manual input** and type or paste coordinates:
 
 ~~~text
 Gun:    x98.54, y110.33
 Target: x101.72, y109.13
 ~~~
 
-For the L81 this gives a horizontal range of **339.888 m**, a bearing of approximately **110.7°** and **649.013 MIL**. The card rounds range and MIL to **340 m / 649 MIL**. Calculations use the original coordinate precision.
+L81 displays approximately **340 m / 110.7° / 649 MIL**. Calculations use exact coordinates; displayed metres and MIL are rounded. Enable **Manual input only** in General settings to work without game capture.
 
-Select **Settings → Advanced → Standalone calculator · manual input only** for a mode without global hotkeys, screen capture and game overlays.
+## L81 and SPH-2: range and MIL
 
-## L81 and SPH-2
-
-| Weapon / arc | Original samples | Horizontal range in the table | In-game sight |
+| Weapon / arc | Original samples | Horizontal table range | Game sight |
 |---|---:|---:|---:|
 | **L81** | 71 | 132–684 m | 850–150 MIL |
 | **SPH-2, low** | 59 | 1181–2629 m | 20–600 MIL |
 | **SPH-2, high** | 80 | 735–2629 m | 610–1400 MIL |
 
-SPH-2 ranges refer to the original flat-ground tables. With an elevation difference, arc availability depends on the model and final sight value. Unavailable solutions are shown explicitly.
+These are retained **community tables**, not verified data for the current WARDOGS patch. SPH-2 ranges describe level ground; arc availability with an elevation difference depends on the model and the permitted final sight setting. Unsupported solutions do not produce invented MIL values. **L81 has no elevation correction.**
 
-**MIL is the game's aiming scale, not miles or a range in metres.** Use the selected arc's final MIL when aiming. The main window and mini card distinguish **target range**, **final MIL** and **approximate equivalent range from the community table**. Target range is identical for both arcs; table metres describe the current MIL and may differ after elevation or impact corrections. They are not a promise to match the current game's RNG readout.
+**MIL is the game's aiming scale, not miles or metres.** Set the selected command's bearing and final MIL to fire. **To target** is horizontal map distance. **Table ≈** is the inverse range estimate of the current MIL; it may differ after elevation correction or ranging and is not a promise of agreement with the in-game RNG display.
 
-### Optional SPH-2 impact refinement
+The main window, mini card, auxiliary reticle, copying and Alt+I use one selected final command: **integer MIL and bearing rounded to 0.1°**. Analysis of another arc in additional tools is labelled as the baseline calculation.
 
-SPH-2 provides a solution immediately. Two initial trial shots in different directions are not required.
+## SPH-2 ranging
 
-1. Calculate the target and select an arc.
-2. Fire normally using the displayed settings.
-3. **Before changing the target or arc**, open the map, point at the actual impact and press **Alt+I**.
-4. The app refines the original target solution. The compact **RANGING** block shows the latest accepted miss in metres, the already **applied bearing/MIL change** and observation count. It is included in the final values; do not add it again. Manual impact entry is in the main window: **Manual input and diagnostics → Impact corrections**.
-5. **Reset corrections** removes refinements and immediately restores the direct solution.
+The first solution is available immediately; ranging shots are optional.
 
-Middle-clicking the impact would replace the target: use Alt+I for corrections. The app does not observe the shot itself or the actual in-game sight settings; the record refers to the command displayed when capture begins.
+1. Fire using the displayed command for the selected arc.
+2. Before changing the target, arc or gun, point at the **actual impact** on the map and press **Alt+I**.
+3. The app refines the same target. **Ranging** shows the miss in metres, observation count and the bearing/MIL change **already included**.
+4. Set the new final values. **Do not add the correction again.** Reset returns to the baseline solution.
 
-The main window, mini card, sight and Alt+I recording use **one selected final command**. When another arc is viewed in additional tools, its analysis is explicitly labeled as baseline and does not replace the command to fire with. An accepted impact updates guidance for the original target; manual target-shift controls in additional tools move the point itself and recalculate the task.
+Middle-clicking the impact creates a new target. Enter a manual impact through **Impact corrections** in the main window; reset and the complete report are available under **Correction details**.
 
-Ranging hints express **left/right** as bearing degrees and **closer/farther** as a MIL change. To move farther, the **low arc increases MIL** and the **high arc decreases MIL**. Ranging estimates these changes from an accepted impact; it does not determine the vehicle's physical tilt.
+A local correction applies to the same arc near the target and fades to zero at **50 m**. An impact is accepted only within **20% of horizontal range and 400 m simultaneously**; command compatibility and the permitted MIL are also checked. Incompatible observations are rejected, retaining the previous valid command. Repeated observations do not keep adding the same correction; history is limited to **256 impacts**.
 
-Corrections apply to the **same arc** near the recorded target and fade to zero at **50 m**. Repeated corrections do not accumulate endlessly. An impact that is too far away or incompatible is rejected without replacing the current solution. Set the gun again after moving the vehicle; reset corrections manually if its body orientation changes at the same position.
+After observations at at least three distinct targets from a stationary gun, a consistent **provisional bearing prediction** may apply to another target within the validated envelope. It is explicitly labelled, does not transfer a general MIL correction and does not guarantee a hit. Pause, weapon or manual arc changes withdraw prediction transfer while retaining local history.
 
-**SPH-2 mini card in version 2.11.** This is a separate demonstration calculation at **1562 m**, using a different target from the main-window screenshot above.
+The app does not observe firing, actual sight settings or chassis tilt. Alt+I refers to the command displayed when reading starts. If the chassis changes attitude at the same coordinates, **reset corrections manually**. [Ranging calculations and limits](source/docs/SPH2-VALIDATION-EN.md).
 
-![WARDOGS Fire Control 2.11 SPH-2 mini card with ranging](docs/screenshots/en-sph2-mini-2.11.png)
+![WARDOGS Fire Control 2.13.2 mini card — SPH-2 aiming values in English](docs/screenshots/en-card-2.13.2.png)
 
-Historical SPH-2 calculation view from version 2.7:
+The card shows a separate synthetic **1562 m** target, different from the main-window example.
 
-![SPH-2 calculation](docs/screenshots/en-vehicle.png)
+## Keyboard shortcuts
 
-## Controls
+These are **defaults**. If a Windows shortcut conflicts, the app selects an available alternative; effective combinations are shown in the interface and help.
 
-These are the **defaults**. If a Windows hotkey conflicts, the app selects an available alternative and displays the actual registered combinations in the interface.
-
-| Action | Control |
+| Action | Shortcut |
 |---|---|
-| Read the gun position from the active chat draft | **Alt+X** |
-| Read a target beside the map cursor | **Middle mouse button** |
-| Reopen the main window | **Alt+C** |
-| Select a custom OCR region | **Alt+R** |
-| Read a target from chat or a custom region | **Alt+T** |
-| Temporarily select a line and read a target | **Alt+V** |
-| Read an impact for SPH-2 correction | **Alt+I** |
+| Gun from the active chat draft | **Alt+X** |
+| Target beside the map cursor | **Middle mouse button** |
+| Impact for SPH-2 correction | **Alt+I** |
 | Switch the selected SPH-2 arc | **F4** |
+| Return to the main window | **Alt+C** |
+| Pause / resume capture | **Ctrl+Alt+P** |
 | Unlock the mini card | **Ctrl+Alt+Q** |
+| Select a custom OCR region | **Alt+R** |
+| Target from chat or a custom region | **Alt+T** |
+| Temporarily select a line and read the target | **Alt+V** |
 
-Hotkeys are configurable. If no supported combination can be registered, the app displays an error; an incomplete hotkey set is not saved.
+Configure capture combinations under **Settings → Shortcuts**. If the complete supported set cannot be registered, the app displays an error and rolls registration back. Game capture requires the active WARDOGS window; global registration still reserves the combinations. Pause releases capture shortcuts, F4 and middle-click; return, unlock and resume controls remain available.
 
-## Language and settings
+## Interface and settings
 
-The **RU / EN** selector is in the header beside the version. Russian is the default and your choice is saved. Translations are embedded in the EXE; no language-file download is required.
+**RU / EN** in the header switches the interface and help without restarting. Russian is the default; the language is saved and translations are bundled.
 
-| Setting | Purpose |
+| Section | Settings |
 |---|---|
-| **General** | Operating workflow and capture delay after marking a point |
-| **Advanced** | Standalone mode, middle mouse button, hotkeys and custom region |
-| **Custom-region OCR** | Main RapidOCR model or optional Windows OCR |
-| **Coordinate pattern** | A simple validated X/Y format, with a standard-pattern reset |
-| **Mini card** | Opacity, locking and the unlock hotkey |
-| **Sight** | Size, opacity, bearing compensation and screen-scale parameters |
+| **General** | Operating mode, middle-click and update checks |
+| **Shortcuts** | Action combinations and effective replacements for conflicts |
+| **Sight** | Auxiliary reticle size, opacity and alignment |
+| **Recognition** | Marker delay, custom OCR region, engine for additional captures and coordinate pattern |
 
-The default capture delay is **250 ms**; it can be set to **0–2000 ms**. In 2.11, the actual first middle-button screenshot delay is at least **80 ms**, even with a zero setting. This waits for coordinate labels after a click; it is not a promised total recognition time.
+Drag the mini card to move it and drag its edges to resize it. It remembers the monitor, placement and separate L81/SPH-2 sizes. **Right-click the card** to control opacity, locking, the reticle and **Always on top**. A locked card passes clicks to the game; unlock it before using its buttons.
 
-Settings are stored in <code>%LOCALAPPDATA%\WardogsFireControl\settings.ini</code>. If the new profile does not exist, the app can read the old <code>WarDogsDistanceCalculatorCpp</code> profile and save changes at the new location. A manually selected capture region is tied to the monitor's physical resolution; select it again after changing resolution.
-
-![Settings](docs/screenshots/en-settings.png)
-
-## How the calculations work
-
-For numerical methods and boundaries, see **[CALCULATIONS-EN.md](source/docs/CALCULATIONS-EN.md)**. All tables and algorithms are in the [source code](https://github.com/sany86russ/Wardogs-Fire-Control/tree/main/source/src).
-
-### Coordinates, range and bearing
-
-One game-coordinate unit corresponds to **100 m**. For gun position (x₀, y₀) and target (x₁, y₁):
-
-~~~text
-Δx = x₁ − x₀
-Δy = y₁ − y₀
-D  = 100 · √(Δx² + Δy²)                  [metres]
-A  = atan2(Δx, Δy) · 180 / π mod 360      [degrees]
-~~~
-
-Bearings run clockwise from north: **0° north, 90° east, 180° south, 270° west**. Results are normalized to [0°, 360°). Range is horizontal; elevation is not included in the map segment's length.
-
-Fractional coordinates are preserved for calculation; display rounding is separate. NaN, infinity and overflow are rejected. History restores the actual point, not its rounded label.
-
-### Game-table interpolation
-
-Between adjacent samples (D₀, M₀) and (D₁, M₁), the app uses linear interpolation:
-
-~~~text
-MIL(D) = M₀ + (D − D₀) / (D₁ − D₀) · (M₁ − M₀)
-~~~
-
-The app does not invent MIL outside a supported table. L81 endpoint handling permits only floating-point roundoff of about 5·10⁻¹² m at 132 and 684 m; it does not extend the game range.
-
-The SPH-2 high table contains two maximum-range observations: **2629 m → 610 and 620 MIL**. At the exact maximum, inverse conversion selects the first sample, **610 MIL**. This follows the retained observations rather than introducing new ballistics.
-
-### SPH-2 elevation model
-
-With compatible terrain data, the app obtains Δh = htarget − hgun by bilinear interpolation and solves an approximate trajectory using an assumed maximum range R = 2629 m:
-
-~~~text
-r = D / R
-z = Δh / R
-q = 1 − r² − 2z
-tan(θlow)  = (1 − √q) / r
-tan(θhigh) = (1 + √q) / r
-~~~
-
-The low branch uses an algebraically equivalent form in code to avoid loss of precision. The angle is converted to an equivalent flat-ground range R·sin(2θ), then back through the **game's MIL table**. Game MIL is not substituted directly as a physical launch angle. An unreachable target or an output beyond the sight table produces an explicit error.
-
-This model is approximate. An **L81 elevation model has not been established and is not applied**.
-
-### Local impact corrections
-
-An observation compares the displayed command with the baseline calculation for the actual impact:
-
-~~~text
-δA   = wrap(displayed bearing − nominal impact bearing)
-δMIL = displayed MIL − nominal impact MIL on the same arc
-~~~
-
-Bearing and MIL corrections are estimated independently from observations, considering their consistency and distance from the target. An accepted miss must be within **20% of horizontal range** and **400 m** simultaneously; command compatibility and the corrected sight's availability are also checked. Impact history is limited to **256 observations**.
-
-One impact does not determine the vehicle's three-dimensional tilt. The consistency score is not a hit probability.
-
-### Automatic ground assessment and additional tools
-
-After an SPH-2 target is accepted, the app automatically checks available ground along the **selected arc's baseline model trajectory**. Results distinguish an estimated ground intersection, no detected intersection at sampled points, unknown elevations and incomplete coverage. If the other available arc appears preferable under this estimate, the app can suggest it; the arc **does not change automatically**.
-
-This is not a check of the corrected projectile's actual path. Alt+I corrections change the aiming command rather than produce a measured trajectory. Buildings, trees, bridges, roofs and barrel height are absent from the elevation data.
-
-**Additional tools** brings together manual target shifts, saved points, personal flight-time measurements, ground profiles and table sources. Moving **left/right/closer/farther by 10/25/50/100 m** explicitly changes the target coordinates; it is separate from recording an impact.
-
-Accepted positions and targets are saved with exact coordinates under their map and weapon; names are optional. Restore them explicitly after confirming the map. Map, gun and earlier corrections are not automatically restored on launch.
-
-Elapsed time from firing to Alt+I **is not flight time**: it includes player reaction and map interaction. Time comes from matching personal measurements or a separately enabled physical model. The speed/gravity model is disabled by default and its seconds are labeled as estimates.
+**Positions and flight** opens target shifts, recent and named points, ground profiles and personal flight-time observations. Shifting left/right/closer/farther by **10/25/50/100 m** changes target coordinates; it is separate from ranging. Restore saved points explicitly after confirming the map; old ranging corrections are not restored automatically.
 
 ## Maps and elevations
 
-A map is **required** and must be confirmed each session. This prevents silently applying another map's elevations. A map change clears the gun, target, history and corrections.
+- **Bakurani, Ozeti, Zestafona:** corresponding compatible local `.wdt` packs.
+- **Training ground / unknown map:** an explicitly selected **no-height mode**, assuming equal gun and target elevations.
+- **Terrain is not included in the public ZIP or repository** and is not downloaded automatically. Import only local data you have the necessary rights to use.
+- Import checks SHA-256, map identity and geometry; reading checks block sizes and CRC. Missing coverage is not replaced with zero elevation.
+- Packs reside in `%LOCALAPPDATA%\WardogsFireControl\terrain-packs` and survive application updates.
 
-- **Bakurani, Ozeti, Zestafona:** the corresponding compatible local .wdt packages are supported.
-- **Training ground / unknown map:** an explicit **no-height mode**, assuming equal gun and target elevations.
-- **Terrain data is not included in the public ZIP or repository.** The app does not download it automatically. Import is limited to existing local files for which you have the necessary usage rights.
-- Import validates SHA-256, map identity and geometry. Reading validates block sizes and CRC; a point outside coverage is not given a zero elevation.
-- User packages reside in <code>%LOCALAPPDATA%\WardogsFireControl\terrain-packs</code> and survive updates to the portable app folder.
+The grid spacing is **2 m**, stored height units are **0.1 m**, and bilinear interpolation is used between points. Data represents the ground surface; **buildings, bridges, roofs, trees and barrel height are not modelled**. A suitable training-ground dataset is unavailable; another map is not a substitute. [Terrain provenance and usage conditions](source/TERRAIN_DATA_NOTICE.md).
 
-The sampling grid is **2 m**, stored elevation units are **0.1 m**, and values between grid points use bilinear interpolation. Data represents the ground surface; bridge decks, roofs and barrel height are not represented. A suitable training-ground dataset is unavailable; another map is not a substitute.
+<details>
+<summary>Import a compatible elevation pack separately</summary>
 
-See the [terrain provenance and redistribution notice](source/TERRAIN_DATA_NOTICE.md).
+A compatible **terrain-packs.zip** is available in the [original Ricoz217 v1.4.0 release](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0): [download terrain-packs.zip](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/download/v1.4.0/terrain-packs.zip). This is an external source of game data subject to separate [rights-holder conditions](source/TERRAIN_DATA_NOTICE.md); you do not need to install the original calculator.
 
-### Importing elevations separately
-
-A compatible **terrain-packs.zip** is available in the [original Ricoz217 v1.4.0 release](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/tag/v1.4.0): **[download terrain-packs.zip](https://github.com/Ricoz217/WarDogs_Distance_Calculator/releases/download/v1.4.0/terrain-packs.zip)**. This is an external data source, subject to the [rights-holder conditions](source/TERRAIN_DATA_NOTICE.md). You do not need to install the original calculator.
-
-1. Download the archive yourself and extract it.
-2. Locate the **terrain-packs** folder containing **bakurani.wdt**, **ozeti.wdt** and **zestafona.wdt**.
-3. In the **main window** of WARDOGS Fire Control, under **Game map · required**, click **Connect local height data…**.
-4. Select the extracted **terrain-packs** folder. The app verifies the files and installs them in the persistent user-data directory.
-5. Select and confirm **the map you are actually playing**. SPH-2 will use elevation differences; set the gun and target again after changing maps.
+1. Download and extract the archive yourself.
+2. Locate **terrain-packs** containing **bakurani.wdt**, **ozeti.wdt** and **zestafona.wdt**.
+3. In the calculator's main window, beside map selection, click **Connect local height data…**.
+4. Select that folder. The app verifies the packs and saves them in the Windows profile.
+5. Select and confirm the current match's map; enter the gun and target again after changing maps.
 
 SHA-256 of the linked archive:
 
@@ -336,67 +216,75 @@ SHA-256 of the linked archive:
 c511df32f956e9171ac79bf939e955ea7f2851a4c39bdad6f924e46c989ede49
 ~~~
 
-The link is pinned to the verified compatible **v1.4.0** package. New or arbitrarily modified packages should not automatically be considered compatible. Once all three packages have been installed successfully, the import button is hidden; user files survive application updates.
-
-## OCR and coordinate review
-
-The quick workflow uses **PP-OCRv6_rec_small + ONNX Runtime on the CPU**. Recognition is local and the main model is bundled. Optional Windows OCR applies to a **custom region** and requires a supported English Windows OCR pack. Selecting it does not change the main chat and map capture paths.
-
-Alt+X searches the **active draft**, not any older coordinate pair in chat history. Target acquisition reads **two separate labeled X/Y fields** beside the cursor. Completeness, confidence, agreement between passes and window context are checked. Weak, clipped or ambiguous readings open the review panel; the previous guidance is hidden until the situation is resolved.
-
-In **2.11.0**, original rectangles guide a bounded search near the cursor. A number without a complete axis label is not accepted as X or Y; competing pairs require review. The first middle-button screenshot is delayed, by **250 ms** by default, so the game can show its marker. Automatic acceptance requires the same trustworthy pair from **two separate screenshots** with unchanged cursor, window and geometry. A request is limited to **four frames**; processing one frame again is not a second observation. If you select another point while OCR is running, only the current capture is applied; a stale response does not replace the new target. **There is no continuous screen scanning.**
-
-If recognition fails:
-
-1. For the gun, use **Mark Coordinates** again and check that a full pair is visible in the chat input.
-2. For a target, keep the cursor beside the selected point's labels and middle-click again.
-3. Target fallback: **M → right-click target → Mark Coordinates → Alt+T**. A full pair must be visible in the active chat draft; no message needs to be sent. Enable **Auto-detect for additional captures** under **Settings → Advanced**, otherwise Alt+T uses the saved custom region.
-4. Keep the game on one monitor; WARDOGS must be the active window and available for capture.
-5. Use manual input, a custom region or editing in the review panel.
-
-Search remains within the active game client and a bounded cursor neighborhood. Map recognition uses RapidOCR; errors do not silently select another OCR engine. Five retained real X/Y pairs and their transformations support regression checks; new in-game firing trials have not been performed. Support for every resolution, HUD layout and future game update is not promised.
-
-## Local data and privacy
-
-In 2.11, **recent-fire-missions.json** (up to 64 recently accepted points), **fire-missions.json** (up to 500 named records), **flight-profiles.json** and **planning.ini** keep points, personal observations and parameters in the Windows profile beside settings. They remain local, survive updates and are not included in the app archive.
-
-- Calculations, OCR and terrain reading run **on your computer**.
-- Calculating requires no account, API key or cloud subscription.
-- The app does not read game process memory, inject DLLs, control the sight or fire.
-- Screen capture is restricted to a region of the active WARDOGS window; this does not establish anti-cheat approval.
-- The clipboard is read when you click **Paste**, not monitored in the background.
-- The current session log is <code>%LOCALAPPDATA%\WardogsFireControl\logs\latest.log</code>; the previous log is <code>latest.previous.log</code>. Version 2.11.0 retains up to **32** older logs in **latest.archive**. Each file is limited to **4 MiB**: up to **128 MiB** of archives and **8 MiB** for current and previous files. A filesystem failure may retain an additional recovery file of up to 4 MiB; unrelated files are outside this limit and are not deleted. Bounded archives do not retain history forever.
-- Logs contain OCR and calculation diagnostics, not screenshots. They may include game coordinates and local paths; review them before attaching them publicly.
-
-## Screenshots
-
-The **2.11.0** screenshots come from the actual app on a GitHub runner: the main window uses a **2200 m** target, and the mini card uses a separate **1562 m** target. The remaining images are historical **2.7.0** screenshots retained to show the other windows. Demonstration values are not evidence of in-game hit accuracy.
-
-| Window | RU | EN |
-|---|---|---|
-| Unified workflow and ranging · 2.11 | [Open](docs/screenshots/ru-fire-control-2.11.png) | [Open](docs/screenshots/en-fire-control-2.11.png) |
-| SPH-2 mini card · 2.11 | [Open](docs/screenshots/ru-sph2-mini-2.11.png) | [Open](docs/screenshots/en-sph2-mini-2.11.png) |
-| Main window · 2.7 | [Open](docs/screenshots/ru-main.png) | [Open](docs/screenshots/en-main.png) |
-| SPH-2 · 2.7 | [Open](docs/screenshots/ru-vehicle.png) | [Open](docs/screenshots/en-vehicle.png) |
-| Settings · 2.7 | [Open](docs/screenshots/ru-settings.png) | [Open](docs/screenshots/en-settings.png) |
-| Advanced settings · 2.7 | [Open](docs/screenshots/ru-recognition.png) | [Open](docs/screenshots/en-recognition.png) |
-| Manual input · 2.7 | [Open](docs/screenshots/ru-manual.png) | [Open](docs/screenshots/en-manual.png) |
-| Impact corrections · 2.7 | [Open](docs/screenshots/ru-calibration.png) | [Open](docs/screenshots/en-calibration.png) |
-| Compact window · 2.7 | [Open](docs/screenshots/ru-compact.png) | [Open](docs/screenshots/en-compact.png) |
-
-<details>
-<summary>Manual input and advanced settings</summary>
-
-![Manual input](docs/screenshots/en-manual.png)
-![Advanced settings](docs/screenshots/en-recognition.png)
+The link is pinned to the compatible **v1.4.0** pack; new or arbitrarily modified packs are not automatically considered compatible. After all three packs have been imported successfully, the import button is hidden.
 
 </details>
 
-<details>
-<summary>Impact corrections and compact window</summary>
+## OCR and coordinate review
 
-![Impact corrections](docs/screenshots/en-calibration.png)
-![Compact window](docs/screenshots/en-compact.png)
+The main workflow uses **Paddle PP-OCRv6 Small through RapidOCR / ONNX Runtime on the CPU**. The model is bundled and recognition is local. Optional **Windows OCR** is for a custom region and needs a suitable English Windows OCR component; selecting it does not change the main Alt+X and middle-click paths.
+
+**Alt+X** searches for a complete pair in the active chat draft, not old messages. In the quick workflow, targets and impacts use separate labelled **X/Y** fields in a bounded cursor neighbourhood inside the active game window. Automatic acceptance requires two trustworthy matching pairs from separate screenshots with consistent context; a request is limited to **four frames**. Version 2.13.2 has no periodic sight-HUD reading or continuous screen scanning.
+
+Clipped, weak or competing pairs open review. The previous command is hidden until reading is resolved. Repeating capture can replace an uncertain result; choose or correct a pair in the main window and accept it explicitly. **Reject** restores the previous solution. A changed task prevents late OCR from replacing the new target.
+
+If reading fails:
+
+1. Gun: repeat **Mark Coordinates → Alt+X** with complete X/Y visible in the chat input.
+2. Target: middle-click again with both labels visible, keeping the game window active during reading.
+3. Backup: **M → right-click the target → Mark Coordinates → Alt+T**, with automatic search for additional captures enabled under **Settings → Recognition**. Otherwise Alt+T uses the saved custom region.
+4. Use **Manual input**, a custom region or coordinate review to correct the values.
+
+The default marker delay is **250 ms**, configurable from **0–2000 ms**; the first middle-click screenshot has a minimum delay of **80 ms**. This waits for the game's label, rather than describing total OCR duration. Support for every resolution, HUD layout and future game update is not promised. [Coordinate-reading research, RU](source/docs/COORDINATE-WORKFLOW-RESEARCH-RU.md).
+
+## How the calculations work
+
+One game-coordinate unit equals **100 m**. Horizontal range is the length of the gun-to-target segment multiplied by 100. Bearing runs clockwise from north: **0° north, 90° east, 180° south, 270° west**. MIL is linearly interpolated between adjacent table samples; fractional coordinates are retained until display rounding.
+
+For SPH-2, compatible terrain provides an elevation difference. An approximate geometric model finds an equivalent range, then converts it back through the game's MIL table. MIL is not used directly as a physical barrel angle. Unreachable targets or unsupported sight settings produce explicit errors.
+
+Automatic ground assessment checks the selected arc's **baseline model trajectory**. It distinguishes an estimated intersection, no detected intersection, unknown heights and incomplete coverage. It can suggest the other arc, but **does not switch automatically**. This is not a measured post-correction projectile path or a building check.
+
+**Alt+I does not measure flight time:** elapsed time includes player reaction and map interaction. Time comes from matching personal observations or a separately enabled model; assumed speed and gravity are unverified and the model is disabled by default. [Formulas, sources and numerical limits](source/docs/CALCULATIONS-EN.md).
+
+## Local data and privacy
+
+Calculations, OCR and terrain processing run on your PC. The app does not read game memory, inject code, control the sight or fire. Main game captures stay inside the active WARDOGS window; additional OCR reads a user-selected screen region. This does not establish anti-cheat approval. The clipboard is read when you click **Paste**, without background monitoring.
+
+Profile: `%LOCALAPPDATA%\WardogsFireControl`.
+
+| Data | File / folder |
+|---|---|
+| Settings and language | `settings.ini` |
+| Additional-tool parameters | `planning.ini` |
+| Recent accepted points | `recent-fire-missions.json` |
+| Named records | `fire-missions.json` |
+| Personal flight-time observations | `flight-profiles.json` |
+| Imported elevations | `terrain-packs` |
+| Logs | `logs` |
+
+The profile survives updates; copy it while the app is closed to transfer it. A corrupt JSON store displays an error and is not automatically replaced with empty records. Confirm the map after launching; the active solution and old corrections are not automatically restored.
+
+The current log is `logs\latest.log`, the previous one is `latest.previous.log`, and up to **32** older logs are kept in `latest.archive`. Each is limited to **4 MiB**: up to 128 MiB of archives and 8 MiB for current/previous files; a filesystem failure can leave an additional recovery file of up to 4 MiB. The archive does not retain history forever or delete unrelated files.
+
+Logs contain OCR and calculation diagnostics and may include game coordinates and local paths; screenshots are not recorded in them. Review logs before public sharing. Internet access is used for updates and external links; coordinates, screenshots and terrain are not sent to GitHub.
+
+## RU and EN screenshots
+
+All screenshots below are from the **actual 2.13.2 app on an isolated Windows runner**. Coordinates and correction examples are synthetic; the images show the interface and do not establish in-game accuracy.
+
+| Window | Русский | English |
+|---|---|---|
+| Main SPH-2 calculation and ranging | [Открыть](docs/screenshots/ru-main-2.13.2.png) | [Open](docs/screenshots/en-main-2.13.2.png) |
+| SPH-2 mini card | [Открыть](docs/screenshots/ru-card-2.13.2.png) | [Open](docs/screenshots/en-card-2.13.2.png) |
+| Settings | [Открыть](docs/screenshots/ru-settings-2.13.2.png) | [Open](docs/screenshots/en-settings-2.13.2.png) |
+| Help and first solution | [Открыть](docs/screenshots/ru-help-2.13.2.png) | [Open](docs/screenshots/en-help-2.13.2.png) |
+
+<details>
+<summary>Settings and help in English</summary>
+
+![WARDOGS Fire Control 2.13.2 settings in English](docs/screenshots/en-settings-2.13.2.png)
+![WARDOGS Fire Control 2.13.2 help — first solution in English](docs/screenshots/en-help-2.13.2.png)
 
 </details>
 
@@ -404,58 +292,54 @@ The **2.11.0** screenshots come from the actual app on a GitHub runner: the main
 
 | Document | Contents |
 |---|---|
-| [Quick start EN](source/docs/QUICKSTART-EN.md) / [RU](source/docs/QUICKSTART-RU.md) | Launch, coordinates, game workflow, controls, OCR and profiles |
-| [Workflow 2.11 EN](source/docs/USAGE-EN.md) / [RU](source/docs/USAGE-RU.md) | Ranging, the final command, saved points and additional tools |
-| [Mathematics EN](source/docs/CALCULATIONS-EN.md) / [RU](source/docs/CALCULATIONS-RU.md) | Tables, formulas, elevations, corrections and numerical limits |
-| [Architecture EN](source/docs/ARCHITECTURE-EN.md) / [RU](source/docs/ARCHITECTURE-RU.md) | Modules, threads, state management and technologies |
-| [Game interaction EN](source/docs/ANTICHEAT-EN.md) / [RU](source/docs/ANTICHEAT-RU.md) | Screen capture, hooks, limits and WARDOGS rules |
-| [Release notes EN](source/docs/RELEASE-NOTES-EN.md) / [RU](source/docs/RELEASE-NOTES-RU.md) | Current-version changes and verification boundaries |
-| [Localization](source/docs/LOCALIZATION.md) | Translation catalogs, language switching and checks |
-| [Build EN](docs/BUILD-EN.md) / [RU](docs/BUILD-RU.md) | Environment setup, tests and the portable package |
-| [Source code](source/) | App, mathematics, OCR, translations, tools and tests |
+| [Quick start EN](source/docs/QUICKSTART-EN.md) / [RU](source/docs/QUICKSTART-RU.md) | First solution, shortcuts, OCR and profile |
+| [Workflow EN](source/docs/USAGE-EN.md) / [RU](source/docs/USAGE-RU.md) | Selected command, ranging, points and additional tools |
+| [Calculations EN](source/docs/CALCULATIONS-EN.md) / [RU](source/docs/CALCULATIONS-RU.md) | Tables, formulas, elevations, sources and limits |
+| [Architecture EN](source/docs/ARCHITECTURE-EN.md) / [RU](source/docs/ARCHITECTURE-RU.md) | Modules, threads and state |
+| [Game interaction EN](source/docs/ANTICHEAT-EN.md) / [RU](source/docs/ANTICHEAT-RU.md) | Capture, system input and approval boundaries |
+| [ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) / [RU](source/docs/RELEASE-NOTES-RU.md) | Complete change history |
+| [Build EN](docs/BUILD-EN.md) / [RU](docs/BUILD-RU.md) | Tools, verification, portable packaging and licenses |
+| [Updates EN](docs/UPDATES-EN.md) / [RU](docs/UPDATES-RU.md) | Installation, retained data and recovery |
+| [Localization](source/docs/LOCALIZATION.md) | Translation catalogs and checks |
+| [Source code](source/) | App, OCR, model, tests and tools |
 
-Stack: **C++20, Qt 6.8+, MSVC x64, CMake 3.24+, Ninja, ONNX Runtime, C++/WinRT and Zstandard**. Main modules: <code>calculator.cpp</code>, <code>vehicle_ballistics.cpp</code>, <code>continuous_calibration.cpp</code>, <code>ocr.cpp</code>, <code>terrain_package.cpp</code> and <code>main_window.cpp</code>.
-
-Building requires Visual Studio 2022 with **Desktop development with C++**, **MSVC x64 Qt**, and CMake/Ninja. From the repository root:
+Stack: **C++20, Qt 6.8+, MSVC x64, CMake 3.24+, Ninja, ONNX Runtime, C++/WinRT and Zstandard**. Public builds use Qt **6.8.3**. Development requires a separate Visual Studio 2022 installation with **Desktop development with C++** and Qt MSVC x64. From the clone's root:
 
 ~~~powershell
 $env:QT_ROOT = 'C:\Qt\6.8.3\msvc2022_64'
-.\Build.ps1
-.\Build.ps1 -Package
+.\Build.ps1 -Configuration Release
 ~~~
 
-The first command builds the project and runs CTest. The second also creates the portable **App** folder and a ZIP under **dist**. **-SkipTests** is intended only for preparation and cannot be combined with a package update.
+This builds the project and runs CTest. `Build.ps1 -Package` prepares the portable package and also replaces the local `App` directory. See the [build guide](docs/BUILD-EN.md) for packaging without replacing `App`, archive contents and LGPL requirements.
 
-[GitHub Actions](https://github.com/sany86russ/Wardogs-Fire-Control/actions) builds on Windows and runs CTest; the release workflow prepares the portable ZIP, public source archive and SHA-256 checksums. See Actions and the release page for the result of a particular run.
-
-The repository contains app source, tests, the OCR model, used components and license notices. Install the Qt SDK and Visual Studio separately for development. Corresponding Qt source is available as separate release archives for LGPL compliance.
+[GitHub Actions](https://github.com/sany86russ/Wardogs-Fire-Control/actions) builds the Windows version and runs checks; release builds prepare the app ZIP, source code, corresponding Qt source and SHA-256. Consult Actions and the release for a particular run's result.
 
 ## Limitations and feedback
 
-The app does not model wind, dispersion or target motion. Flight time comes from personal observations or an explicitly enabled assumption; arc and ground checks are approximate and exclude buildings, bridges and trees. The SPH-2 elevation model is approximate; L81 table aiming has no elevation correction. Retained community tables may differ from the current game's readouts. The new workflow does not change the tables or establish hit accuracy. First-shot accuracy and any hit percentage are not guaranteed.
+Wind, dispersion and target motion are not modelled. Elevations, flight time and ground assessment have the limits described above. Community tables may differ from the current game patch. **First-shot accuracy and any hit percentage, including 99% within 10 m, are not established or guaranteed.**
 
-Automated checks cover calculations, extreme values, OCR on fixtures, rejection without state corruption, terrain, settings and localization. The 2.7.0 interface review included RU/EN at Windows scales of 100/150/200%. These results establish software behavior; they do not replace measured in-game firing trials, every HUD test or a developer decision on utility approval.
+Automated checks cover calculations, OCR fixtures, rejection without state corruption, terrain, settings, input and RU/EN interface workflows. They do not replace in-game trials, every resolution/window-mode check or game developer approval.
 
-To report a problem, open an [Issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues) with:
+When opening an [Issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues), include:
 
-- App and Windows versions, language and display scale.
+- Calculator and Windows versions, language and display scale.
 - Weapon, map, game resolution and window mode.
-- Reproduction steps, expected behavior and actual behavior.
-- Coordinates, selected arc and, if needed, a log excerpt you have reviewed.
+- Reproduction steps, expected behaviour and actual result.
+- Coordinates, selected arc and a relevant log excerpt after reviewing its contents.
 
-For OCR failures, a cropped screenshot of the X/Y labels without personal chat is useful. Do not attach passwords, keys, personal information or unrelated logs.
+For OCR failures, a cropped X/Y screenshot without personal chat is useful. Do not attach passwords, keys, personal information or unrelated logs.
 
 ## Origins and licenses
 
-WARDOGS Fire Control develops the MIT project **Rico217 / Ricoz217 — [WarDogs_Distance_Calculator](https://github.com/Ricoz217/WarDogs_Distance_Calculator)**. Its base is **v1.4.0**, commit <code>e1e14b2df5e59b6452a7aba105c36711b355d954</code>. Original attribution, license and [upstream documentation](source/docs/README-UPSTREAM.md) are preserved.
+WARDOGS Fire Control develops the MIT project **Rico217 / Ricoz217 — [WarDogs_Distance_Calculator](https://github.com/Ricoz217/WarDogs_Distance_Calculator)**. Its base is **v1.4.0**, commit `e1e14b2df5e59b6452a7aba105c36711b355d954`. Original attribution, license and [upstream documentation](source/docs/README-UPSTREAM.md) are preserved.
 
-SoNiX's development includes standalone portable launch, game-coordinate acquisition, OCR review, local SPH-2 corrections, terrain handling, new windows and complete RU/EN localization. Exact sources of the investigated third-party EXE modification were unavailable; bit-for-bit identity with it is not claimed.
+SoNiX's development includes portable launch, game-coordinate acquisition and review, local SPH-2 corrections, terrain handling, the mini card, auxiliary reticle and RU/EN localization. Exact sources of the investigated third-party EXE modification were unavailable; bit-for-bit identity with it is not claimed.
 
 - **Application code:** [MIT](source/LICENSE).
 - **L81 table:** community data from [apollyon-sys/wardogs-calculator](https://github.com/apollyon-sys/wardogs-calculator).
 - **SPH-2 tables:** observations from [wardogs.t0ki.cn](https://wardogs.t0ki.cn/js/data.js), retained in the upstream base.
-- **Qt:** dynamically linked, LGPL-3.0; **ONNX Runtime:** MIT; **PaddleOCR model:** Apache-2.0; **Zstandard:** BSD-3-Clause. See [third-party notices](source/THIRD_PARTY_NOTICES.md).
-- **Game and terrain data:** remain the property of their respective rights holders and are not relicensed under MIT. See the [terrain-data notice](source/TERRAIN_DATA_NOTICE.md).
+- **Qt:** dynamically linked, LGPL-3.0; **ONNX Runtime:** MIT; **PaddleOCR:** Apache-2.0; **Zstandard:** BSD-3-Clause. [Third-party notices](source/THIRD_PARTY_NOTICES.md).
+- **Game and terrain:** remain the property of their respective rights holders and are not relicensed under MIT. [Terrain-data notice](source/TERRAIN_DATA_NOTICE.md).
 
 WARDOGS and related marks belong to their respective owners. The app is not an official BULKHEAD product.
 

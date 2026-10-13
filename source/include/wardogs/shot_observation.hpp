@@ -34,7 +34,8 @@ enum class ShotCameraPhase { unavailable, idle, firing };
 
 struct AcceptedSightFrame {
     std::uint64_t id{};
-    // Monotonic capture time, BEFORE OCR; completion time is not capture time.
+    // Monotonic acquisition receipt, before OCR. This is an upper bound on
+    // source-pixel time; OCR completion is never a capture timestamp.
     std::uint64_t timestamp_ms{};
     std::uint64_t epoch{};
     FiringSnapshot firing_snapshot;
@@ -53,6 +54,9 @@ struct AcceptedSightFrame {
     // reduce them, and missing intervals remain unknown rather than zero.
     std::optional<double> bearing_uncertainty_deg;
     std::optional<double> mil_uncertainty;
+    // Earliest possible source-pixel time. An absent bound preserves the
+    // exact-timestamp contract of existing saved/synthetic frame adapters.
+    std::optional<std::uint64_t> source_started_at_ms;
 };
 
 // Reload/shot-camera screens can hide the reticle. This evidence carries no
@@ -67,6 +71,7 @@ struct DischargeFrameEvidence {
     std::string ammo_channel;
     std::optional<bool> stabilized;
     ShotCameraPhase shot_camera{ShotCameraPhase::unavailable};
+    std::optional<std::uint64_t> source_started_at_ms;
 };
 
 enum class ShotEvidenceReason {
@@ -279,6 +284,7 @@ private:
     std::string candidate_pose_;
     std::uint64_t candidate_pose_frame_id_{};
     std::uint64_t candidate_pose_time_ms_{};
+    std::uint64_t candidate_pose_source_ms_{};
     std::deque<PendingShot> pending_;
 };
 

@@ -116,6 +116,9 @@ public:
     RapidOcr& operator=(const RapidOcr&) = delete;
 
     OcrResult recognize(const Image& image, std::stop_token stop = {}) const;
+    // Dedicated short instrument lines retain the same source resampling,
+    // model and crop-pass evidence while reducing unused right tensor padding.
+    OcrResult recognize_hud_line(const Image& image, std::stop_token stop = {}) const;
     // Each detected line is recognized separately with bounded CPU/memory.
     // Unrelated UI labels are excluded; provenance records intact glyphs and
     // independent crop agreement. Multiple coordinate rows remain visible.
@@ -132,6 +135,7 @@ public:
     [[nodiscard]] std::size_t character_count() const;
 
 private:
+    OcrResult recognize_line(const Image& image, std::stop_token stop, int minimum_width) const;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

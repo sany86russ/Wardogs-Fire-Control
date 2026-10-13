@@ -80,6 +80,111 @@ std::uint64_t reservation_id(const wardogs::ShotImpactAssociation& association) 
     return association.reservation ? association.reservation->reservation_id : 0;
 }
 
+void capture_press_ordering() {
+    Fixture same_tick;
+    same_tick.stable();
+    const auto ambiguous = same_tick.session.fire_intent(same_tick.query(), 200, 250);
+    check(ambiguous.reason == Reason::stale_frame && !ambiguous.intent,
+          "a capture acquired in the press millisecond has no proven pre-press order");
+    (void)same_tick.read(300, 4);
+    const auto ambiguous_discharge = same_tick.read(400, 4);
+    check(!ambiguous_discharge.shot && same_tick.session.outstanding_shots() == 0,
+          "a later ammunition decrement cannot retroactively validate a same-tick aim snapshot");
+
+    Fixture one_tick_before;
+    (void)one_tick_before.read(100);
+    (void)one_tick_before.session.observe(one_tick_before.frame(200), 250);
+    const auto ordered = one_tick_before.session.fire_intent(one_tick_before.query(), 201, 251);
+    check(ordered.intent && ordered.intent->last_sight_capture_ms == 200 && ordered.intent->pressed_at_ms == 201,
+          "a capture acquired one millisecond before the press stays valid despite later OCR completion");
+    (void)one_tick_before.read(300, 4);
+    const auto ordered_discharge = one_tick_before.read(400, 4);
+    check(ordered_discharge.shot && ordered_discharge.shot->last_sight_capture_ms == 200 &&
+          ordered_discharge.shot->pressed_at_ms == 201,
+          "confirmed discharge preserves strictly pre-press acquisition provenance");
+
+    Fixture one_tick_after;
+    one_tick_after.stable(101);
+    const auto post_press = one_tick_after.session.fire_intent(one_tick_after.query(), 200, 250);
+    check(post_press.reason == Reason::stale_frame && !post_press.intent,
+          "a capture acquired one millisecond after the press is never frozen as the executed aim");
+}
+
+void bounded_source_capture_times() {
+    Fixture old_pixels;
+    auto late_receipt = old_pixels.frame(1200);
+    late_receipt.source_started_at_ms = 100;
+    check(old_pixels.session.observe(late_receipt, 1250).reason == Reason::stale_frame,
+          "a recent acquisition receipt cannot make possibly old source pixels fresh");
+    late_receipt = old_pixels.frame(1300);
+    late_receipt.source_started_at_ms = 1301;
+    check(old_pixels.session.observe(late_receipt, 1300).reason == Reason::invalid_frame,
+          "source acquisition cannot begin after its receipt timestamp");
+
+    Fixture expiring;
+    auto first = expiring.frame(100);
+    first.source_started_at_ms = 50;
+    (void)expiring.session.observe(first, 100);
+    auto second = expiring.frame(200);
+    second.source_started_at_ms = 150;
+    check(expiring.session.observe(second, 200).reason == Reason::accepted_frame,
+          "disjoint bounded captures can still establish a stable actual sight");
+    const auto expired = expiring.session.fire_intent(expiring.query(), 1200, 1200);
+    check(expired.reason == Reason::awaiting_stable_hud && !expired.intent,
+          "pre-press freshness expires from the earliest source time rather than the later receipt");
+
+    Fixture overlapping;
+    first = overlapping.frame(200);
+    first.source_started_at_ms = 100;
+    (void)overlapping.session.observe(first, 200);
+    second = overlapping.frame(250);
+    second.source_started_at_ms = 150;
+    check(overlapping.session.observe(second, 250).reason == Reason::awaiting_stable_hud,
+          "receipt separation cannot establish a stable pair when source acquisition intervals overlap");
+    auto third = overlapping.frame(350);
+    third.source_started_at_ms = 300;
+    check(overlapping.session.observe(third, 350).reason == Reason::accepted_frame &&
+          overlapping.session.fire_intent(overlapping.query(), 351, 351).intent.has_value(),
+          "a later source interval with proven separation restores stable pre-press observation");
+
+    Fixture partial;
+    wardogs::DischargeFrameEvidence evidence;
+    evidence.id = 1; evidence.timestamp_ms = 1200; evidence.source_started_at_ms = 100;
+    evidence.epoch = partial.session.epoch(); evidence.context = partial.context;
+    evidence.foreground_verified = true; evidence.ammo = 4; evidence.ammo_channel = "synthetic-shell-counter";
+    check(partial.session.observe_discharge(evidence, 1250).reason == Reason::stale_frame,
+          "reticle-hidden discharge metadata applies the same conservative source freshness bound");
+    evidence.id = 2; evidence.timestamp_ms = 1300; evidence.source_started_at_ms = 1301;
+    check(partial.session.observe_discharge(evidence, 1300).reason == Reason::invalid_frame,
+          "a partial frame also rejects an inverted acquisition interval");
+
+    Fixture ambiguous;
+    ambiguous.stable();
+    (void)ambiguous.session.fire_intent(ambiguous.query(), 250, 250);
+    auto decrement = ambiguous.frame(300, 4);
+    decrement.source_started_at_ms = 240;
+    check(ambiguous.session.observe(decrement, 300).reason == Reason::correlation_ambiguous,
+          "a first decrement whose source interval overlaps the press cannot prove a post-press discharge");
+    check(!ambiguous.read(400, 4).shot && ambiguous.session.outstanding_shots() == 0,
+          "a later unchanged counter cannot repair the original ambiguous discharge ordering");
+
+    Fixture corroboration;
+    corroboration.stable();
+    (void)corroboration.session.fire_intent(corroboration.query(), 250, 250);
+    decrement = corroboration.frame(300, 4);
+    decrement.source_started_at_ms = 290;
+    check(corroboration.session.observe(decrement, 300).reason == Reason::awaiting_discharge_confirmation,
+          "a proven post-press source interval starts bounded discharge confirmation");
+    auto too_close = corroboration.frame(400, 4);
+    too_close.source_started_at_ms = 310;
+    check(!corroboration.session.observe(too_close, 400).shot,
+          "receipt latency cannot inflate the minimum separation of discharge corroboration frames");
+    auto separated = corroboration.frame(500, 4);
+    separated.source_started_at_ms = 410;
+    check(corroboration.session.observe(separated, 500).shot.has_value(),
+          "a genuinely separated later source interval corroborates the immutable pre-press shot");
+}
+
 void pre_press_and_retry() {
     Fixture fixture;
     fixture.stable();
@@ -714,6 +819,8 @@ void body_markers_and_bounds() {
 }  // namespace
 
 int main() {
+    capture_press_ordering();
+    bounded_source_capture_times();
     pre_press_and_retry();
     intents_are_not_shots();
     asynchronous_ambiguity();

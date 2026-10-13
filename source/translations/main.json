@@ -1632,8 +1632,12 @@
     "en": "Sight read: %1° · MIL %2"
   },
   {
-    "ru": "Прицел: нет данных",
-    "en": "Sight: unavailable"
+    "ru": "HUD прицела не считан",
+    "en": "Sight HUD unread"
+  },
+  {
+    "ru": "Игровой прицел пока не подтверждён. Откройте оптический прицел SPH-2. Расчёт команды работает независимо от чтения HUD.",
+    "en": "The in-game sight is not yet verified. Open the SPH-2 optical sight. Command calculation works independently of HUD reading."
   },
   {
     "ru": "Прицел согласован",
@@ -1678,5 +1682,13 @@
   {
     "ru": "Чтение: ±%1° · ±%2 MIL",
     "en": "Reading: ±%1° · ±%2 MIL"
+  },
+  {
+    "ru": "Неверный язык Windows OCR: нужен тег BCP-47",
+    "en": "Invalid Windows OCR language: a BCP-47 tag is required"
+  },
+  {
+    "ru": "В Windows не установлен пакет OCR для языка ",
+    "en": "Windows has no OCR language pack for "
   }
 ]

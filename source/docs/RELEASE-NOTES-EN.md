@@ -2,6 +2,36 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.13.2 — calculation and ranging without background HUD reading · October 13, 2026
+
+This stable release combines the final changes since the published 2.13.0. Changes were prepared on October 12; candidate 2.13.1 was not published as a separate stable release. [Complete 2.13.2 release EN/RU](../../docs/releases/v2.13.2.md).
+
+- Removed automatic SPH-2 sight reading, periodic polling and the background HUD capture/OCR worker from the player application. The calculator no longer starts Windows Graphics Capture introduced during 2.13.1 preparation. The subsystem was removed following reports of the system capture border flashing during background capture.
+- The mini card no longer displays sight-reading status or a colour border comparing the in-game sight with the command. Bearing, final MIL, both arcs, target range, approximate table range, map and terrain remain. The unlock hint retains header space.
+- Removed the left-button subscription for sight/shot association. Middle-click still reads target coordinates when enabled; disabling it no longer leaves the mouse listener running for sight observation.
+- Alt+I works without the HUD, shell counter or fire input: it retains the displayed selected command when reading begins and applies an accepted impact to the original target. The app does not authenticate a physical shot or actual in-game sight settings.
+- Pause/resume preserve coordinates, history and card placement; required shortcuts and enabled middle-button reading recover without sight capture. Coordinate OCR through shortcuts, middle-click and additional captures remains available.
+- L81/SPH-2, tables, the height model, ranges, correction rules and provisional bearing-offset transfer are retained. Ordinary coordinate OCR preserves its previous tensor preparation and visible samples.
+- Standalone source and `sph_hud_probe` retain improvements to HUD geometry, complete digits, conflict refusals, bounded attempts and dedicated short-line OCR. Windows OCR supports explicit installed-language selection and exact Russian stabilization captions. These are separately invoked diagnostics for an archived experiment.
+- Archived-observer tests check original Windows input timing, frame age and independence; a standalone replay contract pins model/image SHA-256 hashes and requires distinct positive cases with a negative context. Personal game frames are excluded from the public repository and ordinary CI.
+- Concurrent saved-point writer tests report each writer's error, successful operations and actual record total. The user-data format is unchanged.
+- Updating from a complete portable 2.8.0+ package preserves settings, imported heights, points, personal profiles and logs. Current coordinates and session ranging must be set again after restart; saved points are explicitly reapplied after confirming the map. First installation requires the entire ZIP, not a single EXE.
+
+**Source validation before the documentation update:** [Windows CI](https://github.com/sany86russ/Wardogs-Fire-Control/actions/runs/38289514769), `5c36ee2781adb744af61f701afaa54844cb02f5d` — **37/37 CTest**, **104 RU/EN interface snapshots**, package-file verification against the manifest, a real isolated **2.13.0 → 2.13.2** update and restart. Final tag checks are available in GitHub Actions. Source and application checks establish capture removal; absence of all flashing in the current game has not been independently verified. **99% hits within 10 m have not been established.**
+
+## 2.13.1 — historical candidate: sight-reader qualification · October 12, 2026
+
+This intermediate version was prepared and installed locally but was not published as a separate stable release. Its automatic observer was removed in 2.13.2; this section preserves development history. [Candidate description EN/RU](../../docs/releases/v2.13.1.md).
+
+- Developed fresh selected-window capture through Windows Graphics Capture, checking compositor time, window identity, geometry and bounded waits. A repeated stale client-DC image no longer counted as sight evidence. This background path is removed from final 2.13.2.
+- Refined actual ticks, RNG/MIL ladders, the inner compass, complete digit isolation and refusal of clipped/conflicting labels. Pointer-adjacent rows were read first, supplemental attempts were bounded, and repeat polling retained the one-second reading-age limit.
+- Added exact Russian stabilization captions with installed Windows OCR, processing-stage/refusal diagnostics and reduced unused padding for short OCR lines. Ordinary coordinate reading remained unchanged.
+- Sight/press association used original Windows message time, conservative frame-acquisition bounds and two independent images. Unknown timing and equal frame/press millisecond timestamps could not establish a pre-press sight.
+- The mini card explained unavailable HUD evidence while command calculation continued independently. Logs exposed named refusals, capture/recognition stages, processing time and outcome counters; ordinary operation saved neither game images nor raw OCR text.
+- Added geometry, conflict, age and input-clock regression coverage, plus separate console-reader replay on private hash-pinned frames.
+
+Retained-frame checks covered only observed poses and resolution. The complete mini-card → press → counter → Alt+I game path was not independently established. Historical candidate status labels and colour borders are absent from the 2.13.2 player application.
+
 ## 2.13.0 — clearer workflows, mini-card convenience and sight observation · October 12, 2026
 
 This release combines the interface, responsiveness, mini-card, pause, SPH-2 prediction and experimental HUD work prepared since 2.12.0. [Detailed release EN/RU](../../docs/releases/v2.13.0.md).
