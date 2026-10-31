@@ -576,6 +576,90 @@ void check_pinned_preferences_reconstruction() {
     restored.hide();
 }
 
+void check_pinned_helpers_status() {
+    const auto original_language = wardogs::i18n::language();
+    wardogs::i18n::set_language(wardogs::UiLanguage::russian);
+    for (bool vehicle : {false, true}) {
+        wardogs::GameHelpersPreferences helpers;
+        helpers.build.hotkey = L"Ctrl+Alt+Shift+PageDown";
+        helpers.team.hotkey = L"Ctrl+Alt+Shift+PageUp";
+        PinnedResultWindow card([] {});
+        card.set_mode(vehicle);
+        card.set_values(QStringLiteral("470 m"), QStringLiteral("180.0° S"), QStringLiteral("500 MIL"));
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::none);
+        card.show();
+        QApplication::processEvents();
+        auto* strip = card.findChild<QWidget*>(QStringLiteral("pinnedHelpersStatus"));
+        auto* build = card.findChild<QLabel*>(QStringLiteral("pinnedBuildHelperStatus"));
+        auto* team = card.findChild<QLabel*>(QStringLiteral("pinnedTeamPikerStatus"));
+        check(strip && build && team && strip->isVisible() && build->isVisible() && team->isVisible(),
+              "both helper indicators remain visible for mortar and SPH-2 even when disabled");
+        check(build->text().contains(QString::fromStdWString(helpers.build.hotkey)) &&
+              team->text().contains(QString::fromStdWString(helpers.team.hotkey)) &&
+              build->property("helperState").toString() == QStringLiteral("off") &&
+              team->property("helperState").toString() == QStringLiteral("off"),
+              "disabled indicators retain the actual custom user shortcuts and explicit Off state");
+        const QRect geometry = card.geometry();
+        helpers.build.enabled = true;
+        helpers.team.enabled = true;
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::build);
+        check(build->property("active").toBool() && !team->property("active").toBool() &&
+              build->text().contains(QStringLiteral("▶")) && build->text().contains(QStringLiteral("Работает")) &&
+              team->text().contains(QStringLiteral("Готов")) && build->styleSheet() != team->styleSheet(),
+              "only the running helper receives an active marker, state text and distinct style");
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::team);
+        check(!build->property("active").toBool() && team->property("active").toBool(),
+              "switching helpers clears the previous active indicator");
+        for (int update = 0; update < 20; ++update)
+            card.set_helpers_status(helpers, wardogs::GameHelperMode::team);
+        QApplication::processEvents();
+        check(card.geometry() == geometry,
+              "helper start, switch and repeated runtime polling preserve the user's card geometry");
+        wardogs::i18n::set_language(wardogs::UiLanguage::english);
+        check(team->text().contains(QStringLiteral("Running")) && build->text().contains(QStringLiteral("Ready")) &&
+              team->text().contains(QString::fromStdWString(helpers.team.hotkey)),
+              "live English switching translates helper state while retaining the assigned key");
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::none);
+        check(!build->property("active").toBool() && !team->property("active").toBool() &&
+              build->property("helperState").toString() == QStringLiteral("ready") &&
+              team->property("helperState").toString() == QStringLiteral("ready"),
+              "stopping immediately clears both active indicators without hiding enabled helpers");
+        helpers.team.enabled = false;
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::team);
+        check(!build->property("active").toBool() && !team->property("active").toBool() &&
+              team->text().contains(QStringLiteral("Off")),
+              "a disabled helper cannot be presented as running even with stale active mode");
+        card.resize(card.minimumSize());
+        QApplication::processEvents();
+        for (auto* label : {build, team}) {
+            const QRect bounds(label->mapTo(&card, QPoint{}), label->size());
+            check(card.rect().contains(bounds) &&
+                  QFontMetrics(label->font()).horizontalAdvance(label->text()) <= label->contentsRect().width() &&
+                  QFontMetrics(label->font()).height() <= label->contentsRect().height(),
+                  "the full long custom key and state fit inside the narrow card without clipping");
+            check(label->focusPolicy() == Qt::NoFocus && label->testAttribute(Qt::WA_TransparentForMouseEvents) &&
+                  label->textFormat() == Qt::PlainText && label->accessibleDescription() == label->text(),
+                  "helper status is readable, accessible and passive rather than an input control");
+        }
+        const int helpers_top = strip->mapTo(&card, QPoint{}).y();
+        for (const auto* label : card.findChildren<QLabel*>()) {
+            if (!label->isVisible()) continue;
+            if (label->objectName() == QStringLiteral("pinnedMortarMil") ||
+                label->objectName() == QStringLiteral("solutionMil"))
+                check(label->mapTo(&card, QPoint(0, label->height())).y() <= helpers_top,
+                      "helper strip has its own height below the ballistic command slots");
+        }
+        card.set_locked(true);
+        QApplication::processEvents();
+        check(card.testAttribute(Qt::WA_TransparentForMouseEvents) &&
+              card.windowFlags().testFlag(Qt::WindowDoesNotAcceptFocus) && strip->isVisible(),
+              "locked helper indicators retain click-through and cannot steal game focus");
+        card.hide();
+        wardogs::i18n::set_language(wardogs::UiLanguage::russian);
+    }
+    wardogs::i18n::set_language(original_language);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -609,6 +693,7 @@ int main(int argc, char* argv[]) {
     qputenv("QT_QPA_FONTDIR", (QString::fromWCharArray(windows_directory) +
                               QStringLiteral("\\Fonts")).toUtf8());
     QApplication app(argc, argv);
+    check_pinned_helpers_status();
     if (!native_geometry)
         check(QGuiApplication::primaryScreen() &&
                   QGuiApplication::primaryScreen()->name() == QStringLiteral("pinned-fixture-screen") &&

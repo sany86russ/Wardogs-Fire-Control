@@ -16,9 +16,11 @@ MODES = (
     ('pinned', '--pinned-ui-snapshot'),
     ('pinned-locked', '--pinned-locked-ui-snapshot'),
     ('pinned-menu', '--pinned-menu-ui-snapshot'),
+    ('pinned-helpers', '--pinned-helpers-ui-snapshot'),
     ('vehicle-pinned', '--vehicle-pinned-ui-snapshot'),
     ('vehicle-pinned-locked', '--vehicle-pinned-locked-ui-snapshot'),
     ('vehicle-pinned-menu', '--vehicle-pinned-menu-ui-snapshot'),
+    ('vehicle-pinned-helpers', '--vehicle-pinned-helpers-ui-snapshot'),
 )
 CONTEXT_NAMES = {
     'caption': 'pinnedContextCaption',
@@ -220,6 +222,45 @@ def verify_snapshot(path, language, scale, mode):
             widget_surface('pinnedWeaponCaption', widget, label=True, text=True)
             check(widget.get('text') == ('SPH-2' if vehicle else 'L81'),
                   'Mini-card header must identify the actual calculated weapon')
+        helper_fixture = mode.endswith('-helpers')
+        helper_rows = []
+        for name, caption, key, selected in (
+                ('pinnedBuildHelperStatus', 'Build helper', 'Ctrl+F6', helper_fixture and not vehicle),
+                ('pinnedTeamPikerStatus', 'Team Piker', 'Shift+F7', helper_fixture and vehicle)):
+            for widget in named(name):
+                widget_surface(name, widget, label=True, text=True)
+                helper_rows.append(widget)
+                check(caption in widget.get('text', ''), f'{name}: helper name is missing')
+                expected_state = 'running' if selected else 'ready' if helper_fixture else 'off'
+                check(widget.get('active') is selected and widget.get('helperState') == expected_state,
+                      f'{name}: actual active indicator/state differs from the fixture')
+                state_caption = {
+                    'ru': {'off': 'Выкл.', 'ready': 'Готов', 'running': 'Работает'},
+                    'en': {'off': 'Off', 'ready': 'Ready', 'running': 'Running'},
+                }[language][expected_state]
+                check(state_caption in widget.get('text', ''),
+                      f'{name}: state must be stated explicitly in the chosen language')
+                if helper_fixture:
+                    check(key in widget.get('text', ''),
+                          f'{name}: custom assigned key must be visible rather than a hardcoded default')
+                if selected:
+                    check('▶' in widget.get('text', ''),
+                          f'{name}: active state needs a visible marker in addition to its color')
+                check(widget.get('accessibleDescription') == widget.get('text'),
+                      f'{name}: accessible status must include the full helper name, key and state')
+        check(sum(widget.get('active') is True for widget in helper_rows) == (1 if helper_fixture else 0),
+              'Exactly the expected single helper must be active on the mini-card')
+        strips = named('pinnedHelpersStatus')
+        if len(strips) == 1:
+            strip = strips[0].get('snapshot_rect')
+            if isinstance(strip, dict):
+                for widget in helper_rows:
+                    bounds = widget.get('snapshot_rect')
+                    if isinstance(bounds, dict):
+                        check(bounds['x'] >= strip['x'] and bounds['y'] >= strip['y'] and
+                              bounds['x'] + bounds['width'] <= strip['x'] + strip['width'] and
+                              bounds['y'] + bounds['height'] <= strip['y'] + strip['height'],
+                              'Both passive helper indicators must fit completely inside their strip')
         hotkey = receipt.get('pinned_unlock_hotkey')
         check(isinstance(hotkey, str) and bool(hotkey.strip()),
               'Mini-card must record its actual recovery shortcut')
@@ -304,7 +345,7 @@ def verify_directory(evidence, capture_errors=()):
                 print(f'FAIL: {result["file"]}: {error}')
         else:
             print(f'PASS: {result["file"]}: native commands, context and controls remain visible and readable')
-    return {'boundary': '36 actual native mini-card/popup views, RU/EN, factors 1/1.5/2; '
+    return {'boundary': '48 actual native mini-card/popup views, RU/EN, factors 1/1.5/2; '
                         'no physical mixed-monitor, gameplay accuracy or real fullscreen proof.',
             'screenshots': results, 'capture_errors': list(capture_errors),
             'failures': sum(bool(result['errors']) for result in results) + len(capture_errors)}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wardogs/pinned_preferences.hpp"
+#include "wardogs/game_helpers.hpp"
 #include "wardogs/vehicle_ballistics.hpp"
 
 #include <QPoint>
@@ -51,6 +52,8 @@ public:
     void set_error(bool error);
     void set_context_caption(const QString& caption, const QString& detail = {});
     void set_workflow_status(const QString& caption, const QString& detail = {});
+    void set_helpers_status(const wardogs::GameHelpersPreferences& preferences,
+                            wardogs::GameHelperMode active);
     // Restore once on entering pinned mode. Later entries retain the live placement.
     void prepare_for_show(const QRect& anchor);
     // Flush the pending user gesture before the owner snapshots settings or exits.
@@ -96,6 +99,8 @@ private:
     [[nodiscard]] static Qt::CursorShape cursor_for_edges(const Edges& edges);
     void resize_from_pointer(QPoint pointer);
     void apply_font_scale();
+    void update_helpers_status();
+    void fit_helpers_text();
     [[nodiscard]] int workflow_status_extra() const;
     void update_workflow_status_layout(int previous_extra,
                                        bool preserve_result_height = true);
@@ -139,6 +144,12 @@ private:
     QLabel *distance_{}, *bearing_{}, *mortar_mil_{};
     QLabel* workflow_status_{};
     QLabel* context_caption_{};
+    QWidget* helpers_status_{};
+    QLabel* build_helper_status_{};
+    QLabel* team_helper_status_{};
+    wardogs::GameHelpersPreferences helpers_preferences_;
+    wardogs::GameHelperMode helpers_active_{wardogs::GameHelperMode::none};
+    bool helpers_initialized_{};
     VehicleSolutionWidget *low_{}, *high_{};
     bool vehicle_mode_{};
     bool dragging_{};

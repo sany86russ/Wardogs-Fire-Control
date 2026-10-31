@@ -28,6 +28,7 @@
 #include <array>
 #include <exception>
 #include <regex>
+#include <vector>
 
 namespace {
 QString qtext(const std::wstring& value) { return QString::fromStdWString(value); }
@@ -444,13 +445,17 @@ std::wstring SettingsDialog::hotkey_text(const QKeySequenceEdit* editor) {
 void SettingsDialog::accept_if_valid() {
     try {
         const auto value = settings();
-        const std::array hotkeys{
+        std::vector<wardogs::Hotkey> hotkeys{
             wardogs::parse_hotkey(value.region_hotkey), wardogs::parse_hotkey(value.base_hotkey),
             wardogs::parse_hotkey(value.target_hotkey), wardogs::parse_hotkey(value.quick_target_hotkey),
             wardogs::parse_hotkey(value.impact_hotkey), wardogs::parse_hotkey(value.ghost_arc_hotkey),
             wardogs::parse_hotkey(value.exit_game_mode_hotkey),
             wardogs::parse_hotkey(value.pinned_card.unlock_hotkey),
         };
+        if (value.game_helpers.build.enabled)
+            hotkeys.push_back(wardogs::parse_hotkey(value.game_helpers.build.hotkey));
+        if (value.game_helpers.team.enabled)
+            hotkeys.push_back(wardogs::parse_hotkey(value.game_helpers.team.hotkey));
         if (value.game_integration_enabled) wardogs::validate_global_hotkeys(hotkeys);
         else wardogs::validate_unique_hotkeys(hotkeys);
         try { wardogs::validate_ocr_coordinate_pattern(value.coordinate_pattern); }

@@ -1,0 +1,13 @@
+[
+  {"ru":"Стоп","en":"Stop"},
+  {"ru":"Помощники","en":"Helpers"},
+  {"ru":"Build helper и Team Piker · отдельные настройки","en":"Build helper and Team Piker · separate settings"},
+  {"ru":"Остановить помощников","en":"Stop helpers"},
+  {"ru":"Build helper · работает","en":"Build helper · running"},
+  {"ru":"Team Piker · работает","en":"Team Piker · running"},
+  {"ru":"Помощник остановлен: ","en":"Helper stopped: "},
+  {"ru":"Помощник остановлен","en":"Helper stopped"},
+  {"ru":"Не удалось запустить помощник: ","en":"Could not start helper: "},
+  {"ru":"Настройки помощников сохранены. Запуск — назначенной клавишей в игре.","en":"Helper settings saved. Start with the assigned shortcut in the game."},
+  {"ru":"Клавиша помощника занята. Откройте «Помощники» и назначьте другую клавишу","en":"Helper shortcut is occupied. Open Helpers and assign another shortcut"}
+]

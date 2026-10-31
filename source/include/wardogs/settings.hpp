@@ -4,6 +4,7 @@
 #include "wardogs/core.hpp"
 #include "wardogs/ghost_reticle.hpp"
 #include "wardogs/game_map.hpp"
+#include "wardogs/game_helpers_preferences.hpp"
 #include "wardogs/language.hpp"
 #include "wardogs/pinned_preferences.hpp"
 
@@ -45,6 +46,7 @@ struct AppSettings {
     std::optional<CaptureRegion> capture_region;
     PinnedCardPreferences pinned_card;
     GhostReticlePreferences ghost_reticle;
+    GameHelpersPreferences game_helpers;
 };
 
 std::filesystem::path settings_path();

@@ -29,6 +29,8 @@ MODES = (
     ('tutorial-keys', '--tutorial-keys-snapshot'),
     ('tutorial-help', '--tutorial-help-snapshot'),
     ('settings', '--settings-ui-snapshot'),
+    ('helpers', '--helpers-ui-snapshot'),
+    ('helpers-team', '--helpers-team-ui-snapshot'),
     ('recognition-hotkeys', '--recognition-hotkeys-snapshot'),
     ('recognition-reticle', '--recognition-reticle-snapshot'),
     ('recognition', '--recognition-snapshot'),
@@ -253,6 +255,21 @@ def verify_snapshot(path, language, scale, mode):
                       f'{name}: real help document is missing')
                 if name == browser_name:
                     widget_surface(name, widget)
+    elif mode in ('helpers', 'helpers-team'):
+        for tabs in named('gameHelpersTabs', visible=True):
+            check(tabs.get('count') == 2 and tabs.get('currentIndex') == (mode == 'helpers-team'),
+                  'Helpers must expose the requested one of two separate pages')
+        for name in ('helperTitle', 'helperStopped', 'helperBoundaries'):
+            for widget in named(name, visible=True):
+                widget_surface(name, widget, minimum_foreground=10, label=True, meaningful_text=True)
+        for widget in named('helperSaveButton', visible=True):
+            widget_surface('helperSaveButton', widget, minimum_foreground=10, meaningful_text=True)
+        control = 'buildHelperHold' if mode == 'helpers' else 'teamPikerInterval'
+        for widget in named(control, visible=True):
+            widget_surface(control, widget, minimum_foreground=10)
+        random = 'buildHelperRandom' if mode == 'helpers' else 'teamPikerRandom'
+        for widget in named(random, visible=True):
+            check(widget.get('checked') is (mode == 'helpers-team'), 'Unexpected randomization default')
     elif mode in SETTINGS_PAGES:
         index, control_name = SETTINGS_PAGES[mode]
         for tabs in named('settingsTabs', visible=True):

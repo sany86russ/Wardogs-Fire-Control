@@ -1,0 +1,58 @@
+[
+  {
+    "ru": "Удержание ЛКМ должно быть от 50 до 5000 мс",
+    "en": "Left-button hold must be between 50 and 5000 ms"
+  },
+  {
+    "ru": "Пауза Build helper должна быть от 20 до 10000 мс",
+    "en": "Build helper pause must be between 20 and 10000 ms"
+  },
+  {
+    "ru": "Интервал Team Piker должен быть от 100 до 10000 мс",
+    "en": "Team Piker interval must be between 100 and 10000 ms"
+  },
+  {
+    "ru": "Случайная добавка должна быть от 0 до 2000 мс; минимум не больше максимума",
+    "en": "Random addition must be between 0 and 2000 ms; minimum must not exceed maximum"
+  },
+  {
+    "ru": "Случайная задержка помощника вне заданного диапазона",
+    "en": "Helper random delay is outside the configured range"
+  },
+  {
+    "ru": "Выберите помощника перед запуском",
+    "en": "Choose a helper before starting"
+  },
+  {
+    "ru": "Ошибка обработчика отпускания ЛКМ",
+    "en": "Error in the left-button release handler"
+  },
+  {
+    "ru": "Windows не приняла отпускание ЛКМ. Остановите помощник и отпустите кнопку мыши",
+    "en": "Windows did not accept the left-button release. Stop the helper and release the mouse button"
+  },
+  {
+    "ru": "Отпустите горячую клавишу и запустите помощник заново",
+    "en": "Release the hotkey and start the helper again"
+  },
+  {
+    "ru": "Windows не приняла нажатие ЛКМ",
+    "en": "Windows did not accept the left-button press"
+  },
+  {
+    "ru": "Ошибка помощника. Цикл остановлен",
+    "en": "Helper error. The loop has stopped"
+  },
+  {
+    "ru": "Не удалось отпустить ЛКМ предыдущего цикла",
+    "en": "Could not release the left button from the previous loop"
+  },
+  {
+    "ru": "Выбранный помощник отключён в настройках",
+    "en": "The selected helper is disabled in settings"
+  },
+  {
+    "ru": "Не настроена проверка окна или отправка ЛКМ",
+    "en": "Window validation or left-button input is not configured"
+  }
+]

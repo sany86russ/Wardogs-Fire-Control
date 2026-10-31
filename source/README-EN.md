@@ -8,6 +8,8 @@ Russian is the default. The **RU / EN** header selector changes the interface im
 
 ## Using the application
 
+**Version 2.14.0:** **Helpers** opens a separate **Build helper / Team Piker** window. Build helper: **514 ms hold / 33 ms pause**, randomization off; Team Piker: **800 + 100–200 ms** between click starts. Defaults are **F6/F7**, both disabled. Preferences persist; loops remain stopped on launch. L81/SPH-2 mini cards display both helper states and actual shortcuts without start controls. [Setup and limits](docs/GAME-HELPERS-EN.md).
+
 The application checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
 
 1. Confirm the current map. Training-ground and unknown-map selections use an explicit mode without heights.
@@ -22,8 +24,11 @@ If shortcuts conflict, the UI shows the combinations actually registered. Weak o
 
 ## Documentation
 
+Helpers generate left-button input through standard Windows `SendInput`. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Publisher approval is unconfirmed, and randomization does not provide anti-cheat protection.
+
 | Guide | Contents |
 | --- | --- |
+| [Helpers](docs/GAME-HELPERS-EN.md) | Build helper, Team Piker, shortcuts, persistence and limits |
 | [Quick start](docs/QUICKSTART-EN.md) | Launching, coordinates, shortcuts, settings and troubleshooting |
 | [Calculations and limits](docs/CALCULATIONS-EN.md) | Coordinates, L81/SPH-2 tables, interpolation, elevation and local corrections |
 | [Architecture](docs/ARCHITECTURE-EN.md) | Modules, threads, storage, OCR and checks |
@@ -51,7 +56,7 @@ Settings: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. The previous profile
 
 Community `.wdt` files are excluded from the public source repository and ZIP. They are not covered by the application's MIT license; import only already available files you have rights to use. For a map using heights, a missing or damaged package blocks confirmation. No-height mode requires explicitly selecting the training ground or unknown map. See the separate [manual download of a third-party published archive and import instructions](TERRAIN_DATA_NOTICE.md). L81 has no validated elevation model.
 
-Software tests do not establish in-match hit accuracy, publisher approval or overlay visibility in exclusive fullscreen. Recognition and calculations run locally. The application does not observe the shot itself or the actual sight settings; the player performs aiming and firing.
+Software tests do not establish in-match hit accuracy, publisher approval or overlay visibility in exclusive fullscreen. Recognition and calculations run locally. The calculation workflow does not observe a physical shot or actual sight settings; the player sets the aim. Left-button helpers run separately and do not recognize the in-game action selected by the player.
 
 [MIT license](LICENSE) · [Third-party components](THIRD_PARTY_NOTICES.md) · [Terrain provenance](TERRAIN_DATA_NOTICE.md)
 

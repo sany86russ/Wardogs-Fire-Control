@@ -8,7 +8,9 @@
 
 Выбранный язык сохраняется в профиле `%LOCALAPPDATA%\WardogsFireControl\settings.ini` и используется при следующем запуске. Смена языка не изменяет язык WARDOGS, содержимое OCR, введённые координаты и горячие клавиши. Числа координат по-прежнему вводятся с десятичной точкой независимо от региональных настроек Windows. Обозначения оружия, **X/Y**, **MIL** и названия карт остаются узнаваемыми в обоих языках; **MIL** — шкала наведения, а не мили.
 
-Пользовательские руководства: [быстрый старт](QUICKSTART-RU.md), [расчёты и ограничения](CALCULATIONS-RU.md).
+В 2.14.0 переводятся также окно **Помощники**, динамические интервалы и состояния **Выкл. / Готов / Работает** на мини-карточках. Назначенные клавиши и параметры при смене языка сохраняются.
+
+Пользовательские руководства: [быстрый старт](QUICKSTART-RU.md), [помощники](GAME-HELPERS-RU.md), [расчёты и ограничения](CALCULATIONS-RU.md).
 
 ## EN
 
@@ -18,4 +20,6 @@ Select **EN** to switch to English or **RU** to return to Russian. Translation t
 
 The selected language is saved in `%LOCALAPPDATA%\WardogsFireControl\settings.ini` and used at the next launch. Changing the interface language does not change the language of WARDOGS, OCR content, entered coordinates or shortcuts. Coordinate numbers still use a decimal point independently of Windows regional settings. Weapon names, **X/Y**, **MIL** and map names remain recognizable in both languages; **MIL** is an aiming scale, not miles.
 
-User guides: [quick start](QUICKSTART-EN.md), [calculations and limitations](CALCULATIONS-EN.md).
+In 2.14.0, the **Helpers** window, dynamic timing and mini-card states **Off / Ready / Running** are translated as well. Assigned shortcuts and preferences remain unchanged when switching languages.
+
+User guides: [quick start](QUICKSTART-EN.md), [helpers](GAME-HELPERS-EN.md), [calculations and limitations](CALCULATIONS-EN.md).
