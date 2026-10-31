@@ -2,6 +2,61 @@
 
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
+## 2.14.0 — left-button helpers and mini-card states · October 31, 2026
+
+[Full release EN/RU and files](../../docs/releases/v2.14.0.md).
+
+**2.14.0 adds Build helper and Team Piker in a separate window with their own shortcuts, timing and instructions.** L81 and SPH-2 mini cards display both helper states and actual key assignments. Loops remain stopped after application startup; users enable the new helpers separately.
+
+### Main changes
+
+- **Build helper:** hold LMB for **514 ms**, release for **33 ms**, repeat until stopped. The base cycle is **547 ms**. Hold and pause are configurable. An optional random **0–30 ms** addition affects only the released phase and is disabled by default; hold duration is not randomized.
+- **Team Piker:** short **30 ms** left-button clicks at the current cursor position. The default start-to-start interval is **800 ms + a random 100–200 ms**, giving **900–1000 ms**. The press is already included in this interval; base timing and random addition can be changed, and randomness can be disabled.
+- **Helpers** opens from a separate main-window button and the tray menu. Both tabs include descriptions, shortcut/timing fields, a current cycle summary and instructions. They are separate from calculation and coordinate-recognition settings.
+- Initial assignments are **F6** for Build helper and **F7** for Team Piker. Both shortcuts are disabled in a fresh profile. Keys are configurable; F12, Win combinations and enabled-helper/artillery duplicates are rejected. Helper assignments are never automatically changed after a Windows conflict.
+- The same assigned key starts and stops its loop. The first click waits for release of the shortcut, modifiers and LMB; holding activation for more than three seconds cancels startup. Only one helper runs at a time: switching stops and releases the previous mode first.
+- Changing the active window, application pause, opening settings or closing stops the helper. Separate stop commands are available in the app and tray. Returning to the game or resuming the application does not restart clicks.
+- Shortcuts, enable choices, hold, pause, interval and randomization are saved in the Windows-profile `settings.ini`. Running state is never restored; both loops are stopped after launch. Existing valid timing preferences are retained rather than overwritten by the new preset.
+- Malformed settings use bounded defaults without rewriting the original profile. Validation or saving failures cannot partially replace prior settings; unknown keys and the original legacy profile are retained during migration.
+
+### Mini-card states
+
+- Both **L81 and SPH-2** gain a compact strip for both helpers and their actual shortcuts. **Off** means the shortcut is disabled, **Ready** means enabled but stopped, and **Running** identifies and highlights the active loop.
+- The strip is read-only. Clicking it does not start, switch or stop a helper; use the assigned shortcut or application commands. Statuses do not replace bearing/MIL, affect corrections or confirm an in-game hammer hit.
+- L81/SPH-2 calculations, both arcs, coordinate OCR, **Alt+I** ranging, history, local elevations and saved points are retained. Periodic sight reading removed in 2.13.2 does not return. These additions do not recalibrate ballistics or establish a hit percentage.
+
+### Getting started
+
+1. Open **Helpers**, select a tab and enable its shortcut.
+2. Assign a combination, check timing and click **Save**.
+3. Return to WARDOGS, equip the desired tool and aim at the object. Press and release the shortcut to start.
+4. Press it again to stop. After switching away and returning to the game, start the loop explicitly again.
+
+[Full instructions](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/source/docs/GAME-HELPERS-EN.md) · [Quick start](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/source/docs/QUICKSTART-EN.md) · [Settings and workflow](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/source/docs/USAGE-EN.md).
+
+### Standard Windows input and game rules
+
+Helpers use documented **Windows `SendInput`** for ordinary left-button press/release events. They do not move the cursor, read game memory, inject code, install a driver, elevate privileges or conceal synthetic events. A Windows refusal stops the loop without trying a different input mechanism.
+
+Every new press rechecks the original HWND, visibility, non-minimized state and current input-receiving desktop. The worker checks the window every **10 ms**; desktop switching/locking stops new presses. An accepted press is released even after focus loss; a known rejected press does not generate a spurious release. Window caption/class metadata do not authenticate the game process, and a short foreground-switch race cannot be eliminated completely.
+
+**WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Publisher approval for these helpers is unconfirmed. Randomization does not provide anti-cheat protection.** [Official policy](https://www.wardogs.com/enforcement) · [System interaction and limits](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/source/docs/ANTICHEAT-EN.md).
+
+[Steam](https://steamcommunity.com/app/1867240/discussions/0/562541966849565845/) and [Reddit](https://www.reddit.com/r/WarDogs/comments/1wf8elq/is_hammer_animation_cancel_an_exploit/) discussions describe releasing LMB after hammer contact, but do not establish universal **514/33 ms** timing. The project owner selected this preset; our field testing has not established its effectiveness in the current game. This is a game utility, not a tool for real weapons.
+
+### Validation and limits
+
+The local Release build and 38 CTest suites passed; a separate planning check runs only on the isolated Windows runner. RU/EN catalogue validation covered 1219 application messages and 148 Qt messages with no defects. Before a tag is published, the workflow runs the full CTest suite, native snapshots at multiple scales, packaging and an update/restart check; results are available in [GitHub Actions](https://github.com/sany86russ/Wardogs-Fire-Control/actions). Screenshots show the actual native application with synthetic coordinates and helper states. Capture does not use the game or send real LMB input; images do not establish hit accuracy, faster construction or anti-cheat approval.
+
+### Updating and retaining data
+
+From **2.8.0 or newer**: **Check for updates → What's new / Update**. The updater validates the complete ZIP, SHA-256 and manifest, exits, replaces the package and restarts the app. Helper preferences, settings, imported elevations, saved points, `planning.ini`, profiles and logs remain in `%LOCALAPPDATA%\WardogsFireControl`. Unknown user files are preserved. After restart, confirm the map and set the current solution again; both helper loops remain stopped.
+
+For first installation, **2.7.0 or earlier**, or manual recovery, extract the **entire** `WardogsFireControl-v2.14.0-win-x64.zip` into a separate folder. A single EXE cannot replace DLLs, models, TLS and the updater helper. For rollback, retain the previous complete package and a profile backup made with the app closed; do not mix DLL versions. [Updating and rollback](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/docs/UPDATES-EN.md).
+
+Previous release history remains in the [complete English changelog](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.14.0/source/docs/RELEASE-NOTES-EN.md).
+
+
 ## 2.13.2 — calculation and ranging without background HUD reading · October 13, 2026
 
 This stable release combines the final changes since the published 2.13.0. Changes were prepared on October 12; candidate 2.13.1 was not published as a separate stable release. [Complete 2.13.2 release EN/RU](../../docs/releases/v2.13.2.md).

@@ -756,7 +756,7 @@ public:
                 wardogs::i18n::text(QStringLiteral("Диагностика")), problem, QMessageBox::Ok, this);
         }
         else if (mode == QStringLiteral("pinned") || mode == QStringLiteral("pinned-menu") ||
-                 mode == QStringLiteral("pinned-locked")) {
+                 mode == QStringLiteral("pinned-locked") || mode == QStringLiteral("pinned-helpers")) {
             enter_pinned_mode(); view = pinned_window_.get();
             if (mode == QStringLiteral("pinned-locked")) pinned_window_->set_locked(true);
         }
@@ -879,6 +879,16 @@ public:
             QApplication::processEvents();
             if (!view->isVisible() || QApplication::activePopupWidget() != view) return false;
         }
+        if (mode == QStringLiteral("pinned-helpers") || mode == QStringLiteral("vehicle-pinned-helpers")) {
+            auto sample = settings_.game_helpers;
+            sample.build.enabled = sample.team.enabled = true;
+            sample.build.hotkey = L"Ctrl+F6";
+            sample.team.hotkey = L"Shift+F7";
+            // Display-only fixture. No runner or synthetic input is started.
+            pinned_window_->set_helpers_status(sample, mode == QStringLiteral("pinned-helpers")
+                ? wardogs::GameHelperMode::build : wardogs::GameHelperMode::team);
+            QApplication::processEvents();
+        }
         const QFileInfo file(path);
         if (!QDir().mkpath(file.absolutePath())) return false;
         QJsonArray widgets;
@@ -908,6 +918,10 @@ public:
                 const auto value = widget->property(property).toString();
                 if (!value.isEmpty()) item.insert(QString::fromLatin1(property), value);
             }
+            if (widget->property("active").isValid())
+                item.insert(QStringLiteral("active"), widget->property("active").toBool());
+            if (widget->property("helperState").isValid())
+                item.insert(QStringLiteral("helperState"), widget->property("helperState").toString());
             if (auto* label = qobject_cast<QLabel*>(widget)) {
                 item.insert(QStringLiteral("wordWrap"), label->wordWrap());
                 const QFontMetrics metrics(label->font());
@@ -2307,6 +2321,42 @@ public:
         }
         enter_pinned_mode(); QApplication::processEvents();
         check("pinned_card_visible", pinned_mode_ && pinned_window_->isVisible());
+        {
+            const auto saved_helpers = settings_.game_helpers;
+            settings_.game_helpers.build.enabled = settings_.game_helpers.team.enabled = true;
+            settings_.game_helpers.build.hotkey = L"Ctrl+F6";
+            settings_.game_helpers.team.hotkey = L"Shift+F7";
+            auto* build_status = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedBuildHelperStatus"));
+            auto* team_status = pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedTeamPikerStatus"));
+            std::atomic_bool helper_foreground{true};
+            const wardogs::GameHelperPlatform mock_platform{
+                [&] { return helper_foreground.load(); }, [](bool) { return true; }, [] { return true; }};
+            for (const auto mode : {wardogs::GameHelperMode::build, wardogs::GameHelperMode::team}) {
+                game_helper_.start(mode, settings_.game_helpers, mock_platform);
+                update_game_helper_status();
+                check(mode == wardogs::GameHelperMode::build
+                        ? "pinned_build_status_tracks_actual_worker_and_custom_key"
+                        : "pinned_team_status_tracks_actual_worker_and_custom_key",
+                    build_status && team_status && build_status->text().contains(QStringLiteral("Ctrl+F6")) &&
+                    team_status->text().contains(QStringLiteral("Shift+F7")) &&
+                    build_status->property("active").toBool() == (mode == wardogs::GameHelperMode::build) &&
+                    team_status->property("active").toBool() == (mode == wardogs::GameHelperMode::team));
+            }
+            helper_foreground = false;
+            for (int attempt = 0; game_helper_.running() && attempt < 100; ++attempt) {
+                QApplication::processEvents(); Sleep(2);
+            }
+            update_game_helper_status();
+            check("pinned_helpers_clear_highlight_after_worker_focus_loss",
+                !game_helper_.running() && build_status && team_status &&
+                !build_status->property("active").toBool() && !team_status->property("active").toBool());
+            game_helper_.stop();
+            settings_.game_helpers = saved_helpers;
+            update_game_helper_status();
+            check("pinned_helpers_restore_disabled_state_without_starting_input",
+                build_status && team_status && build_status->property("helperState").toString() == QStringLiteral("off") &&
+                team_status->property("helperState").toString() == QStringLiteral("off"));
+        }
         const auto main_geometry_before_pin_test = geometry();
         const auto available = screen()->availableGeometry();
         pinned_window_->resize(pinned_window_->size().expandedTo(QSize(480, 230)));
@@ -5666,6 +5716,7 @@ private:
     void sync_pinned_result() {
         update_readiness();
         if (!pinned_window_) return;
+        sync_pinned_helpers();
         pinned_window_->set_mode(vehicle_mode_);
         if (vehicle_mode_)
             pinned_window_->set_vehicle_values(*low_solution_, *high_solution_);
@@ -6703,7 +6754,12 @@ private:
             settings_.game_integration_enabled) enter_game_mode();
     }
 
+    void sync_pinned_helpers() {
+        if (pinned_window_) pinned_window_->set_helpers_status(settings_.game_helpers, game_helper_.mode());
+    }
+
     void update_game_helper_status() {
+        sync_pinned_helpers();
         const auto mode = game_helper_.mode();
         const auto reason = game_helper_.stop_reason();
         const auto error = game_helper_.last_error();
@@ -7398,7 +7454,9 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("tutorial-keys"), QStringLiteral("tutorial-help"), QStringLiteral("workspace-ui"),
                             QStringLiteral("first-start-ui"), QStringLiteral("workspace-sidebar-ui"),
                             QStringLiteral("standalone-ui"),
-                            QStringLiteral("pinned-menu-ui"), QStringLiteral("pinned-locked-ui"), QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
+                            QStringLiteral("pinned-menu-ui"), QStringLiteral("pinned-locked-ui"),
+                            QStringLiteral("pinned-helpers-ui"), QStringLiteral("vehicle-pinned-helpers-ui"),
+                            QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),
                             QStringLiteral("folder-ui"), QStringLiteral("error-ui"),

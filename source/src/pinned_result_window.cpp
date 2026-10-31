@@ -11,6 +11,7 @@
 #include <QContextMenuEvent>
 #include <QCursor>
 #include <QFrame>
+#include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHoverEvent>
@@ -49,6 +50,7 @@ constexpr double minimum_font_scale = 0.78;
 constexpr double maximum_font_scale = 2.5;
 constexpr int header_height = 28;
 constexpr int header_extra = header_height + 6;
+constexpr int helpers_status_height = 46;
 
 QSize minimum_size(bool vehicle) { return vehicle ? QSize{480, 128 + header_extra} : QSize{320, 96 + header_extra}; }
 QSize default_size(bool vehicle) { return vehicle ? QSize{540, 148 + header_extra} : QSize{430, 112 + header_extra}; }
@@ -410,9 +412,33 @@ PinnedResultWindow::PinnedResultWindow(
     workflow_status_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Состояние считывания координат")));
     layout->addWidget(workflow_status_);
     workflow_status_->hide();
+    helpers_status_ = new QWidget(frame_);
+    helpers_status_->setObjectName(QStringLiteral("pinnedHelpersStatus"));
+    helpers_status_->setFixedHeight(helpers_status_height);
+    helpers_status_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    helpers_status_->setFocusPolicy(Qt::NoFocus);
+    auto* helpers_layout = new QVBoxLayout(helpers_status_);
+    helpers_layout->setContentsMargins(0, 0, 0, 0);
+    helpers_layout->setSpacing(2);
+    const auto helper_label = [this, helpers_layout](const QString& name) {
+        auto* label = new QLabel(helpers_status_);
+        label->setObjectName(name);
+        label->setTextFormat(Qt::PlainText);
+        label->setTextInteractionFlags(Qt::NoTextInteraction);
+        label->setAttribute(Qt::WA_TransparentForMouseEvents);
+        label->setFocusPolicy(Qt::NoFocus);
+        label->setFixedHeight(22);
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        helpers_layout->addWidget(label);
+        return label;
+    };
+    build_helper_status_ = helper_label(QStringLiteral("pinnedBuildHelperStatus"));
+    team_helper_status_ = helper_label(QStringLiteral("pinnedTeamPikerStatus"));
+    layout->addWidget(helpers_status_);
+    set_helpers_status(helpers_preferences_, wardogs::GameHelperMode::none);
     outer->addWidget(frame_);
-    setMinimumSize(minimum_size(false));
-    resize(mode_sizes_[false]);
+    setMinimumSize(minimum_size(false) + QSize(0, workflow_status_extra()));
+    resize(mode_sizes_[false] + QSize(0, workflow_status_extra()));
     build_context_menu();
     apply_font_scale();
     apply_mouse_transparency();
@@ -867,6 +893,7 @@ QWidget* PinnedResultWindow::result_card(const QString& color, const QString& ca
 bool PinnedResultWindow::event(QEvent* event) {
     if (event->type() == QEvent::LanguageChange) {
         update_lock_control();
+        update_helpers_status();
         set_ghost_enabled(ghost_enabled_);
         set_ghost_opacity_percent(ghost_opacity_percent_);
         if (opacity_slider_)
@@ -1045,7 +1072,80 @@ int PinnedResultWindow::workflow_status_extra() const {
         ? context_caption_->height() + 6 : 0;
     const int workflow = workflow_status_ && !workflow_status_->isHidden()
         ? workflow_status_->height() + 6 : 0;
-    return context + workflow;
+    // This always-visible strip owns its own space. Persisted mode_sizes still
+    // describe the command canvas, so adding it does not shrink old results or
+    // add its height again when the saved card is reconstructed next launch.
+    const int helpers = helpers_status_ ? helpers_status_height + 6 : 0;
+    return context + workflow + helpers;
+}
+
+void PinnedResultWindow::set_helpers_status(
+    const wardogs::GameHelpersPreferences& preferences, wardogs::GameHelperMode active) {
+    const auto effective =
+        (active == wardogs::GameHelperMode::build && preferences.build.enabled) ||
+        (active == wardogs::GameHelperMode::team && preferences.team.enabled)
+            ? active : wardogs::GameHelperMode::none;
+    if (helpers_initialized_ && helpers_preferences_ == preferences && helpers_active_ == effective)
+        return;
+    helpers_preferences_ = preferences;
+    helpers_active_ = effective;
+    helpers_initialized_ = true;
+    update_helpers_status();
+}
+
+void PinnedResultWindow::update_helpers_status() {
+    if (!build_helper_status_ || !team_helper_status_) return;
+    const auto update = [this](QLabel* label, const QString& name,
+                                const std::wstring& hotkey, bool enabled,
+                                wardogs::GameHelperMode mode) {
+        const bool running = enabled && helpers_active_ == mode;
+        const QString state = !enabled ? QStringLiteral("off")
+            : running ? QStringLiteral("running") : QStringLiteral("ready");
+        const QString caption = wardogs::i18n::text(!enabled ? QStringLiteral("Выкл.")
+            : running ? QStringLiteral("Работает") : QStringLiteral("Готов"));
+        const QString icon = running ? QStringLiteral("▶")
+            : enabled ? QStringLiteral("○") : QStringLiteral("–");
+        const QString text = QStringLiteral("%1 %2 · %3 · %4")
+            .arg(icon, name, QString::fromStdWString(hotkey), caption);
+        label->setText(text);
+        label->setToolTip(text);
+        label->setAccessibleName(text);
+        label->setAccessibleDescription(text);
+        label->setProperty("active", running);
+        label->setProperty("helperState", state);
+    };
+    update(build_helper_status_, QStringLiteral("Build helper"), helpers_preferences_.build.hotkey,
+           helpers_preferences_.build.enabled, wardogs::GameHelperMode::build);
+    update(team_helper_status_, QStringLiteral("Team Piker"), helpers_preferences_.team.hotkey,
+           helpers_preferences_.team.enabled, wardogs::GameHelperMode::team);
+    fit_helpers_text();
+}
+
+void PinnedResultWindow::fit_helpers_text() {
+    if (!build_helper_status_ || !team_helper_status_) return;
+    // Keep status independent of the large ballistic numerals. Long custom
+    // chords still fit at the narrow card width without eliding the real key.
+    const int available = std::max(1, width() - 36);
+    int pixels = std::clamp(qRound(width() / 40.0), 10, 12);
+    QFont font(QStringLiteral("Segoe UI"));
+    font.setPixelSize(pixels);
+    font.setWeight(QFont::Medium);
+    while (pixels > 9 && (QFontMetrics(font).horizontalAdvance(build_helper_status_->text()) > available ||
+                          QFontMetrics(font).horizontalAdvance(team_helper_status_->text()) > available))
+        font.setPixelSize(--pixels);
+    for (auto* label : {build_helper_status_, team_helper_status_}) {
+        const bool running = label->property("active").toBool();
+        const bool enabled = label->property("helperState").toString() != QStringLiteral("off");
+        const QString foreground = running ? QStringLiteral("#8af3dc")
+            : enabled ? QStringLiteral("#c2d6e8") : QStringLiteral("#91a5bd");
+        const QString background = running ? QStringLiteral("#123c3b")
+            : enabled ? QStringLiteral("#172a3b") : QStringLiteral("#14202e");
+        const QString border = running ? QStringLiteral("#2faaa0") : QStringLiteral("#24364b");
+        label->setStyleSheet(QStringLiteral(
+            "color:%1;background:%2;border:1px solid %3;border-radius:5px;"
+            "padding:2px 6px;font-family:'Segoe UI';font-size:%4px;font-weight:500;")
+                .arg(foreground, background, border).arg(pixels));
+    }
 }
 
 void PinnedResultWindow::set_context_caption(const QString& caption, const QString& detail) {
@@ -1152,6 +1252,7 @@ void PinnedResultWindow::resize_from_pointer(QPoint pointer) {
 void PinnedResultWindow::apply_font_scale() {
     if (applying_font_scale_) return;
     applying_font_scale_ = true;
+    fit_helpers_text();
     const auto base = default_size(vehicle_mode_);
     const auto requested_scale = [&] {
         return std::clamp(

@@ -4,20 +4,20 @@
 
 **A WARDOGS mortar and artillery calculator for L81 and SPH-2, on Windows 10/11 x64.** Calculate range, bearing and MIL from map coordinates, select an SPH-2 arc and optionally refine aim from an actual impact. Enter coordinates manually or capture them with local OCR; view the solution in the main window or an always-on-top mini card.
 
-[![Version](https://img.shields.io/badge/version-2.13.2-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.14.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-update)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#interface-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
 
 [Русский](README.md) · **English** · [Download for Windows](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Quick start](source/docs/QUICKSTART-EN.md) · [Report an issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
 
-**Version 2.13.2:** periodic reading of the in-game sight display (HUD) and its colour statuses have been removed. Coordinate OCR, calculations, the mini card, auxiliary reticle and **Alt+I** ranging are retained. [Full release EN/RU](docs/releases/v2.13.2.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
+**Version 2.14.0:** a separate **Build helper / Team Piker** window, persistent shortcuts and timing, and both helper statuses on L81 and SPH-2 mini cards. Helpers are enabled separately; their loops remain stopped after launch. [Full release EN/RU](docs/releases/v2.14.0.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
 
-![WARDOGS Fire Control 2.13.2 main window — SPH-2 calculation and ranging in English](docs/screenshots/en-main-2.13.2.png)
+![WARDOGS Fire Control 2.14.0 main window — calculation and separate Helpers button](docs/screenshots/en-main-2.14.0.png)
 
-The screenshot is from the actual app in Windows CI: a synthetic **2200 m** SPH-2 target and a correction example. It demonstrates the interface, not an in-game firing result.
+A native screenshot of the actual app. Demonstration coordinates and statuses are synthetic; capture does not use the game or send game input. It does not validate hit accuracy.
 
-> An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. The game developer's approval of OCR, shortcuts and overlays has not been established; freedom from sanctions is not guaranteed. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
+> An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. Publisher approval for OCR, overlays and left-button automation has not been established. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Randomization does not provide anti-cheat protection. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
 
 ## Contents
 
@@ -28,6 +28,7 @@ The screenshot is from the actual app in Windows CI: a synthetic **2200 m** SPH-
 - [SPH-2 ranging](#sph-2-ranging)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Interface and settings](#interface-and-settings)
+- [Build helper and Team Piker](#build-helper-and-team-piker)
 - [Maps and elevations](#maps-and-elevations)
 - [OCR and coordinate review](#ocr-and-coordinate-review)
 - [How the calculations work](#how-the-calculations-work)
@@ -54,6 +55,7 @@ The screenshot is from the actual app in Windows CI: a synthetic **2200 m** SPH-
 | **Positions and flight** | Target shifts, saved points, ground profiles and personal flight-time observations |
 | **History** | Up to 12 session targets, 64 recent accepted points and 500 named records |
 | **Capture pause** | **Ctrl+Alt+P** releases capture shortcuts, F4 and middle-click while retaining the solution |
+| **Build helper / Team Piker** | A separate left-button helper window, configurable shortcuts and timing, persistent preferences and stop on window changes |
 | **Russian and English** | Interface and help switching without a restart |
 | **GitHub updates** | New-version checks and complete-package installation with SHA-256 verification |
 
@@ -64,7 +66,7 @@ The app calculates aiming values. The player sets bearing and MIL, fires and che
 **Requirements:** Windows 10/11 x64. Running the app does not require administrator privileges, Qt SDK, Visual Studio or Python.
 
 1. Open the [latest stable release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Under **Assets**, download **WardogsFireControl-v2.13.2-win-x64.zip**.
+2. Under **Assets**, download **WardogsFireControl-v2.14.0-win-x64.zip**.
 3. **Extract the complete ZIP** to a separate folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** from that folder.
 
@@ -75,13 +77,13 @@ Do not move only the EXE: the other DLLs and the `platforms` and `models` folder
 Compare the result with **SHA256SUMS.txt** from the same release:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.13.2-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.14.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 With GitHub CLI installed, you can also verify the build's origin:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.13.2-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.14.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Update inside the app
@@ -151,13 +153,13 @@ After observations at at least three distinct targets from a stationary gun, a c
 
 The app does not observe firing, actual sight settings or chassis tilt. Alt+I refers to the command displayed when reading starts. If the chassis changes attitude at the same coordinates, **reset corrections manually**. [Ranging calculations and limits](source/docs/SPH2-VALIDATION-EN.md).
 
-![WARDOGS Fire Control 2.13.2 mini card — SPH-2 aiming values in English](docs/screenshots/en-card-2.13.2.png)
+![SPH-2 mini card 2.14.0 — aiming values and helper statuses](docs/screenshots/en-vehicle-pinned-helpers-2.14.0.png)
 
-The card shows a separate synthetic **1562 m** target, different from the main-window example.
+The card shows a synthetic solution and demonstration helper statuses. The strip displays actual assigned shortcuts; highlighting indicates a running loop, not a confirmed in-game hammer hit.
 
 ## Keyboard shortcuts
 
-These are **defaults**. If a Windows shortcut conflicts, the app selects an available alternative; effective combinations are shown in the interface and help.
+These are **defaults**. Occupied artillery shortcuts can use an available alternative shown by the app. Helper shortcuts are never replaced automatically; choose available combinations in their separate window.
 
 | Action | Shortcut |
 |---|---|
@@ -171,6 +173,8 @@ These are **defaults**. If a Windows shortcut conflicts, the app selects an avai
 | Select a custom OCR region | **Alt+R** |
 | Target from chat or a custom region | **Alt+T** |
 | Temporarily select a line and read the target | **Alt+V** |
+| Start / stop Build helper, after enabling its shortcut | **F6** |
+| Start / stop Team Piker, after enabling its shortcut | **F7** |
 
 Configure capture combinations under **Settings → Shortcuts**. If the complete supported set cannot be registered, the app displays an error and rolls registration back. Game capture requires the active WARDOGS window; global registration still reserves the combinations. Pause releases capture shortcuts, F4 and middle-click; return, unlock and resume controls remain available.
 
@@ -188,6 +192,27 @@ Configure capture combinations under **Settings → Shortcuts**. If the complete
 Drag the mini card to move it and drag its edges to resize it. It remembers the monitor, placement and separate L81/SPH-2 sizes. **Right-click the card** to control opacity, locking, the reticle and **Always on top**. A locked card passes clicks to the game; unlock it before using its buttons.
 
 **Positions and flight** opens target shifts, recent and named points, ground profiles and personal flight-time observations. Shifting left/right/closer/farther by **10/25/50/100 m** changes target coordinates; it is separate from ranging. Restore saved points explicitly after confirming the map; old ranging corrections are not restored automatically.
+
+## Build helper and Team Piker
+
+**Helpers** in the main window and tray menu opens a separate **Build helper / Team Piker** tabbed window. These settings are separate from artillery calculations.
+
+1. Select a tab and enable its shortcut. Both helpers are disabled in a fresh profile.
+2. Assign a key: defaults are **F6** and **F7**. Set the timing and click **Save**.
+3. Return to WARDOGS, equip the desired tool and aim at the object. Press and release the assigned shortcut to start the loop.
+4. Press it again to stop. **Stop helpers**, application pause, opening settings, changing the active window and closing the app also stop it. Returning to the game does not resume clicks.
+
+| Helper | Initial settings | Additional settings |
+|---|---|---|
+| **Build helper** | Hold LMB for **514 ms**, release for **33 ms**; **547 ms** cycle | Hold and pause; optional random **0–30 ms** pause addition, disabled by default |
+| **Team Piker** | A **30 ms** click; **800 + 100–200 ms** between click starts, giving **900–1000 ms** | Base interval, randomization switch and addition range |
+
+Shortcuts, timing and switches persist, but both loops remain stopped after a fresh app launch. Only one helper runs at a time. A read-only strip on both **L81 and SPH-2** mini cards shows each helper's state and actual assigned shortcut; the active mode is highlighted. Clicking the strip does not start input.
+
+![Build helper 2.14.0 — hold, pause and assigned shortcut](docs/screenshots/en-helpers-build-2.14.0.png)
+![Team Piker 2.14.0 — interval and random addition](docs/screenshots/en-helpers-team-2.14.0.png)
+
+Helpers use ordinary `SendInput`, checking the exact foreground window and active desktop; they do not elevate privileges or conceal synthetic events. This does not establish publisher permission or protection from sanctions. The project owner selected **514/33**; hammer-release discussions do not establish universal timing. [Detailed setup and limits](source/docs/GAME-HELPERS-EN.md).
 
 ## Maps and elevations
 
@@ -224,7 +249,7 @@ The link is pinned to the compatible **v1.4.0** pack; new or arbitrarily modifie
 
 The main workflow uses **Paddle PP-OCRv6 Small through RapidOCR / ONNX Runtime on the CPU**. The model is bundled and recognition is local. Optional **Windows OCR** is for a custom region and needs a suitable English Windows OCR component; selecting it does not change the main Alt+X and middle-click paths.
 
-**Alt+X** searches for a complete pair in the active chat draft, not old messages. In the quick workflow, targets and impacts use separate labelled **X/Y** fields in a bounded cursor neighbourhood inside the active game window. Automatic acceptance requires two trustworthy matching pairs from separate screenshots with consistent context; a request is limited to **four frames**. Version 2.13.2 has no periodic sight-HUD reading or continuous screen scanning.
+**Alt+X** searches for a complete pair in the active chat draft, not old messages. In the quick workflow, targets and impacts use separate labelled **X/Y** fields in a bounded cursor neighbourhood inside the active game window. Automatic acceptance requires two trustworthy matching pairs from separate screenshots with consistent context; a request is limited to **four frames**. Version 2.14.0 has no periodic sight-HUD reading or continuous screen scanning.
 
 Clipped, weak or competing pairs open review. The previous command is hidden until reading is resolved. Repeating capture can replace an uncertain result; choose or correct a pair in the main window and accept it explicitly. **Reject** restores the previous solution. A changed task prevents late OCR from replacing the new target.
 
@@ -249,7 +274,7 @@ Automatic ground assessment checks the selected arc's **baseline model trajector
 
 ## Local data and privacy
 
-Calculations, OCR and terrain processing run on your PC. The app does not read game memory, inject code, control the sight or fire. Main game captures stay inside the active WARDOGS window; additional OCR reads a user-selected screen region. This does not establish anti-cheat approval. The clipboard is read when you click **Paste**, without background monitoring.
+Calculations, OCR and terrain processing run on your PC. The app does not read game memory or inject code. The player sets the sight. Separately enabled helpers send ordinary left-button events through Windows `SendInput`; they do not recognize the equipped tool or conceal synthetic input. Main game captures stay inside the active WARDOGS window; additional OCR reads a user-selected screen region. This does not establish anti-cheat approval. The clipboard is read when you click **Paste**, without background monitoring.
 
 Profile: `%LOCALAPPDATA%\WardogsFireControl`.
 
@@ -271,20 +296,23 @@ Logs contain OCR and calculation diagnostics and may include game coordinates an
 
 ## RU and EN screenshots
 
-All screenshots below are from the **actual 2.13.2 app on an isolated Windows runner**. Coordinates and correction examples are synthetic; the images show the interface and do not establish in-game accuracy.
+Native screenshots of the actual **2.14.0** application with synthetic calculations and helper states. Capture does not use the game or send real left-button input; images do not establish in-game accuracy or anti-cheat approval.
 
 | Window | Русский | English |
 |---|---|---|
-| Main SPH-2 calculation and ranging | [Открыть](docs/screenshots/ru-main-2.13.2.png) | [Open](docs/screenshots/en-main-2.13.2.png) |
-| SPH-2 mini card | [Открыть](docs/screenshots/ru-card-2.13.2.png) | [Open](docs/screenshots/en-card-2.13.2.png) |
-| Settings | [Открыть](docs/screenshots/ru-settings-2.13.2.png) | [Open](docs/screenshots/en-settings-2.13.2.png) |
-| Help and first solution | [Открыть](docs/screenshots/ru-help-2.13.2.png) | [Open](docs/screenshots/en-help-2.13.2.png) |
+| Main window | [Открыть](docs/screenshots/ru-main-2.14.0.png) | [Open](docs/screenshots/en-main-2.14.0.png) |
+| Build helper | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
+| Team Piker | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
+| L81 mini card and helpers | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |
+| SPH-2 mini card and helpers | [Открыть](docs/screenshots/ru-vehicle-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-vehicle-pinned-helpers-2.14.0.png) |
 
 <details>
-<summary>Settings and help in English</summary>
+<summary>Historical 2.13.2 settings and help</summary>
 
-![WARDOGS Fire Control 2.13.2 settings in English](docs/screenshots/en-settings-2.13.2.png)
-![WARDOGS Fire Control 2.13.2 help — first solution in English](docs/screenshots/en-help-2.13.2.png)
+These retained images document the previous version and do not show the new 2.14.0 features.
+
+![EN settings 2.13.2](docs/screenshots/en-settings-2.13.2.png)
+![EN help 2.13.2](docs/screenshots/en-help-2.13.2.png)
 
 </details>
 

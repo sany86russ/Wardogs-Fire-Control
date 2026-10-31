@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.13.2 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.14.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -20,7 +20,7 @@ qt_add_resources(wardogs_i18n localization
     BASE translations
     FILES translations/main.json translations/dialogs.json
           translations/errors.json translations/common.json translations/planning.json translations/helpers.json
-          translations/helper_errors.json translations/helper_runtime.json translations/qtbase_ru.json
+          translations/helper_errors.json translations/helper_runtime.json translations/pinned_helpers.json translations/qtbase_ru.json
 )
 
 add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)

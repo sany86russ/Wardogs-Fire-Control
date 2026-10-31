@@ -32,6 +32,23 @@ The helpers use documented Windows `SendInput`: one ordinary press and one relea
 
 Before each new press, the original foreground window is checked again for visibility and non-minimized state, and the current desktop must be receiving input. A desktop switch/lock or failed check stops new presses. An accepted press must still be released; an explicitly rejected press does not generate a spurious release. A Windows refusal stops the loop without elevating privileges or selecting another input method. These limits reduce unintended input but do not establish permission to use macros in the game. [Microsoft UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw).
 
+## Mini-card status strip
+
+In **2.14.0**, both **L81 and SPH-2** mini cards have a separate strip showing both helpers, their actual shortcuts and states:
+
+| State | Meaning |
+|---|---|
+| **Off** | This helper's hotkey is disabled in settings |
+| **Ready** | Its hotkey is enabled, but the loop is stopped |
+| **Running** | The current loop is active and its row is highlighted |
+
+The strip is read-only: clicking it does not start or switch a helper. Use the assigned shortcut for control and the **Helpers** window to edit preferences. A displayed state does not confirm an in-game hammer hit or anti-cheat acceptance.
+
+![L81 2.14.0: helper states and shortcuts](../../docs/screenshots/en-pinned-helpers-2.14.0.png)
+![SPH-2 2.14.0: helper strip beside the solution](../../docs/screenshots/en-vehicle-pinned-helpers-2.14.0.png)
+
+Screenshots show the actual native application with synthetic calculations and states. Capture does not use the game or send real game input.
+
 ## Persistence and limits
 
 Assigned shortcuts, hotkey enable choices, intervals and randomization switches are saved in the Windows profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. Restarting restores these preferences while **both loops remain stopped** until an explicit shortcut press.
