@@ -16,9 +16,9 @@ Only one helper runs at a time. Switching the active window, pausing or closing 
 
 ## Build helper
 
-Base sequence: **hold the left button for 660 ms → release for 100 ms → repeat**. Hold and pause durations are configurable. A separate switch adds a random number of milliseconds from the configured range to the released pause; it is disabled by default with a 0–30 ms addition range. Hold duration is not randomized.
+Base sequence: **hold the left button for 514 ms → release for 33 ms → repeat**. Hold and pause durations are configurable. A separate switch adds a random number of milliseconds from the configured range to the released pause; it is disabled by default with a 0–30 ms addition range. Hold duration is not randomized.
 
-[Steam](https://steamcommunity.com/app/1867240/discussions/0/562541966849565845/) and [Reddit](https://www.reddit.com/r/WarDogs/comments/1wf8elq/is_hammer_animation_cancel_an_exploit/) discussions describe releasing the left button after the hammer contacts the object to start the next swing sooner. They support the community observation, but do not establish a universal **660/100 ms** preset. The project owner supplied this preset; our testing has not established its speed benefit in the current game version.
+[Steam](https://steamcommunity.com/app/1867240/discussions/0/562541966849565845/) and [Reddit](https://www.reddit.com/r/WarDogs/comments/1wf8elq/is_hammer_animation_cancel_an_exploit/) discussions describe releasing the left button after the hammer contacts the object to start the next swing sooner. They support the community observation, but do not establish a universal **514/33 ms** preset. The project owner supplied this preset; our testing has not established its speed benefit in the current game version.
 
 ## Team Piker
 

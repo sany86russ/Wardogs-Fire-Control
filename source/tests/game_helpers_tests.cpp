@@ -119,11 +119,11 @@ int main() {
 
     GameHelpersPreferences defaults;
     const auto build = wardogs::game_helper_timing(GameHelperMode::build, defaults, 20);
-    check(build.hold_ms == 660 && build.pause_ms == 100,
-          "the requested Build helper preset holds 660ms and releases 100ms without jitter");
+    check(build.hold_ms == 514 && build.pause_ms == 33,
+          "the requested Build helper preset holds 514ms and releases 33ms without jitter");
     defaults.build.random_enabled = true;
-    check(wardogs::game_helper_timing(GameHelperMode::build, defaults, 0).pause_ms == 100 &&
-          wardogs::game_helper_timing(GameHelperMode::build, defaults, 30).pause_ms == 130,
+    check(wardogs::game_helper_timing(GameHelperMode::build, defaults, 0).pause_ms == 33 &&
+          wardogs::game_helper_timing(GameHelperMode::build, defaults, 30).pause_ms == 63,
           "build jitter includes both configured endpoints and never shortens the hold");
     check(rejects([&] { (void)wardogs::game_helper_timing(GameHelperMode::build, defaults, 31); }),
           "out-of-range jitter is rejected rather than silently altered");

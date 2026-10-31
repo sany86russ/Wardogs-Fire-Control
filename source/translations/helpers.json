@@ -68,8 +68,8 @@
     "en": "Random addition to"
   },
   {
-    "ru": "Пресет 660 / 100 мс — стартовая настройка. Игроки описывают отпускание кнопки сразу после удара; точное время зависит от игры и требует проверки. Случайная добавка меняет только паузу, удержание остаётся точным.",
-    "en": "The 660 / 100 ms preset is a starting point. Players describe releasing the button just after impact; exact timing depends on the game and needs testing. Randomization changes the pause only; hold duration stays fixed."
+    "ru": "Пресет 514 / 33 мс — стартовая настройка. Игроки описывают отпускание кнопки сразу после удара; точное время зависит от игры и требует проверки. Случайная добавка меняет только паузу, удержание остаётся точным.",
+    "en": "The 514 / 33 ms preset is a starting point. Players describe releasing the button just after impact; exact timing depends on the game and needs testing. Randomization changes the pause only; hold duration stays fixed."
   },
   {
     "ru": "Повторяет короткий клик ЛКМ в текущем положении курсора. Наведите курсор на нужную игровую кнопку; помощник не распознаёт интерфейс и не перемещает мышь.",

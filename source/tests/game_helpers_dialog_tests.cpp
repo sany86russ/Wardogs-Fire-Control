@@ -55,8 +55,8 @@ void defaults_and_editing() {
     auto* tabs = child<QTabWidget>(dialog, "gameHelpersTabs");
     check(tabs->count() == 2 && tabs->tabText(0) == QStringLiteral("Build helper") &&
           tabs->tabText(1) == QStringLiteral("Team Piker"), "two helpers share one tabbed dialog");
-    check(child<QLabel>(dialog, "buildCycleSummary")->text().contains(QStringLiteral("760")),
-          "build default cycle is 660 held plus 100 released");
+    check(child<QLabel>(dialog, "buildCycleSummary")->text().contains(QStringLiteral("547")),
+          "build default cycle is 514 held plus 33 released");
     check(child<QLabel>(dialog, "teamCycleSummary")->text().contains(QStringLiteral("900–1000")),
           "team default interval includes 100 to 200 ms random addition");
     check(!child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->isEnabled(),
@@ -146,7 +146,7 @@ void validation() {
         GameHelpersDialog dialog(settings);
         child<QSpinBox>(dialog, "buildHelperHold")->setValue(900);
         child<QDialogButtonBox>(dialog, "helperDialogButtons")->button(QDialogButtonBox::Cancel)->click();
-        check(dialog.result() == QDialog::Rejected && settings.game_helpers.build.hold_ms == 660,
+        check(dialog.result() == QDialog::Rejected && settings.game_helpers.build.hold_ms == 514,
               "cancel never mutates the caller settings");
     }
 }
@@ -188,7 +188,7 @@ void translation_and_layout(const QString& evidence) {
     check(child<QSpinBox>(dialog, "buildHelperHold")->suffix() == QStringLiteral(" ms"),
           "milliseconds suffix follows the chosen language");
     check(child<QLabel>(dialog, "buildCycleSummary")->text() ==
-          QStringLiteral("LMB 660 ms → pause 100–100 ms\nFull cycle: 760–760 ms"),
+          QStringLiteral("LMB 514 ms → pause 33–33 ms\nFull cycle: 547–547 ms"),
           "live language change renders the build summary through the application catalog");
     check(child<QLabel>(dialog, "teamCycleSummary")->text() ==
           QStringLiteral("Left-click every 900–1000 ms\nThe first click follows the start command."),

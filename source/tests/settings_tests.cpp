@@ -78,7 +78,7 @@ int run_settings_tests() {
           "the ghost trajectory shortcut defaults to the unused F4 key");
     check(fresh.game_helpers == wardogs::GameHelpersPreferences{} &&
               !fresh.game_helpers.build.enabled && !fresh.game_helpers.team.enabled &&
-              fresh.game_helpers.build.hold_ms == 660 && fresh.game_helpers.build.pause_ms == 100 &&
+              fresh.game_helpers.build.hold_ms == 514 && fresh.game_helpers.build.pause_ms == 33 &&
               fresh.game_helpers.team.interval_ms == 800 && fresh.game_helpers.team.random_enabled &&
               fresh.game_helpers.team.random_min_ms == 100 && fresh.game_helpers.team.random_max_ms == 200,
           "fresh profiles expose the requested helper presets without enabling any helper");
@@ -128,7 +128,7 @@ int run_settings_tests() {
         WritePrivateProfileStringW(L"settings", L"build_helper_hold_ms", invalid, helpers_path.c_str());
         const auto original = bytes(helpers_path);
         const auto recovered_helpers = wardogs::load_settings_from(helpers_path);
-        check(recovered_helpers.game_helpers.build.hold_ms == 660 &&
+        check(recovered_helpers.game_helpers.build.hold_ms == 514 &&
                   recovered_helpers.game_helpers.build.pause_ms == 120 &&
                   recovered_helpers.game_helpers.team == helper_settings.game_helpers.team &&
                   bytes(helpers_path) == original,
@@ -144,7 +144,7 @@ int run_settings_tests() {
     WritePrivateProfileStringW(L"settings", L"team_piker_random_enabled", L"bogus", helpers_path.c_str());
     const auto invalid_helpers_before_read = bytes(helpers_path);
     const auto invalid_helpers = wardogs::load_settings_from(helpers_path).game_helpers;
-    check(invalid_helpers.build.pause_ms == 100 && invalid_helpers.team.interval_ms == 800 &&
+    check(invalid_helpers.build.pause_ms == 33 && invalid_helpers.team.interval_ms == 800 &&
               invalid_helpers.team.random_min_ms == 100 && invalid_helpers.team.random_max_ms == 200 &&
               invalid_helpers.build.random_max_ms == 30 && !invalid_helpers.build.enabled &&
               invalid_helpers.team.random_enabled && bytes(helpers_path) == invalid_helpers_before_read,

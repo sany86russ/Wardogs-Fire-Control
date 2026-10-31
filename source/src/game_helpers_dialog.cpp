@@ -166,7 +166,7 @@ GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidg
     build_summary_->setObjectName(QStringLiteral("buildCycleSummary"));
     build_summary_->setProperty("helperSummary", true);
     build_page->addWidget(build_summary_);
-    build_page->addWidget(paragraph("Пресет 660 / 100 мс — стартовая настройка. Игроки описывают отпускание кнопки сразу после удара; точное время зависит от игры и требует проверки. Случайная добавка меняет только паузу, удержание остаётся точным."));
+    build_page->addWidget(paragraph("Пресет 514 / 33 мс — стартовая настройка. Игроки описывают отпускание кнопки сразу после удара; точное время зависит от игры и требует проверки. Случайная добавка меняет только паузу, удержание остаётся точным."));
     build_page->addStretch();
 
     const auto& team = settings.game_helpers.team;

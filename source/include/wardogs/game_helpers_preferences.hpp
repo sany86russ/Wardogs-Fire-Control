@@ -18,8 +18,8 @@ inline constexpr int maximum_random_ms = 2000;
 struct BuildHelperPreferences {
     bool enabled{false};
     std::wstring hotkey{L"F6"};
-    int hold_ms{660};
-    int pause_ms{100};
+    int hold_ms{514};
+    int pause_ms{33};
     bool random_enabled{false};
     int random_min_ms{0};
     int random_max_ms{30};
