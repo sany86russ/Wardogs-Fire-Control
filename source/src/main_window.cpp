@@ -5,6 +5,8 @@
 #include "app_icon.hpp"
 #include "selection_overlay.hpp"
 #include "settings_dialog.hpp"
+#include "game_helpers_dialog.hpp"
+#include "wardogs/game_helpers.hpp"
 #include "planning_dialog.hpp"
 #include "update_ui.hpp"
 #include "ghost_reticle_window.hpp"
@@ -662,6 +664,7 @@ public:
     }
 
     void stop_background_tasks() {
+        stop_game_helper();
         if (pinned_window_) pinned_window_->flush_preferences();
         closing_ = true;
         if (hud_freshness_timer_) hud_freshness_timer_->stop();
@@ -696,7 +699,8 @@ public:
             mode != QStringLiteral("settings") && mode != QStringLiteral("recognition") &&
             mode != QStringLiteral("recognition-bottom") && mode != QStringLiteral("tutorial-bottom") &&
             mode != QStringLiteral("tutorial-keys") && mode != QStringLiteral("tutorial-help") &&
-            mode != QStringLiteral("tutorial") && mode != QStringLiteral("notice")) {
+            mode != QStringLiteral("tutorial") && mode != QStringLiteral("notice") &&
+            mode != QStringLiteral("helpers") && mode != QStringLiteral("helpers-team")) {
             terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
             base_input_->setText(QStringLiteral("80 80"));
             manual_base();
@@ -706,7 +710,12 @@ public:
         std::unique_ptr<QTemporaryDir> planning_snapshot_data;
         std::unique_ptr<QDialog> dialog;
         QWidget* view = this;
-        if (mode == QStringLiteral("settings") || mode.startsWith(QStringLiteral("recognition"))) {
+        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team")) {
+            dialog = std::make_unique<GameHelpersDialog>(settings_);
+            if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs")))
+                tabs->setCurrentIndex(mode == QStringLiteral("helpers-team") ? 1 : 0);
+        }
+        else if (mode == QStringLiteral("settings") || mode.startsWith(QStringLiteral("recognition"))) {
             dialog = std::make_unique<SettingsDialog>(settings_);
             if (mode.startsWith(QStringLiteral("recognition")))
                 if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs")))
@@ -1124,6 +1133,23 @@ public:
               settings_.middle_mouse_enabled && settings_.automatic_chat_region &&
               settings_.base_hotkey == L"Alt+X" && settings_.exit_game_mode_hotkey == L"Alt+C" &&
               !hotkey_listener_.active() && !mouse_listener_.active());
+        {
+            bool helpers_opened = false;
+            const auto before = settings_.game_helpers;
+            QTimer::singleShot(0, this, [&helpers_opened] {
+                if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+                    auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs"));
+                    helpers_opened = tabs && tabs->count() == 2;
+                    dialog->reject();
+                }
+            });
+            click("gameHelpersButton");
+            check("helpers_navigation_opens_two_modes_and_cancel_preserves_preferences",
+                helpers_opened && settings_.game_helpers == before && !game_helper_.running());
+            toggle_game_helper(wardogs::GameHelperMode::build, nullptr);
+            check("helpers_never_start_in_diagnostic_or_without_game_foreground",
+                !game_helper_.running() && !before.build.enabled && !before.team.enabled);
+        }
         map_confirmed_ = false;
         update_readiness();
         check("game_button_explains_explicit_confirmation", game_button_->text() ==
@@ -2950,6 +2976,12 @@ private:
     std::jthread rapid_warmup_;
     std::unique_ptr<wardogs::WindowsOcr> windows_;
     wardogs::GlobalHotkeyListener hotkey_listener_;
+    wardogs::GameHelperRunner game_helper_;
+    wardogs::GameHelperMode displayed_helper_mode_{wardogs::GameHelperMode::none};
+    wardogs::GameHelperStopReason displayed_helper_reason_{wardogs::GameHelperStopReason::none};
+    std::string displayed_helper_error_;
+    QTimer* game_helper_status_timer_{};
+    QPushButton *helpers_button_{}, *stop_helpers_button_{};
     wardogs::GlobalMouseListener mouse_listener_;
     std::atomic_uint64_t hotkey_listener_epoch_{};
     std::atomic_uint64_t mouse_listener_epoch_{};
@@ -3520,6 +3552,8 @@ private:
         tray_->setToolTip(QStringLiteral("WARDOGS Fire Control"));
         auto* menu = new QMenu(this);
         connect(menu->addAction(wardogs::i18n::text(QStringLiteral("Открыть расчёт"))), &QAction::triggered, this, [this] { exit_game_mode(); });
+        connect(menu->addAction(wardogs::i18n::text(QStringLiteral("Помощники"))), &QAction::triggered, this, &MainWindow::edit_game_helpers);
+        connect(menu->addAction(wardogs::i18n::text(QStringLiteral("Остановить помощников"))), &QAction::triggered, this, &MainWindow::stop_game_helper);
         connect(menu->addAction(wardogs::i18n::text(QStringLiteral("Мини-карточка"))), &QAction::triggered, this, &MainWindow::enter_pinned_mode);
         connect(menu->addAction(wardogs::i18n::text(QStringLiteral("Снять блокировку карточки"))), &QAction::triggered, this, [this] { unlock_pinned_window("tray"); });
         menu->addSeparator();
@@ -3766,6 +3800,20 @@ private:
         language_selector_->setToolTip(wardogs::i18n::text(QStringLiteral("Язык интерфейса · сохраняется автоматически")));
         language_selector_->setAccessibleName(wardogs::i18n::text(QStringLiteral("Язык интерфейса")));
         heading->addWidget(language_selector_);
+        helpers_button_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Помощники")));
+        helpers_button_->setObjectName(QStringLiteral("gameHelpersButton"));
+        helpers_button_->setToolTip(wardogs::i18n::text(QStringLiteral("Build helper и Team Piker · отдельные настройки")));
+        heading->addWidget(helpers_button_);
+        connect(helpers_button_, &QPushButton::clicked, this, &MainWindow::edit_game_helpers);
+        stop_helpers_button_ = new QPushButton(wardogs::i18n::text(QStringLiteral("Стоп")));
+        stop_helpers_button_->setObjectName(QStringLiteral("stopGameHelpersButton"));
+        stop_helpers_button_->setVisible(false);
+        heading->addWidget(stop_helpers_button_);
+        connect(stop_helpers_button_, &QPushButton::clicked, this, &MainWindow::stop_game_helper);
+        game_helper_status_timer_ = new QTimer(this);
+        game_helper_status_timer_->setInterval(100);
+        connect(game_helper_status_timer_, &QTimer::timeout, this, &MainWindow::update_game_helper_status);
+        if (!diagnostic_) game_helper_status_timer_->start();
         connect(language_selector_, &QComboBox::currentIndexChanged, this, [this](int index) {
             change_language(index == 1 ? wardogs::UiLanguage::english : wardogs::UiLanguage::russian);
         });
@@ -6655,6 +6703,100 @@ private:
             settings_.game_integration_enabled) enter_game_mode();
     }
 
+    void update_game_helper_status() {
+        const auto mode = game_helper_.mode();
+        const auto reason = game_helper_.stop_reason();
+        const auto error = game_helper_.last_error();
+        if (mode == displayed_helper_mode_ && reason == displayed_helper_reason_ &&
+            error == displayed_helper_error_) return;
+        displayed_helper_mode_ = mode;
+        displayed_helper_reason_ = reason;
+        displayed_helper_error_ = error;
+        if (helpers_button_) helpers_button_->setText(wardogs::i18n::text(
+            mode == wardogs::GameHelperMode::build ? QStringLiteral("Build helper · работает") :
+            mode == wardogs::GameHelperMode::team ? QStringLiteral("Team Piker · работает") :
+            QStringLiteral("Помощники")));
+        if (stop_helpers_button_) stop_helpers_button_->setVisible(mode != wardogs::GameHelperMode::none);
+        if (tray_) tray_->setToolTip(mode == wardogs::GameHelperMode::none
+            ? QStringLiteral("WARDOGS Fire Control") : QStringLiteral("WARDOGS Fire Control · ") +
+                (mode == wardogs::GameHelperMode::build ? QStringLiteral("Build helper") : QStringLiteral("Team Piker")));
+        if (mode == wardogs::GameHelperMode::none) {
+            if (!error.empty()) set_status(wardogs::i18n::text(QStringLiteral("Помощник остановлен: ")) +
+                wardogs::i18n::text(QString::fromUtf8(error.c_str())), true);
+            else set_status(wardogs::i18n::text(QStringLiteral("Помощник остановлен")));
+            wardogs::log_info("helper.stopped");
+        }
+    }
+
+    void stop_game_helper() {
+        game_helper_.stop();
+        update_game_helper_status();
+    }
+
+    void toggle_game_helper(wardogs::GameHelperMode mode, HWND activation_window) {
+        if (game_helper_.running()) {
+            const bool same = game_helper_.mode() == mode;
+            stop_game_helper();
+            if (same) return;
+        }
+        if (diagnostic_ || closing_ || application_paused_ || QApplication::activeModalWidget() ||
+            !activation_window || GetForegroundWindow() != activation_window ||
+            !is_wardogs_window(activation_window)) return;
+        const auto& preferences = settings_.game_helpers;
+        if ((mode == wardogs::GameHelperMode::build && !preferences.build.enabled) ||
+            (mode == wardogs::GameHelperMode::team && !preferences.team.enabled)) return;
+        const auto hotkey = wardogs::parse_hotkey(mode == wardogs::GameHelperMode::build
+            ? preferences.build.hotkey : preferences.team.hotkey);
+        try {
+            game_helper_.start(mode, preferences, {
+                [activation_window] { return GetForegroundWindow() == activation_window &&
+                    is_wardogs_window(activation_window); },
+                wardogs::send_helper_left_button,
+                [hotkey] {
+                    return !(GetAsyncKeyState(static_cast<int>(hotkey.virtual_key)) & 0x8000) &&
+                        !(GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                        !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
+                        !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
+                        !(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+                }});
+            wardogs::log_info(mode == wardogs::GameHelperMode::build
+                ? "helper.started mode=build" : "helper.started mode=team");
+            update_game_helper_status();
+        } catch (const std::exception& error) {
+            set_status(wardogs::i18n::text(QStringLiteral("Не удалось запустить помощник: ")) + error_text(error), true);
+        }
+    }
+
+    void edit_game_helpers() {
+        stop_game_helper();
+        if (closing_) return;
+        GameHelpersDialog dialog(settings_, this);
+        unregister_hotkeys();
+        for (;;) {
+            if (dialog.exec() != QDialog::Accepted) {
+                try { restore_current_hotkeys(); }
+                catch (const std::exception& error) {
+                    set_status(wardogs::i18n::text(QStringLiteral("Не удалось восстановить горячие клавиши: ")) + error_text(error), true);
+                }
+                return;
+            }
+            auto candidate = settings_;
+            candidate.game_helpers = dialog.preferences();
+            try {
+                // Explicit helper assignments must be available exactly as
+                // selected. The dialog remains open when Windows rejects one.
+                register_hotkeys(candidate, false);
+                if (!diagnostic_) wardogs::save_settings(candidate);
+                settings_ = candidate;
+                set_status(wardogs::i18n::text(QStringLiteral("Настройки помощников сохранены. Запуск — назначенной клавишей в игре.")));
+                return;
+            } catch (const std::exception& error) {
+                unregister_hotkeys();
+                dialog.show_error(error_text(error));
+            }
+        }
+    }
+
     wardogs::AppSettings settings_from_dialog(const SettingsDialog& dialog) const {
         auto candidate = dialog.settings();
         // The map and mini card own these fields. Their queued callbacks can
@@ -6737,6 +6879,7 @@ private:
     }
 
     void unregister_hotkeys() {
+        stop_game_helper();
         ++hotkey_listener_epoch_;
         hotkey_listener_.stop();
     }
@@ -6874,7 +7017,7 @@ private:
     }
 
     void register_resume_only_hotkey() {
-        const std::array configured{
+        std::vector<wardogs::Hotkey> configured{
             wardogs::parse_hotkey(settings_.region_hotkey),
             wardogs::parse_hotkey(settings_.base_hotkey),
             wardogs::parse_hotkey(settings_.target_hotkey),
@@ -6883,6 +7026,10 @@ private:
             wardogs::parse_hotkey(settings_.ghost_arc_hotkey),
             wardogs::parse_hotkey(settings_.pinned_card.unlock_hotkey),
             wardogs::parse_hotkey(settings_.exit_game_mode_hotkey)};
+        if (settings_.game_helpers.build.enabled)
+            configured.push_back(wardogs::parse_hotkey(settings_.game_helpers.build.hotkey));
+        if (settings_.game_helpers.team.enabled)
+            configured.push_back(wardogs::parse_hotkey(settings_.game_helpers.team.hotkey));
         wardogs::validate_unique_hotkeys(configured);
         std::vector<wardogs::Hotkey> attempted(configured.begin(), configured.end());
         const QPointer<MainWindow> self(this);
@@ -6929,6 +7076,7 @@ private:
 
     QString register_hotkeys(wardogs::AppSettings& settings, bool recover_conflicts = true) {
         if (diagnostic_) return {};
+        stop_game_helper();
         auto configured = std::array{
             wardogs::parse_hotkey(settings.region_hotkey),
             wardogs::parse_hotkey(settings.base_hotkey),
@@ -6939,13 +7087,29 @@ private:
             wardogs::parse_hotkey(settings.pinned_card.unlock_hotkey),
             wardogs::parse_hotkey(settings.exit_game_mode_hotkey)};
         wardogs::validate_unique_hotkeys(configured);
-        const auto pause_key = available_pause_hotkey(configured, pause_hotkey_);
+        auto complete = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+        if (settings.game_helpers.build.enabled)
+            complete.push_back(wardogs::parse_hotkey(settings.game_helpers.build.hotkey));
+        if (settings.game_helpers.team.enabled)
+            complete.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
+        wardogs::validate_unique_hotkeys(complete);
+        const auto pause_key = available_pause_hotkey(complete, pause_hotkey_);
         std::vector<wardogs::Hotkey> values;
         std::vector<std::size_t> actions;
         for (std::size_t index = 0; index < configured.size(); ++index) {
             if (!settings.game_integration_enabled || (application_paused_ && index < 6)) continue;
             values.push_back(configured[index]);
             actions.push_back(index);
+        }
+        if (!application_paused_) {
+            if (settings.game_helpers.build.enabled) {
+                values.push_back(wardogs::parse_hotkey(settings.game_helpers.build.hotkey));
+                actions.push_back(9);
+            }
+            if (settings.game_helpers.team.enabled) {
+                values.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
+                actions.push_back(10);
+            }
         }
         values.push_back(pause_key);
         actions.push_back(8);
@@ -6966,9 +7130,15 @@ private:
         const auto listener_epoch = ++hotkey_listener_epoch_;
         const auto callback = [self, actions, listener_epoch](std::size_t index) {
             if (!self) return;
-            QMetaObject::invokeMethod(self, [self, actions, index, listener_epoch] {
+            const HWND activation_window = GetForegroundWindow();
+            QMetaObject::invokeMethod(self, [self, actions, index, listener_epoch, activation_window] {
                 if (!self || listener_epoch != self->hotkey_listener_epoch_ || index >= actions.size()) return;
                 auto* const window = self.data();
+                if (actions[index] == 9 || actions[index] == 10) {
+                    window->toggle_game_helper(actions[index] == 9
+                        ? wardogs::GameHelperMode::build : wardogs::GameHelperMode::team, activation_window);
+                    return;
+                }
                 window->dispatch_registered_hotkey(actions[index], listener_epoch);
             }, Qt::QueuedConnection);
         };
@@ -6981,16 +7151,27 @@ private:
         try {
             if (actual.size() != actions.size()) throw std::invalid_argument("Windows вернула неполный набор горячих клавиш");
             auto next_pause_key = pause_key;
+            auto helper_preferences = settings.game_helpers;
             for (std::size_t index = 0; index < actions.size(); ++index) {
                 if (actions[index] < configured.size()) configured[actions[index]] = actual[index];
-                else next_pause_key = actual[index];
+                else if (actions[index] == 8) next_pause_key = actual[index];
+                else {
+                    auto& key = actions[index] == 9 ? helper_preferences.build.hotkey : helper_preferences.team.hotkey;
+                    if (wardogs::parse_hotkey(key) != actual[index]) {
+                        throw std::invalid_argument("Клавиша помощника занята. Откройте «Помощники» и назначьте другую клавишу");
+                    }
+                    key = actual[index].display;
+                }
             }
             // A paused registration must not choose a fallback that steals a
             // currently released capture key when the app later resumes.
             auto all_effective = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
+            if (helper_preferences.build.enabled) all_effective.push_back(wardogs::parse_hotkey(helper_preferences.build.hotkey));
+            if (helper_preferences.team.enabled) all_effective.push_back(wardogs::parse_hotkey(helper_preferences.team.hotkey));
             all_effective.push_back(next_pause_key);
             wardogs::validate_unique_hotkeys(all_effective);
-            const auto changes = apply_registered_hotkeys(settings, configured);
+            auto changes = apply_registered_hotkeys(settings, configured);
+            settings.game_helpers = helper_preferences;
             pause_hotkey_ = std::move(next_pause_key);
             if (!changes.isEmpty())
                 wardogs::log_info("hotkey.conflicts_resolved changes=" + utf8(changes));
@@ -7204,7 +7385,8 @@ int run_application(int argc, char* argv[]) {
     };
     QString snapshot_path, snapshot_mode;
     for (const auto& mode : {QStringLiteral("ui"), QStringLiteral("manual-ui"), QStringLiteral("compact-ui"), QStringLiteral("pinned-ui"), QStringLiteral("review-ui"),
-                            QStringLiteral("settings-ui"), QStringLiteral("tutorial-ui"), QStringLiteral("notice-ui"),
+                            QStringLiteral("settings-ui"), QStringLiteral("helpers-ui"), QStringLiteral("helpers-team-ui"),
+                            QStringLiteral("tutorial-ui"), QStringLiteral("notice-ui"),
                             QStringLiteral("vehicle-ui"), QStringLiteral("vehicle-pinned-ui"),
                             QStringLiteral("vehicle-pinned-locked-ui"), QStringLiteral("vehicle-pinned-menu-ui"),
                             QStringLiteral("calibration-ui"), QStringLiteral("recognition"),

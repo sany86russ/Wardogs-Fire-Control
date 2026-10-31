@@ -229,6 +229,105 @@ std::optional<long> read_integer(const std::filesystem::path& path,
     }
 }
 
+int read_helper_integer(const std::filesystem::path& path, const wchar_t* key,
+                        int fallback, int minimum, int maximum) {
+    if (const auto value = read_integer(path, key);
+        value && *value >= minimum && *value <= maximum)
+        return static_cast<int>(*value);
+    if (!read_value(path, key, L"").empty())
+        log_warning("settings.invalid_helper_number; using default");
+    return fallback;
+}
+
+bool read_helper_boolean(const std::filesystem::path& path, const wchar_t* key,
+                         bool fallback) {
+    return read_helper_integer(path, key, fallback ? 1 : 0, 0, 1) == 1;
+}
+
+std::wstring normalized_helper_hotkey(std::wstring_view value) {
+    const auto key = parse_hotkey(value);
+    if (key.virtual_key == VK_ESCAPE)
+        throw std::invalid_argument("Esc используется для закрытия окон; выберите другую клавишу помощника");
+    const std::array keys{key};
+    validate_global_hotkeys(keys);
+    return key.display;
+}
+
+void read_game_helpers(const std::filesystem::path& path,
+                       GameHelpersPreferences& helpers) {
+    using namespace game_helpers_limits;
+    auto& build = helpers.build;
+    auto& team = helpers.team;
+    build.enabled = read_helper_boolean(path, L"build_helper_enabled", build.enabled);
+    team.enabled = read_helper_boolean(path, L"team_piker_enabled", team.enabled);
+    const auto read_hotkey = [&](const wchar_t* key, auto& helper) {
+        try { helper.hotkey = normalized_helper_hotkey(read_value(path, key, helper.hotkey)); }
+        catch (const std::exception&) {
+            helper.enabled = false;
+            log_warning("settings.invalid_helper_hotkey; helper disabled and default shortcut retained");
+        }
+    };
+    read_hotkey(L"build_helper_hotkey", build);
+    read_hotkey(L"team_piker_hotkey", team);
+    build.hold_ms = read_helper_integer(path, L"build_helper_hold_ms", build.hold_ms,
+                                        minimum_hold_ms, maximum_hold_ms);
+    build.pause_ms = read_helper_integer(path, L"build_helper_pause_ms", build.pause_ms,
+                                         minimum_pause_ms, maximum_pause_ms);
+    team.interval_ms = read_helper_integer(path, L"team_piker_interval_ms", team.interval_ms,
+                                           minimum_interval_ms, maximum_interval_ms);
+    build.random_enabled = read_helper_boolean(path, L"build_helper_random_enabled", build.random_enabled);
+    team.random_enabled = read_helper_boolean(path, L"team_piker_random_enabled", team.random_enabled);
+    const auto read_random = [&](const wchar_t* minimum_key, const wchar_t* maximum_key,
+                                 auto& helper, const auto& defaults) {
+        helper.random_min_ms = read_helper_integer(path, minimum_key, helper.random_min_ms, 0, maximum_random_ms);
+        helper.random_max_ms = read_helper_integer(path, maximum_key, helper.random_max_ms, 0, maximum_random_ms);
+        if (helper.random_min_ms > helper.random_max_ms) {
+            helper.random_min_ms = defaults.random_min_ms;
+            helper.random_max_ms = defaults.random_max_ms;
+            log_warning("settings.invalid_helper_random_range; using default");
+        }
+    };
+    read_random(L"build_helper_random_min_ms", L"build_helper_random_max_ms", build, BuildHelperPreferences{});
+    read_random(L"team_piker_random_min_ms", L"team_piker_random_max_ms", team, TeamPikerPreferences{});
+}
+
+void validate_helper_hotkeys(const AppSettings& settings) {
+    const auto& helpers = settings.game_helpers;
+    // Validate disabled assignments too so a saved shortcut can be enabled
+    // later, but reserve/check uniqueness only for enabled helper actions.
+    (void)normalized_helper_hotkey(helpers.build.hotkey);
+    (void)normalized_helper_hotkey(helpers.team.hotkey);
+    if (!helpers.build.enabled && !helpers.team.enabled) return;
+    std::vector<Hotkey> keys;
+    for (const auto* text : {&settings.region_hotkey, &settings.base_hotkey,
+             &settings.target_hotkey, &settings.quick_target_hotkey,
+             &settings.impact_hotkey, &settings.ghost_arc_hotkey,
+             &settings.pinned_card.unlock_hotkey, &settings.exit_game_mode_hotkey})
+        keys.push_back(parse_hotkey(*text));
+    if (helpers.build.enabled) keys.push_back(parse_hotkey(helpers.build.hotkey));
+    if (helpers.team.enabled) keys.push_back(parse_hotkey(helpers.team.hotkey));
+    validate_unique_hotkeys(keys);
+}
+
+void write_game_helpers(const std::filesystem::path& path,
+                        const GameHelpersPreferences& helpers) {
+    const auto& build = helpers.build;
+    const auto& team = helpers.team;
+    write_value(path, L"build_helper_enabled", build.enabled ? L"1" : L"0");
+    write_value(path, L"build_helper_hotkey", normalized_helper_hotkey(build.hotkey));
+    write_value(path, L"build_helper_hold_ms", std::to_wstring(build.hold_ms));
+    write_value(path, L"build_helper_pause_ms", std::to_wstring(build.pause_ms));
+    write_value(path, L"build_helper_random_enabled", build.random_enabled ? L"1" : L"0");
+    write_value(path, L"build_helper_random_min_ms", std::to_wstring(build.random_min_ms));
+    write_value(path, L"build_helper_random_max_ms", std::to_wstring(build.random_max_ms));
+    write_value(path, L"team_piker_enabled", team.enabled ? L"1" : L"0");
+    write_value(path, L"team_piker_hotkey", normalized_helper_hotkey(team.hotkey));
+    write_value(path, L"team_piker_interval_ms", std::to_wstring(team.interval_ms));
+    write_value(path, L"team_piker_random_enabled", team.random_enabled ? L"1" : L"0");
+    write_value(path, L"team_piker_random_min_ms", std::to_wstring(team.random_min_ms));
+    write_value(path, L"team_piker_random_max_ms", std::to_wstring(team.random_max_ms));
+}
+
 std::optional<double> read_double(const std::filesystem::path& path,
                                   const wchar_t* key) {
     const std::wstring text = read_value(path, key, L"");
@@ -507,6 +606,7 @@ AppSettings load_settings_from(const std::filesystem::path& requested_path,
         if (settings.quick_workflow_migrated)
             log_info("settings.quick_workflow_migrated version=1");
     }
+    read_game_helpers(path, settings.game_helpers);
     return settings;
 }
 
@@ -514,6 +614,8 @@ void save_settings_to(const std::filesystem::path& requested_path,
                       const AppSettings& settings,
                       const std::filesystem::path& legacy_path) {
     validate_pinned_geometry(settings.pinned_card);
+    validate_game_helpers_preferences(settings.game_helpers);
+    validate_helper_hotkeys(settings);
     const auto destination = std::filesystem::absolute(requested_path);
     std::filesystem::create_directories(destination.parent_path());
     TemporaryIni temporary{destination};
@@ -559,6 +661,7 @@ void save_settings_to(const std::filesystem::path& requested_path,
     write_value(path, L"ocr_backend",
                 settings.backend == OcrBackend::rapid ? L"rapid" : L"windows");
     write_value(path, L"automatic_chat_region", settings.automatic_chat_region ? L"1" : L"0");
+    write_game_helpers(path, settings.game_helpers);
     write_value(path, L"pinned_card_locked",
                 settings.pinned_card.locked ? L"1" : L"0");
     write_value(path, L"pinned_card_always_on_top",

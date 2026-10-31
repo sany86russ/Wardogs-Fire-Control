@@ -8,6 +8,8 @@ Russian is the default. The **RU / EN** header selector changes the interface im
 
 ## Using the application
 
+In the current source, **Helpers** opens a separate **Build helper / Team Piker** window with shortcuts, timing, randomization and instructions. Settings persist between launches; cycles always launch stopped. See [setup and limitations](docs/GAME-HELPERS-EN.md). This feature is not part of the published 2.13.2 release yet.
+
 The application checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
 
 1. Confirm the current map. Training-ground and unknown-map selections use an explicit mode without heights.

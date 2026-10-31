@@ -1,0 +1,118 @@
+[
+  {
+    "ru": "Помощники · WARDOGS",
+    "en": "Helpers · WARDOGS"
+  },
+  {
+    "ru": "Игровые помощники",
+    "en": "Game helpers"
+  },
+  {
+    "ru": "Помощники",
+    "en": "Helpers"
+  },
+  {
+    "ru": " мс",
+    "en": " ms"
+  },
+  {
+    "ru": "Клавиша СТАРТ / СТОП",
+    "en": "START / STOP shortcut"
+  },
+  {
+    "ru": "Нажмите сочетание в этом поле. Повторное нажатие в игре останавливает цикл.",
+    "en": "Press a shortcut in this field. Press it again in the game to stop the loop."
+  },
+  {
+    "ru": "Два отдельных сценария ЛКМ. Настройки помощников не влияют на артиллерийские расчёты.",
+    "en": "Two separate left-click routines. Helper settings do not affect artillery calculations."
+  },
+  {
+    "ru": "Остановлены · запуск только по вашей клавише в игре",
+    "en": "Stopped · start only with your shortcut in the game"
+  },
+  {
+    "ru": "Строительный молоток: удержание ЛКМ → отпускание → пауза → следующий удар. Наведите большой молоток на точку строительства.",
+    "en": "Building hammer: hold LMB → release → pause → next strike. Aim the large hammer at a construction spot."
+  },
+  {
+    "ru": "Управление",
+    "en": "Controls"
+  },
+  {
+    "ru": "Включить горячую клавишу Build helper",
+    "en": "Enable the Build helper shortcut"
+  },
+  {
+    "ru": "Ритм молотка",
+    "en": "Hammer rhythm"
+  },
+  {
+    "ru": "Удержание ЛКМ",
+    "en": "Hold LMB"
+  },
+  {
+    "ru": "Пауза после отпускания",
+    "en": "Pause after release"
+  },
+  {
+    "ru": "Случайная добавка к паузе",
+    "en": "Add a random pause"
+  },
+  {
+    "ru": "Добавка от",
+    "en": "Random addition from"
+  },
+  {
+    "ru": "Добавка до",
+    "en": "Random addition to"
+  },
+  {
+    "ru": "Пресет 660 / 100 мс — стартовая настройка. Игроки описывают отпускание кнопки сразу после удара; точное время зависит от игры и требует проверки. Случайная добавка меняет только паузу, удержание остаётся точным.",
+    "en": "The 660 / 100 ms preset is a starting point. Players describe releasing the button just after impact; exact timing depends on the game and needs testing. Randomization changes the pause only; hold duration stays fixed."
+  },
+  {
+    "ru": "Повторяет короткий клик ЛКМ в текущем положении курсора. Наведите курсор на нужную игровую кнопку; помощник не распознаёт интерфейс и не перемещает мышь.",
+    "en": "Repeats a short left-click at the current cursor position. Point at the desired game button; the helper does not recognize the interface or move the mouse."
+  },
+  {
+    "ru": "Включить горячую клавишу Team Piker",
+    "en": "Enable the Team Piker shortcut"
+  },
+  {
+    "ru": "Интервал кликов",
+    "en": "Click interval"
+  },
+  {
+    "ru": "Базовый интервал",
+    "en": "Base interval"
+  },
+  {
+    "ru": "Добавлять случайную задержку",
+    "en": "Add a random delay"
+  },
+  {
+    "ru": "Интервал измеряется между началами кликов и уже включает короткое нажатие 30 мс. По умолчанию: 800 + случайные 100–200 = 900–1000 мс.",
+    "en": "The interval is measured between click starts and includes the short 30 ms press. Default: 800 + random 100–200 = 900–1000 ms."
+  },
+  {
+    "ru": "1. Включите нужную клавишу и сохраните настройки.\n2. Вернитесь в WARDOGS и нажмите её для старта.\n3. Нажмите повторно для остановки. Смена окна останавливает цикл; возврат в игру его не возобновляет.",
+    "en": "1. Enable your shortcut and save the settings.\n2. Return to WARDOGS and press it to start.\n3. Press it again to stop. Switching windows stops the loop; returning to the game does not resume it."
+  },
+  {
+    "ru": "Одновременно работает один помощник. После запуска программы оба цикла остановлены. Правила WARDOGS ограничивают макросы и эксплуатацию ошибок; возможны санкции. Разрешение издателя не получено. Рандомизация меняет только ритм.",
+    "en": "One helper runs at a time. Both cycles are stopped after launch. WARDOGS rules restrict macros and exploiting bugs; sanctions are possible. Publisher permission has not been obtained. Randomization only varies the rhythm."
+  },
+  {
+    "ru": "ЛКМ %1 мс → пауза %2–%3 мс\nПолный цикл: %4–%5 мс",
+    "en": "LMB %1 ms → pause %2–%3 ms\nFull cycle: %4–%5 ms"
+  },
+  {
+    "ru": "Клик ЛКМ каждые %1–%2 мс\nПервый клик — после команды запуска.",
+    "en": "Left-click every %1–%2 ms\nThe first click follows the start command."
+  },
+  {
+    "ru": "Esc используется для закрытия окон; выберите другую клавишу помощника",
+    "en": "Esc is used to close windows; choose another helper shortcut"
+  }
+]

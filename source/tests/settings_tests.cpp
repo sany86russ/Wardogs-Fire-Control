@@ -76,6 +76,107 @@ int run_settings_tests() {
           "loading a missing profile prepares the quick workflow without writing a file");
     check(saved.ghost_arc_hotkey == L"F4",
           "the ghost trajectory shortcut defaults to the unused F4 key");
+    check(fresh.game_helpers == wardogs::GameHelpersPreferences{} &&
+              !fresh.game_helpers.build.enabled && !fresh.game_helpers.team.enabled &&
+              fresh.game_helpers.build.hold_ms == 660 && fresh.game_helpers.build.pause_ms == 100 &&
+              fresh.game_helpers.team.interval_ms == 800 && fresh.game_helpers.team.random_enabled &&
+              fresh.game_helpers.team.random_min_ms == 100 && fresh.game_helpers.team.random_max_ms == 200,
+          "fresh profiles expose the requested helper presets without enabling any helper");
+    const fs::path helpers_path = directory / L"helpers.ini";
+    AppSettings helper_settings;
+    helper_settings.game_helpers.build = {true, L"Ctrl+F6", 720, 120, true, 5, 35};
+    helper_settings.game_helpers.team = {true, L"Shift+F7", 850, false, 110, 210};
+    wardogs::save_settings_to(helpers_path, helper_settings);
+    WritePrivateProfileStringW(L"extension", L"keep_helpers", L"unchanged", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"helpers_future_option", L"keep", helpers_path.c_str());
+    const auto restored_helpers = wardogs::load_settings_from(helpers_path);
+    check(restored_helpers.game_helpers == helper_settings.game_helpers,
+          "both helper shortcuts, enable choices, timings and independent randomization persist exactly");
+    check(ini_value(helpers_path, L"settings", L"build_helper_running").empty() &&
+              ini_value(helpers_path, L"settings", L"team_piker_running").empty(),
+          "helper profiles store preferences rather than an active clicking state");
+    wardogs::save_settings_to(helpers_path, restored_helpers);
+    check(ini_value(helpers_path, L"extension", L"keep_helpers") == L"unchanged" &&
+              ini_value(helpers_path, L"settings", L"helpers_future_option") == L"keep",
+          "helper persistence retains extension sections and future settings");
+    const auto helpers_before_invalid = bytes(helpers_path);
+    const auto reject_helper_change = [&](const auto& mutate) {
+        auto invalid = helper_settings;
+        mutate(invalid.game_helpers);
+        bool rejected = false;
+        try { wardogs::save_settings_to(helpers_path, invalid); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected && bytes(helpers_path) == helpers_before_invalid,
+              "invalid helper settings cannot partially overwrite any previous profile bytes");
+    };
+    reject_helper_change([](auto& value) { value.build.hold_ms = 49; });
+    reject_helper_change([](auto& value) { value.build.hold_ms = 5001; });
+    reject_helper_change([](auto& value) { value.build.pause_ms = 19; });
+    reject_helper_change([](auto& value) { value.build.pause_ms = 10001; });
+    reject_helper_change([](auto& value) { value.team.interval_ms = 99; });
+    reject_helper_change([](auto& value) { value.team.interval_ms = 10001; });
+    reject_helper_change([](auto& value) { value.build.random_min_ms = -1; });
+    reject_helper_change([](auto& value) { value.build.random_max_ms = 2001; });
+    reject_helper_change([](auto& value) { value.team.random_min_ms = 220; });
+    reject_helper_change([](auto& value) { value.team.random_max_ms = 2001; });
+    reject_helper_change([](auto& value) { value.build.hotkey = L"F12"; });
+    reject_helper_change([](auto& value) { value.build.hotkey = L"Esc"; });
+    reject_helper_change([](auto& value) { value.team.hotkey = L"Win+F7"; });
+    reject_helper_change([](auto& value) { value.team.hotkey = value.build.hotkey; });
+    reject_helper_change([](auto& value) { value.build.hotkey = L"Alt+X"; });
+    for (const wchar_t* invalid : {L"0", L"5001", L"660junk", L"660.5", L"999999999999999999"}) {
+        WritePrivateProfileStringW(L"settings", L"build_helper_hold_ms", invalid, helpers_path.c_str());
+        const auto original = bytes(helpers_path);
+        const auto recovered_helpers = wardogs::load_settings_from(helpers_path);
+        check(recovered_helpers.game_helpers.build.hold_ms == 660 &&
+                  recovered_helpers.game_helpers.build.pause_ms == 120 &&
+                  recovered_helpers.game_helpers.team == helper_settings.game_helpers.team &&
+                  bytes(helpers_path) == original,
+              "malformed build timing falls back safely without rewriting the profile or other helper settings");
+    }
+    wardogs::save_settings_to(helpers_path, helper_settings);
+    WritePrivateProfileStringW(L"settings", L"team_piker_interval_ms", L"-1", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"build_helper_pause_ms", L"10001", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"team_piker_random_min_ms", L"500", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"team_piker_random_max_ms", L"100", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"build_helper_random_max_ms", L"2001", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"build_helper_enabled", L"2", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"team_piker_random_enabled", L"bogus", helpers_path.c_str());
+    const auto invalid_helpers_before_read = bytes(helpers_path);
+    const auto invalid_helpers = wardogs::load_settings_from(helpers_path).game_helpers;
+    check(invalid_helpers.build.pause_ms == 100 && invalid_helpers.team.interval_ms == 800 &&
+              invalid_helpers.team.random_min_ms == 100 && invalid_helpers.team.random_max_ms == 200 &&
+              invalid_helpers.build.random_max_ms == 30 && !invalid_helpers.build.enabled &&
+              invalid_helpers.team.random_enabled && bytes(helpers_path) == invalid_helpers_before_read,
+          "invalid helper intervals, booleans and reversed random ranges use bounded defaults without writes");
+    wardogs::save_settings_to(helpers_path, helper_settings);
+    WritePrivateProfileStringW(L"settings", L"build_helper_hotkey", L"F12", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"team_piker_hotkey", L"bogus", helpers_path.c_str());
+    const auto invalid_keys_before_read = bytes(helpers_path);
+    const auto invalid_helper_keys = wardogs::load_settings_from(helpers_path).game_helpers;
+    check(!invalid_helper_keys.build.enabled && !invalid_helper_keys.team.enabled &&
+              invalid_helper_keys.build.hotkey == L"F6" && invalid_helper_keys.team.hotkey == L"F7" &&
+              bytes(helpers_path) == invalid_keys_before_read,
+          "unsupported helper shortcuts disable the affected helper and retain its default without changing the file");
+    const fs::path helper_legacy_path = directory / L"helpers-legacy.ini";
+    const fs::path helper_migrated_path = directory / L"helpers-migrated.ini";
+    {
+        fs::create_directories(directory);
+        std::ofstream legacy(helper_legacy_path);
+        legacy << "; retained legacy helper comment\n[settings]\nquick_workflow_version=1\n"
+                  "base_hotkey=Alt+X\nlegacy_helper_option=keep\n[extension]\nkeep_helpers=legacy\n";
+    }
+    const auto legacy_helpers_bytes = bytes(helper_legacy_path);
+    auto migrated_helpers = wardogs::load_settings_from(helper_migrated_path, helper_legacy_path);
+    check(migrated_helpers.game_helpers == wardogs::GameHelpersPreferences{} && !fs::exists(helper_migrated_path),
+          "legacy profiles gain helper defaults without writes or automatic activation");
+    migrated_helpers.game_helpers = helper_settings.game_helpers;
+    wardogs::save_settings_to(helper_migrated_path, migrated_helpers, helper_legacy_path);
+    check(wardogs::load_settings_from(helper_migrated_path).game_helpers == helper_settings.game_helpers &&
+              ini_value(helper_migrated_path, L"settings", L"legacy_helper_option") == L"keep" &&
+              ini_value(helper_migrated_path, L"extension", L"keep_helpers") == L"legacy" &&
+              bytes(helper_legacy_path) == legacy_helpers_bytes,
+          "helper migration preserves legacy extension data and never changes the original profile");
     check(saved.ghost_reticle.bearing_compensation_deg == 0.0,
           "ghost bearing compensation defaults to zero degrees");
     check(saved.pinned_card.always_on_top && !saved.pinned_card.placement &&

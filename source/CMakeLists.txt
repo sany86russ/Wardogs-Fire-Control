@@ -19,7 +19,8 @@ qt_add_resources(wardogs_i18n localization
     PREFIX "/i18n"
     BASE translations
     FILES translations/main.json translations/dialogs.json
-          translations/errors.json translations/common.json translations/planning.json translations/qtbase_ru.json
+          translations/errors.json translations/common.json translations/planning.json translations/helpers.json
+          translations/helper_errors.json translations/helper_runtime.json translations/qtbase_ru.json
 )
 
 add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)
@@ -75,6 +76,7 @@ add_library(wardogs_core
     src/firing_analysis.cpp
     src/coordinates.cpp
     src/ghost_reticle.cpp
+    src/game_helpers.cpp
     src/hotkeys.cpp
     src/image.cpp
     src/logger.cpp
@@ -123,6 +125,7 @@ if(WIN32)
         src/capture.cpp
         src/direction_plot.cpp
         src/ghost_reticle_window.cpp
+        src/game_helpers_dialog.cpp
         src/main_window.cpp
         src/pinned_result_window.cpp
         src/selection_overlay.cpp
@@ -188,6 +191,8 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/QUICKSTART-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/USAGE-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/USAGE-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/GAME-HELPERS-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/GAME-HELPERS-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/LOCALIZATION.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/CALCULATIONS-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASE-NOTES-EN.md"
@@ -234,6 +239,22 @@ install(FILES
 )
 
 enable_testing()
+
+add_executable(wardogs_game_helpers_tests tests/game_helpers_tests.cpp)
+target_link_libraries(wardogs_game_helpers_tests PRIVATE wardogs_core user32)
+target_compile_options(wardogs_game_helpers_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_game_helpers_tests COMMAND wardogs_game_helpers_tests)
+set_tests_properties(wardogs_game_helpers_tests PROPERTIES TIMEOUT 20)
+
+add_executable(wardogs_game_helpers_dialog_tests
+    tests/game_helpers_dialog_tests.cpp src/game_helpers_dialog.cpp)
+target_include_directories(wardogs_game_helpers_dialog_tests PRIVATE src include)
+target_link_libraries(wardogs_game_helpers_dialog_tests PRIVATE
+    wardogs_planning_ui wardogs_i18n wardogs_core Qt6::Widgets)
+target_compile_definitions(wardogs_game_helpers_dialog_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_game_helpers_dialog_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_game_helpers_dialog_tests COMMAND wardogs_game_helpers_dialog_tests -platform offscreen)
+set_tests_properties(wardogs_game_helpers_dialog_tests PROPERTIES TIMEOUT 20)
 
 foreach(hud_test IN ITEMS sph_hud shot_observation aim_alignment)
     add_executable(wardogs_${hud_test}_tests tests/${hud_test}_tests.cpp)
