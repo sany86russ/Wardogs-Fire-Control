@@ -26,6 +26,12 @@ A series of short left-button clicks without moving the cursor. The default inte
 
 The first click follows the start command and activation-key release; subsequent clicks follow the configured interval. All timings are nominal: Windows scheduling can delay an event.
 
+## How left-button events are sent
+
+The helpers use documented Windows `SendInput`: one ordinary press and one release. The application does not move the cursor, change game files or memory, or install a driver. Synthetic-input flags and Windows restrictions are not concealed or bypassed. [Microsoft SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [event flags](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-msllhookstruct).
+
+Before each new press, the original foreground window is checked again for visibility and non-minimized state, and the current desktop must be receiving input. A desktop switch/lock or failed check stops new presses. An accepted press must still be released; an explicitly rejected press does not generate a spurious release. A Windows refusal stops the loop without elevating privileges or selecting another input method. These limits reduce unintended input but do not establish permission to use macros in the game. [Microsoft UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw).
+
 ## Persistence and limits
 
 Assigned shortcuts, hotkey enable choices, intervals and randomization switches are saved in the Windows profile: `%LOCALAPPDATA%\WardogsFireControl\settings.ini`. Restarting restores these preferences while **both loops remain stopped** until an explicit shortcut press.

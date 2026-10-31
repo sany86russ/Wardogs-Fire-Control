@@ -2,6 +2,7 @@
 
 #include "wardogs/game_helpers_preferences.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -18,6 +19,8 @@ struct GameHelperPlatform {
     // at START, not merely any game window. Callbacks must return promptly and
     // must not call the runner's lifecycle methods.
     std::function<bool()> foreground_matches;
+    // false means no event was accepted. A rejected DOWN acquires no release
+    // obligation; a thrown exception has uncertain delivery and still owes UP.
     std::function<bool(bool pressed)> send_left_button;
     // Optional initial trigger/modifier release check. A held shortcut never
     // becomes Ctrl+click/Alt+click; timeout after 3 seconds fails closed.
@@ -35,9 +38,15 @@ struct GameHelperTiming {
     GameHelperMode mode, const GameHelpersPreferences& preferences,
     int random_addition_ms);
 
-// Ordinary, visible Win32 input. No game-process access, hooks, or bypasses.
-// Returns false when Windows accepts no input, including UIPI restrictions.
-[[nodiscard]] bool send_helper_left_button(bool pressed) noexcept;
+// Exact-window and active-input-desktop convenience gate. It does not identify
+// a game process or establish publisher permission to automate that window.
+[[nodiscard]] bool helper_window_allows_input(std::uintptr_t expected_window) noexcept;
+// Ordinary, visible Win32 input. Every DOWN repeats the gate above; an owed UP
+// is permitted after focus/desktop loss so owned input can be released. No
+// game-process access, hooks, or bypasses. false means no event was accepted,
+// including a failed preflight or a Windows/UIPI rejection.
+[[nodiscard]] bool send_helper_left_button(std::uintptr_t expected_window,
+                                          bool pressed) noexcept;
 
 class GameHelperRunner {
 public:

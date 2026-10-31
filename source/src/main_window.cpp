@@ -6749,9 +6749,13 @@ private:
             ? preferences.build.hotkey : preferences.team.hotkey);
         try {
             game_helper_.start(mode, preferences, {
-                [activation_window] { return GetForegroundWindow() == activation_window &&
+                [activation_window] { return wardogs::helper_window_allows_input(
+                    reinterpret_cast<std::uintptr_t>(activation_window)) &&
                     is_wardogs_window(activation_window); },
-                wardogs::send_helper_left_button,
+                [activation_window](bool pressed) {
+                    return wardogs::send_helper_left_button(
+                        reinterpret_cast<std::uintptr_t>(activation_window), pressed);
+                },
                 [hotkey] {
                     return !(GetAsyncKeyState(static_cast<int>(hotkey.virtual_key)) & 0x8000) &&
                         !(GetAsyncKeyState(VK_CONTROL) & 0x8000) &&

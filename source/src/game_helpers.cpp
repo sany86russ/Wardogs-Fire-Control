@@ -44,7 +44,24 @@ GameHelperTiming game_helper_timing(GameHelperMode mode,
     throw std::invalid_argument("Выберите помощника перед запуском");
 }
 
-bool send_helper_left_button(bool pressed) noexcept {
+bool helper_window_allows_input(std::uintptr_t expected_window) noexcept {
+    const auto window = reinterpret_cast<HWND>(expected_window);
+    if (!window || GetForegroundWindow() != window || !IsWindowVisible(window) || IsIconic(window))
+        return false;
+    // This is a borrowed handle. Never close it, switch desktops, or attach
+    // the worker to another desktop in order to make synthetic input succeed.
+    const HDESK desktop = GetThreadDesktop(GetCurrentThreadId());
+    BOOL receives_input = FALSE;
+    DWORD required{};
+    if (!desktop || !GetUserObjectInformationW(desktop, UOI_IO, &receives_input,
+                                               sizeof(receives_input), &required) ||
+        receives_input == FALSE)
+        return false;
+    return GetForegroundWindow() == window;
+}
+
+bool send_helper_left_button(std::uintptr_t expected_window, bool pressed) noexcept {
+    if (pressed && !helper_window_allows_input(expected_window)) return false;
     INPUT input{};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = pressed ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
@@ -154,10 +171,11 @@ struct GameHelperRunner::Impl {
                     random_enabled ? distribution(random) : 0);
                 if (!foreground_ok()) break;
                 const auto down_time = std::chrono::steady_clock::now();
-                // Conservatively owe an UP even if an injected test/platform
-                // callback throws after sending DOWN or reports a failure.
+                // A throwing callback may have sent DOWN before throwing.
+                // Explicit false, however, means no input was accepted.
                 owns_button.store(true, std::memory_order_release);
                 if (!platform.send_left_button(true)) {
+                    owns_button.store(false, std::memory_order_release);
                     fail(GameHelperStopReason::input_failed,
                          "Windows не приняла нажатие ЛКМ");
                     break;

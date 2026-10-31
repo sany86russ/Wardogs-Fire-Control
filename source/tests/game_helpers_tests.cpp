@@ -1,9 +1,12 @@
 #include "wardogs/game_helpers.hpp"
 
+#include <Windows.h>
+
 #include <atomic>
 #include <chrono>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -95,6 +98,24 @@ int main() {
         catch (const std::exception&) { return true; }
         return false;
     };
+
+    check(!wardogs::helper_window_allows_input(0) &&
+          !wardogs::helper_window_allows_input(std::numeric_limits<std::uintptr_t>::max()),
+          "missing and invalid window identities fail the production input gate");
+    check(!wardogs::send_helper_left_button(0, true) &&
+          !wardogs::send_helper_left_button(std::numeric_limits<std::uintptr_t>::max(), true),
+          "a refused production DOWN sends no input");
+    {
+        const HWND hidden = CreateWindowExW(0, L"STATIC", L"wardogs-helper-guard-test",
+            WS_POPUP, 0, 0, 20, 20, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        check(hidden != nullptr, "an own hidden window is available for guard verification");
+        if (hidden) {
+            check(!wardogs::helper_window_allows_input(reinterpret_cast<std::uintptr_t>(hidden)) &&
+                  !wardogs::send_helper_left_button(reinterpret_cast<std::uintptr_t>(hidden), true),
+                  "hidden windows cannot receive a helper DOWN");
+            DestroyWindow(hidden);
+        }
+    }
 
     GameHelpersPreferences defaults;
     const auto build = wardogs::game_helper_timing(GameHelperMode::build, defaults, 20);
@@ -233,8 +254,8 @@ int main() {
               runner.stop_reason() == GameHelperStopReason::input_failed &&
               !runner.last_error().empty(), "rejected DOWN stops and exposes the failure");
         const auto values = fixture.snapshot();
-        check(values.size() == 2 && !values.back().pressed,
-              "a rejected or uncertain DOWN still receives a conservative release");
+        check(values.size() == 1 && values.front().pressed,
+              "a known rejected DOWN never emits a spurious UP without ownership");
     }
     {
         Fixture fixture;
