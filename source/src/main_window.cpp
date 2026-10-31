@@ -825,6 +825,17 @@ public:
             QApplication::processEvents();
             QApplication::processEvents();
         }
+        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team")) {
+            if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs")))
+                if (auto* scroll = qobject_cast<QScrollArea*>(tabs->currentWidget()))
+                    if (auto* field = dialog->findChild<QWidget*>(mode == QStringLiteral("helpers")
+                            ? QStringLiteral("buildHelperHold") : QStringLiteral("teamPikerInterval"))) {
+                        // Like a user scrolling a smaller/high-DPI display,
+                        // expose the timing field before checking its pixels.
+                        scroll->ensureWidgetVisible(field);
+                        QApplication::processEvents();
+                    }
+        }
         if (mode == QStringLiteral("recognition-bottom")) {
             if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("settingsTabs")))
                 if (auto* scroll = qobject_cast<QScrollArea*>(tabs->currentWidget()))
