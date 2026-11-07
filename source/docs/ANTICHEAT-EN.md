@@ -36,7 +36,7 @@ Current application-owned code synthesizes left-button input through `SendInput`
 
 The helpers do not use reading/writing of another process's memory, `CreateRemoteThread`, DLL injection, an application-owned driver, game-file modification, stopping anti-cheat services or spoofing its messages. The foreground check uses the HWND, caption and class rather than reading the game process. This does not describe private anti-cheat detection rules.
 
-A helper starts only after an explicit command with a matching active game window. Its worker checks the same HWND every 10 ms during the loop and before a new press. Switching windows, stopping, pausing or closing the application ends the loop and sends a left-button release. Returning to the game does not resume clicking. Caption/class metadata do not authenticate a process; a short foreground-switch race cannot be eliminated completely. Input failures are surfaced; Windows restrictions are not bypassed. [Helper settings](GAME-HELPERS-EN.md).
+A helper starts only after an explicit command with a matching active game window. Its worker checks the same HWND every 10 ms during the loop and before a new press. Switching windows, stopping or closing the application ends the loop and sends a left-button release. Capture pause keeps helpers and their shortcuts active; window and desktop checks continue. Returning to the game does not resume stopped clicks. Caption/class metadata do not authenticate a process; a short foreground-switch race cannot be eliminated completely. Input failures are surfaced; Windows restrictions are not bypassed. [Helper settings](GAME-HELPERS-EN.md).
 
 ## Historical Qt 6.8.3 dependency audit
 
