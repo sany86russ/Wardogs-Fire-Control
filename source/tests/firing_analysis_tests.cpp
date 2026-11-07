@@ -110,6 +110,70 @@ void default_models() {
           "maximum-range geometric apex is independently R/4");
 }
 
+void coordinate_endpoint_consistency() {
+    using namespace wardogs;
+    const PlatformCalibration identity{identity_rotation(), 0.0};
+    for (const auto arc : {Arc::low, Arc::high}) {
+        const double minimum_range = arc == Arc::low ? 1181.0 : 735.0;
+        const double minimum_mil = arc == Arc::low ? 20.0 : 1400.0;
+        for (const double distance : {minimum_range, sph2_maximum_range_m}) {
+            auto endpoint = request(AnalysisWeapon::sph2, distance, arc);
+            endpoint.base = {100.0, 80.0};
+            // Literal two-decimal map coordinates reproduce manual/OCR
+            // input, including (126.29 - 100) * 100 rounding above 2629.
+            endpoint.target = {distance == sph2_maximum_range_m ? 126.29 :
+                (arc == Arc::low ? 111.81 : 107.35), 80.0};
+            const auto main = corrected_solution(endpoint.base, endpoint.target, identity, arc);
+            const auto analysis = analyze_firing(endpoint);
+            check(analysis.status == FiringAnalysisStatus::available &&
+                  analysis.nominal_mil && analysis.trajectory,
+                  "shifted decimal SPH-2 endpoints stay available in both main guidance and analysis");
+            if (analysis.nominal_mil)
+                close(*analysis.nominal_mil, main.mil,
+                      "coordinate roundoff cannot make analysis disagree with the main endpoint command");
+            close(main.mil, distance == minimum_range ? minimum_mil :
+                  (arc == Arc::low ? 600.0 : 610.0),
+                  "endpoint handling retains the supported sight command");
+        }
+
+        // Independently intersect the parabola of the minimum supported
+        // sight angle with a raised/lowered target plane. The resulting
+        // shifted coordinates must not lose guidance in either UI path.
+        const long double principal = std::asin(
+            static_cast<long double>(minimum_range) / sph2_maximum_range_m);
+        const long double elevation = arc == Arc::low ? principal / 2.0L
+            : (std::numbers::pi_v<long double> - principal) / 2.0L;
+        const long double horizontal = std::cos(elevation);
+        const long double midpoint = sph2_maximum_range_m *
+            std::sin(elevation) * horizontal;
+        for (const double height : {-100.0, -50.0, 20.0}) {
+            const double distance = static_cast<double>(midpoint + std::sqrt(
+                midpoint * midpoint - 2.0L * sph2_maximum_range_m *
+                height * horizontal * horizontal));
+            for (const double bearing : {0.0, 47.0, 90.0, 225.0}) {
+                auto endpoint = request(AnalysisWeapon::sph2, distance, arc);
+                endpoint.base = {100.0, 80.0};
+                const double angle = bearing * std::numbers::pi / 180.0;
+                endpoint.target = {
+                    endpoint.base.x + distance / 100.0 * std::sin(angle),
+                    endpoint.base.y + distance / 100.0 * std::cos(angle)};
+                endpoint.height_delta_m = height;
+                const auto main = corrected_solution(
+                    endpoint.base, endpoint.target, identity, arc, height);
+                const auto analysis = analyze_firing(endpoint);
+                check(analysis.status == FiringAnalysisStatus::available &&
+                      analysis.nominal_mil && analysis.trajectory,
+                      "height-aware endpoints remain available after a shifted coordinate roundtrip");
+                if (analysis.nominal_mil)
+                    close(*analysis.nominal_mil, main.mil,
+                          "height-aware analysis uses the same endpoint command as main guidance");
+                close(main.mil, minimum_mil,
+                      "independent height-plane intersection preserves the minimum supported sight");
+            }
+        }
+    }
+}
+
 void assumed_physics() {
     using namespace wardogs;
     auto low_request = request(AnalysisWeapon::sph2, 2000.0);
@@ -439,6 +503,7 @@ void target_offsets() {
 int main() {
     try {
         default_models();
+        coordinate_endpoint_consistency();
         assumed_physics();
         terrain_checks();
         observed_times();

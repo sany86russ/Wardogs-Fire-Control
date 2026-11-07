@@ -598,6 +598,73 @@ int run_tests() {
             "eligibility rejects a first target at the gun position");
     rejects([] { (void)wardogs::calibration_aim_separation_deg({0, 0}, {0, 18}, {0, 0}); },
             "eligibility rejects a second target at the gun position");
+    test_context = "shifted decimal nominal calibration endpoints";
+    struct DecimalEndpoint {
+        Point base;
+        Point endpoint;
+        Point peer;
+        Point unsupported;
+        Arc arc;
+        double expected_mil;
+    };
+    // Literal map coordinates, rather than a distance generated from the
+    // same floating-point expression as production, reproduce the input
+    // path: decimal subtraction puts every fixture just outside its strict
+    // table boundary despite representing an exact supported game range.
+    const std::array decimal_endpoints{
+        DecimalEndpoint{{100.01, 80.0}, {111.82, 80.0}, {100.01, 98.0},
+                        {111.81, 80.0}, Arc::low, 20.0},
+        DecimalEndpoint{{100.0, 80.0}, {126.29, 80.0}, {100.0, 98.0},
+                        {126.30, 80.0}, Arc::low, 600.0},
+        DecimalEndpoint{{100.0, 80.0}, {100.0, 87.35}, {118.0, 80.0},
+                        {100.0, 87.34}, Arc::high, 1400.0},
+        DecimalEndpoint{{100.0, 80.0}, {126.29, 80.0}, {100.0, 98.0},
+                        {126.30, 80.0}, Arc::high, 610.0}};
+    for (const auto& fixture : decimal_endpoints) {
+        const double raw_range = std::hypot(
+            fixture.endpoint.x - fixture.base.x,
+            fixture.endpoint.y - fixture.base.y) * 100.0;
+        rejects([&] {
+            (void)wardogs::sph2_mil_for_distance(raw_range, fixture.arc);
+        }, "the raw table API still rejects a numeric range beyond its exact endpoint");
+        rejects([&] {
+            (void)wardogs::sph2_mil_for_trajectory(raw_range, 0.0, fixture.arc);
+        }, "the raw zero-height trajectory API keeps strict range boundaries");
+        close(wardogs::calibration_aim_separation_deg(
+                  fixture.base, fixture.endpoint, fixture.peer),
+              90.0, "decimal endpoint fixtures retain an independent eligible target pair");
+        const auto command = wardogs::corrected_solution(
+            fixture.base, fixture.endpoint, terrain_identity, fixture.arc);
+        close(command.mil, fixture.expected_mil,
+              "the coordinate calculator accepts the decimal endpoint with its canonical MIL");
+        for (bool swap_shots : {false, true}) {
+            const CalibrationShot endpoint{fixture.endpoint, fixture.endpoint, fixture.arc};
+            const CalibrationShot peer{fixture.peer, fixture.peer, fixture.arc};
+            try {
+                const auto recovered = wardogs::calibrate_platform(
+                    fixture.base, swap_shots ? peer : endpoint,
+                    swap_shots ? endpoint : peer);
+                close(recovered.pair_angle_residual_deg, 0.0,
+                      "exact decimal endpoint impacts preserve a zero calibration residual");
+                const auto expected = wardogs::identity_rotation();
+                for (std::size_t row = 0; row < 3; ++row)
+                    for (std::size_t column = 0; column < 3; ++column)
+                        close(recovered.rotation[row][column], expected[row][column],
+                              "either nominal shot can use a shifted endpoint without inventing platform tilt",
+                              1e-12);
+            } catch (const std::exception&) {
+                check(false, "calibration accepts shifted decimal sight endpoints in either shot position");
+            }
+            const CalibrationShot unsupported{
+                fixture.unsupported, fixture.unsupported, fixture.arc};
+            rejects([&] {
+                (void)wardogs::calibrate_platform(
+                    fixture.base, swap_shots ? peer : unsupported,
+                    swap_shots ? unsupported : peer);
+            }, "endpoint roundoff tolerance cannot accept a nominal shot a full metre outside the table");
+        }
+    }
+    test_context = "calibration geometry and supported nominal settings";
     for (Arc arc : {Arc::low, Arc::high}) {
         rejects([&] {
             (void)wardogs::calibrate_platform(

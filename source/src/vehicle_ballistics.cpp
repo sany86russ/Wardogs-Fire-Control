@@ -490,17 +490,21 @@ PlatformCalibration calibrate_platform(Point base, const CalibrationShot& first,
     // Calibration must describe nominal shots the supported sight could
     // actually request. Observed impacts retain the wider physical domain:
     // an undershoot below the sight-table minimum is useful evidence.
-    const auto check_nominal_shot = [](double range_m, double height_m,
-                                       Arc arc, const char* label) {
+    const auto check_nominal_shot = [base](Point aim, double height_m,
+                                         Arc arc, const char* label) {
         try {
-            (void)sph2_mil_for_trajectory(range_m, height_m, arc);
+            // Match the main coordinate path, including its narrowly bounded
+            // internal endpoint-roundoff handling. The raw table API remains
+            // strict; subtracting decimal map coordinates is not a raw input.
+            (void)corrected_solution(base, aim,
+                PlatformCalibration{identity_rotation(), 0.0}, arc, height_m);
         } catch (const std::invalid_argument& error) {
             throw std::invalid_argument(std::string(label) + ": " + error.what());
         }
     };
-    check_nominal_shot(first_aim.first, first_aim_height, first.arc,
+    check_nominal_shot(first.aim_point, first_aim_height, first.arc,
                        "Цель первого выстрела");
-    check_nominal_shot(second_aim.first, second_aim_height, second.arc,
+    check_nominal_shot(second.aim_point, second_aim_height, second.arc,
                        "Цель второго выстрела");
     const std::array nominal{
         direction_from_bearing_and_elevation(

@@ -310,7 +310,13 @@ FiringAnalysis analyze_firing(const FiringAnalysisRequest& request) {
     try {
         result.nominal_mil = request.weapon == AnalysisWeapon::l81
             ? mortar_mil_for_distance(result.distance_m)
-            : sph2_mil_for_trajectory(result.distance_m, *result.height_delta_m, request.arc);
+            // This is a coordinate-derived solution, just like the main
+            // calculator. Its geometry path tolerates internal roundoff at
+            // sight-table endpoints (e.g. 126.29 - 100 -> 2629.0000000000005 m).
+            // Keep the raw distance/table API strict for external inputs.
+            : corrected_solution(request.base, request.target,
+                PlatformCalibration{identity_rotation(), 0.0}, request.arc,
+                *result.height_delta_m).mil;
     } catch (const std::invalid_argument&) {
         result.status = request.weapon == AnalysisWeapon::l81 || *result.height_delta_m == 0.0
             ? FiringAnalysisStatus::unsupported_range : FiringAnalysisStatus::unreachable;
