@@ -1,5 +1,7 @@
 # WARDOGS Fire Control — workflow
 
+The 2.15 source automatically archives accepted impacts and can provisionally refine a new target's MIL from consistent observations. [Automatic collection and learning limits](AUTOMATIC-LEARNING-EN.md). No extra actions or background HUD reading are introduced.
+
 [Русский](USAGE-RU.md) · [App overview](../../README.en.md) · [Mathematics](CALCULATIONS-EN.md)
 
 This guide describes the current workflow: map, gun, target and optional ranging. Download the complete package from the release page. L81 and SPH-2 tables are unchanged. First-shot accuracy and agreement between table metres and the game's RNG are not promised.

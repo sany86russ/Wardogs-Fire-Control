@@ -62,6 +62,12 @@ struct ObservationAssessment {
     std::size_t bearing_prediction_target_count{};
     double bearing_prediction_offset_deg{};
     double bearing_prediction_residual_m{};
+    // Optional same-standing-gun, same-arc MIL prediction. Error is measured
+    // in exact sight-table metres on held-out target groups, not hit radius.
+    bool range_prediction_applied{};
+    std::size_t range_prediction_target_count{};
+    double range_prediction_offset_mil{};
+    double range_prediction_residual_m{};
 };
 
 class ContinuousCalibration {
@@ -69,7 +75,8 @@ public:
     ContinuousCalibration(
         Point base, PlatformCalibration baseline,
         ContinuousCorrectionMode mode = ContinuousCorrectionMode::platform_refinement,
-        bool enable_bearing_prediction = false);
+        bool enable_bearing_prediction = false,
+        bool enable_range_prediction = false);
 
     [[nodiscard]] CorrectedSolution solution(
         Point target, Arc arc, double height_delta_m = 0.0) const;
@@ -82,7 +89,7 @@ public:
         Point target, Arc arc, double height_delta_m = 0.0) const;
     void clear();
     // Keep local observations/history, but require new independent targets
-    // before transferring a prediction after an unobserved change of pose.
+    // before transferring either prediction after an unobserved change of pose.
     void invalidate_bearing_prediction() noexcept;
     [[nodiscard]] std::size_t sample_count() const noexcept;
     [[nodiscard]] const PlatformCalibration& global_calibration() const noexcept;
@@ -126,7 +133,10 @@ private:
     void refresh_offsets();
     void refit_global_calibration(std::span<const std::size_t> target_groups);
     void rebuild_bearing_prediction();
+    void rebuild_range_prediction();
     [[nodiscard]] double predicted_bearing(Point target, Arc arc,
+        double height_delta_m, ObservationAssessment& assessment) const;
+    [[nodiscard]] double predicted_range(Point target, Arc arc,
         double height_delta_m, ObservationAssessment& assessment) const;
 
     struct BearingPrior {
@@ -139,6 +149,19 @@ private:
         double minimum_elevation{}, maximum_elevation{};
     };
 
+    struct RangePrior {
+        bool valid{};
+        std::size_t targets{};
+        double offset_mil{}, validation_residual_m{};
+        double bearing_start_deg{}, bearing_span_deg{};
+        double minimum_range_m{}, maximum_range_m{};
+        double minimum_elevation{}, maximum_elevation{};
+        double minimum_height_m{}, maximum_height_m{};
+        // At most 32 observed groups support the convex region in normalized
+        // (range, unwrapped bearing, height). A subset can only narrow coverage.
+        std::vector<Vector3> joint_support;
+    };
+
     Point base_;
     PlatformCalibration baseline_;
     PlatformCalibration active_;
@@ -147,8 +170,10 @@ private:
     std::vector<double> confidence_scores_;
     std::vector<std::pair<double, double>> local_confidence_scores_;
     bool enable_bearing_prediction_{};
+    bool enable_range_prediction_{};
     std::size_t bearing_prediction_start_{};
     std::array<BearingPrior, 2> bearing_priors_{};
+    std::array<RangePrior, 2> range_priors_{};
 };
 
 }  // namespace wardogs

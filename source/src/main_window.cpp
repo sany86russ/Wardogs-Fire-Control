@@ -29,6 +29,7 @@
 #include "wardogs/windows_ocr.hpp"
 #include "wardogs/shot_observation.hpp"
 #include "wardogs/aim_alignment.hpp"
+#include "wardogs/accuracy_observations.hpp"
 #include "wardogs/sph_hud.hpp"
 
 #include "pinned_result_window.hpp"
@@ -638,6 +639,7 @@ public:
         wardogs::i18n::watch(this);
         start_terrain_tasks();
         start_ocr_warmup();
+        start_accuracy_collection();
         // Archived synthetic sight-correlation checks have a diagnostic-only
         // expiry timer. The user application owns no sight capture or OCR timer.
         if (diagnostic_) {
@@ -671,6 +673,7 @@ public:
         if (terrain_tasks_) terrain_tasks_->stop();
         if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
         if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
+        if (accuracy_writer_) accuracy_writer_->stop();
     }
 
     bool export_snapshot(const QString& mode, const QString& path) {
@@ -1143,6 +1146,7 @@ public:
         }
         check("diagnostic_previews_do_not_construct_network_updates", !updates_ &&
               !findChild<QPushButton*>(QStringLiteral("checkUpdatesButton"))->isEnabled());
+        check("diagnostic_previews_do_not_open_user_accuracy_archive", !accuracy_writer_);
         check("game_map_must_be_explicitly_confirmed_for_new_session", !map_confirmed_ &&
               selected_game_map() == wardogs::GameMap::unselected && confirm_map_->isVisible());
         show_result({84, 83});
@@ -1916,6 +1920,45 @@ public:
                 observation_count() == 6 && high_result_->bearing_deg == raw.bearing_deg &&
                 !continuous_calibration_->assess(fresh_target, wardogs::Arc::high).bearing_prediction_applied);
             reset_continuous_calibration();
+            bool range_training_recorded = true;
+            for (auto point : training_targets) {
+                accept_manual_target(point);
+                OcrMessage context; capture_impact_context(context);
+                range_training_recorded = range_training_recorded && record_continuous_impact(
+                    impact_for(*context.impact_firing, 0.0, 12.0), QStringLiteral("test"),
+                    *context.impact_firing);
+            }
+            accept_manual_target(fresh_target);
+            const auto range_assessment = continuous_calibration_->assess(fresh_target, wardogs::Arc::high);
+            check("SPH2_normal_AltI_learns_MIL_for_a_supported_new_target_without_HUD_or_extra_actions",
+                range_training_recorded && observation_count() == 3 && range_assessment.range_prediction_applied &&
+                wardogs::displayed_firing_command(*high_result_).mil == std::round(raw.mil + 12.0) &&
+                !hud_context_ && !hud_reading_ && !hud_busy_ &&
+                fire_control_compact_->text().contains(
+                    wardogs::i18n::text(QStringLiteral("MIL: прогноз по %1 целям · предварительно")).arg(3)) &&
+                vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("Прогноз MIL: %1 · предварительно\n")).arg(
+                    wardogs::i18n::text(QStringLiteral("Навесная")).toLower())) &&
+                pinned_window_->findChild<QLabel*>(QStringLiteral("pinnedContextCaption"))->text().contains(
+                    wardogs::i18n::text(QStringLiteral(" · прогноз MIL · предварительно"))));
+            const auto range_station = accuracy_station_id_;
+            // Render only our synthetic diagnostic widget, never game pixels.
+            pinned_window_->ensurePolished();
+            if (pinned_window_->layout()) pinned_window_->layout()->activate();
+            const auto range_preview = wardogs::active_log_path().parent_path() /
+                (settings_.language == wardogs::UiLanguage::english
+                    ? L"range-learning-en.png" : L"range-learning-ru.png");
+            check("SPH2_provisional_range_card_renders_without_HUD_capture",
+                pinned_window_->grab().save(QString::fromStdWString(range_preview.wstring())));
+            toggle_application_pause();
+            check("SPH2_pause_changes_station_and_withdraws_MIL_prediction_but_preserves_local_history",
+                application_paused_ && accuracy_station_id_ != range_station && observation_count() == 3 &&
+                !continuous_calibration_->assess(fresh_target, wardogs::Arc::high).range_prediction_applied &&
+                high_result_->mil == raw.mil);
+            toggle_application_pause();
+            check("SPH2_resume_does_not_restore_archived_or_pre_pause_MIL_predictions",
+                !application_paused_ && high_result_->mil == raw.mil &&
+                !continuous_calibration_->assess(fresh_target, wardogs::Arc::high).range_prediction_applied);
+            reset_continuous_calibration();
             terrain_ = std::move(saved_terrain);
             terrain_map_ = saved_terrain_map;
             settings_.ghost_reticle.preferred_arc = saved_preferred_arc;
@@ -2162,6 +2205,11 @@ public:
         show_result(*target_);
         const auto field_low_before = *low_result_;
         const auto field_high_before = *high_result_;
+        QTemporaryDir accuracy_archive_test;
+        if (!accuracy_archive_test.isValid()) throw std::runtime_error("Cannot create accuracy archive fixture");
+        const std::filesystem::path accuracy_archive_path{
+            (accuracy_archive_test.path() + QStringLiteral("/observations.json")).toStdWString()};
+        accuracy_writer_ = std::make_unique<wardogs::AccuracyObservationWriter>(accuracy_archive_path);
         const auto field_history_before = history_;
         OcrMessage field_context;
         capture_impact_context(field_context);
@@ -2197,6 +2245,45 @@ public:
               high_result_->bearing_deg == field_corrected.bearing_deg &&
               high_result_->mil == field_corrected.mil && history_ == field_history_before &&
               target_ == field_context.impact_firing->target && !ocr_hold_);
+        accuracy_writer_->stop();
+        const auto archived_landings = wardogs::AccuracyObservationRepository(accuracy_archive_path).load();
+        check("SPH2_normal_impact_automatically_archives_only_accepted_observation_without_HUD",
+            archived_landings.size() == 1 && archived_landings.front().session_id == session_id_ &&
+            archived_landings.front().station_id == accuracy_station_id_ &&
+            archived_landings.front().impact == wardogs::Point{83.57, 92.59} &&
+            archived_landings.front().firing.target == field_context.impact_firing->target &&
+            archived_landings.front().firing.mil == field_context.impact_firing->mil &&
+            archived_landings.front().recorded_at_utc_ms > 0 &&
+            archived_landings.front().command_source == wardogs::AccuracyCommandSource::displayed_unverified &&
+            !archived_landings.front().sight_verified && !archived_landings.front().discharge_observed);
+        accuracy_writer_.reset();
+        const auto damaged_archive_path = std::filesystem::path{
+            (accuracy_archive_test.path() + QStringLiteral("/damaged.json")).toStdWString()};
+        const QByteArray damaged_archive_bytes("not a valid observation archive");
+        {
+            QFile damaged(QString::fromStdWString(damaged_archive_path.wstring()));
+            if (!damaged.open(QIODevice::WriteOnly) || damaged.write(damaged_archive_bytes) != damaged_archive_bytes.size())
+                throw std::runtime_error("Cannot create damaged archive fixture");
+        }
+        std::string archive_failure;
+        accuracy_writer_ = std::make_unique<wardogs::AccuracyObservationWriter>(damaged_archive_path,
+            [&](std::string error) { if (!error.empty()) archive_failure = std::move(error); });
+        OcrMessage archive_failure_context; capture_impact_context(archive_failure_context);
+        const bool accepted_without_storage = record_continuous_impact(*target_, QStringLiteral("test storage failure"),
+            *archive_failure_context.impact_firing);
+        accuracy_writer_->stop();
+        accuracy_writer_.reset();
+        if (!archive_failure.empty()) accuracy_collection_failed(archive_failure);
+        QFile damaged_after(QString::fromStdWString(damaged_archive_path.wstring()));
+        const bool damaged_opened = damaged_after.open(QIODevice::ReadOnly);
+        check("SPH2_archive_failure_preserves_accepted_guidance_and_old_bytes_without_a_modal_prompt",
+            accepted_without_storage && observation_count() == 2 && !archive_failure.empty() &&
+            damaged_opened && damaged_after.readAll() == damaged_archive_bytes &&
+            target_ == field_context.impact_firing->target && high_result_ && low_result_ &&
+            copy_button_->isEnabled() && !ocr_hold_ && !busy_ && !QApplication::activeModalWidget() &&
+            status_->text().contains(wardogs::i18n::text(QStringLiteral("Автосохранение наблюдений недоступно. Расчёт и Alt+I продолжают работать; подробности в журнале."))));
+        damaged_after.close();
+        accuracy_storage_warning_ = false;
         clear_continuous_calibration();
         check("SPH2_clearing_field_correction_restores_original_973_MIL_command",
               !continuous_calibration_ && high_result_->bearing_deg == field_high_before.bearing_deg &&
@@ -3092,6 +3179,10 @@ private:
     QString recent_history_error_;
     std::uint64_t calibration_epoch_{};
     const std::string session_id_{QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString()};
+    std::uint64_t accuracy_station_generation_{1};
+    std::string accuracy_station_id_{session_id_ + ":1"};
+    std::unique_ptr<wardogs::AccuracyObservationWriter> accuracy_writer_;
+    bool accuracy_storage_warning_{};
     std::uint64_t observation_sequence_{};
     std::uint64_t command_sequence_{};
     std::array<std::string, 2> command_ids_{};
@@ -3371,7 +3462,8 @@ private:
             if (continuous_calibration_) {
                 const auto assessment = continuous_calibration_->assess(*target_, *arc, target_height_delta(*target_));
                 prediction_assessment = assessment;
-                correction_provisional = assessment.local_observation_count > 0 && assessment.provisional;
+                correction_provisional = assessment.provisional &&
+                    (assessment.local_observation_count > 0 || assessment.range_prediction_applied);
                 text += wardogs::i18n::text(QStringLiteral("\nРядом с целью: %1 наблюдений · учтено: %2."))
                     .arg(assessment.local_observation_count).arg(assessment.accepted_observation_count);
                 if (assessment.local_observation_count > 0)
@@ -3382,9 +3474,13 @@ private:
                     text += wardogs::i18n::text(QStringLiteral("\nРазброс оценок поправки ≈%1 м; это не вероятность попадания."))
                         .arg(assessment.empirical_scatter_m, 0, 'f', 1);
                 if (assessment.bearing_prediction_applied)
-                    text += wardogs::i18n::text(QStringLiteral("\nАзимут заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка боковой модели ≈%2 м; это не радиус попадания. MIL остаётся локальным. После поворота орудия заново задайте его позицию."))
+                    text += wardogs::i18n::text(QStringLiteral("\nАзимут заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка боковой модели ≈%2 м; это не радиус попадания. После поворота орудия заново задайте его позицию."))
                         .arg(assessment.bearing_prediction_target_count)
                         .arg(assessment.bearing_prediction_residual_m, 0, 'f', 1);
+                if (assessment.range_prediction_applied)
+                    text += wardogs::i18n::text(QStringLiteral("\nMIL заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка по таблице ≈%2 м; прогноз предварительный."))
+                        .arg(assessment.range_prediction_target_count)
+                        .arg(assessment.range_prediction_residual_m, 0, 'f', 1);
             }
             text += wardogs::i18n::text(QStringLiteral("\nПравее / левее — градусы азимута. Дальше / ближе — MIL: настильная + / −, навесная − / +."));
             if (has_calibration_data()) {
@@ -3399,6 +3495,9 @@ private:
             if (prediction_assessment && prediction_assessment->bearing_prediction_applied)
                 compact = wardogs::i18n::text(QStringLiteral("Азимут: прогноз по %1 целям · предварительно"))
                     .arg(prediction_assessment->bearing_prediction_target_count);
+            if (prediction_assessment && prediction_assessment->range_prediction_applied)
+                compact = wardogs::i18n::text(QStringLiteral("MIL: прогноз по %1 целям · предварительно"))
+                    .arg(prediction_assessment->range_prediction_target_count);
             if (ready && last_impact_feedback_ && last_impact_feedback_->target == *target_ && last_impact_feedback_->arc == *arc) {
                 const auto& feedback = *last_impact_feedback_;
                 compact = wardogs::i18n::text(QStringLiteral("Промах %1 м · поправка уже учтена")).arg(feedback.miss_m, 0, 'f', 0);
@@ -4528,7 +4627,7 @@ private:
             continuous_impact_->clear();
             if (button == continuous_arc_) {
                 settings_.ghost_reticle.preferred_arc = arc_from_button(button);
-                if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+                invalidate_accuracy_predictions();
                 if (base_set_ && target_ && !ocr_hold_) show_result(*target_);
                 sync_ghost_solution();
                 sync_pinned_result();
@@ -4568,7 +4667,7 @@ private:
     void toggle_mode() {
         reset_hud_observation();
         advance_input_epoch();
-        if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+        invalidate_accuracy_predictions();
         vehicle_mode_ = !vehicle_mode_;
         try { register_mouse_trigger(); }
         catch (const std::exception& error) {
@@ -4937,7 +5036,7 @@ private:
     void update_calibration_summary() {
         if (!calibration_summary_) return;
         calibration_summary_->setText(has_calibration_data()
-            ? wardogs::i18n::text(QStringLiteral("Учтено попаданий: %1/%2. MIL уточняется рядом с целью; согласованный азимут может заранее уточняться по разным целям этой стоянки и траектории."))
+            ? wardogs::i18n::text(QStringLiteral("Учтено попаданий: %1/%2. Согласованные поправки азимута и MIL могут заранее уточнять новые цели внутри изученной области этой стоянки и траектории."))
                 .arg(continuous_calibration_->sample_count()).arg(wardogs::maximum_continuous_observations)
             : wardogs::i18n::text(QStringLiteral("Можно стрелять сразу. Поправка необязательна: после выстрела по показанным азимуту и MIL наведите курсор на фактическое попадание и нажмите %1 до смены цели или траектории."))
                 .arg(qtext(settings_.impact_hotkey)));
@@ -5158,7 +5257,75 @@ private:
         return false;
     }
 
+    void accuracy_collection_failed(const std::string& reason) {
+        wardogs::log_warning("accuracy.collection_failed reason=" + reason);
+        if (closing_ || accuracy_storage_warning_) return;
+        accuracy_storage_warning_ = true;
+        set_status(wardogs::i18n::text(QStringLiteral("Автосохранение наблюдений недоступно. Расчёт и Alt+I продолжают работать; подробности в журнале.")), true);
+    }
+
+    void start_accuracy_collection() {
+        // Diagnostics never construct a writer at the user's profile path.
+        // No pixels/HUD polling or physical-input subscriptions are involved.
+        if (diagnostic_) return;
+        const QPointer<MainWindow> self(this);
+        try {
+            accuracy_writer_ = std::make_unique<wardogs::AccuracyObservationWriter>(
+                wardogs::accuracy_observations_path(), [self](std::string error) {
+                    if (error.empty()) return;
+                    wardogs::log_warning("accuracy.storage_failed reason=" + error);
+                    if (self) QMetaObject::invokeMethod(self, [self, error = std::move(error)] {
+                        if (self && !self->closing_) self->accuracy_collection_failed(error);
+                    }, Qt::QueuedConnection);
+                });
+        } catch (const std::exception& error) {
+            accuracy_collection_failed(error.what());
+        }
+    }
+
+    void advance_accuracy_station() {
+        accuracy_station_id_ = session_id_ + ":" + std::to_string(++accuracy_station_generation_);
+    }
+
+    void invalidate_accuracy_predictions() {
+        advance_accuracy_station();
+        if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+    }
+
+    void collect_accuracy_observation(const wardogs::FiringSnapshot& firing,
+                                     wardogs::Point impact, double impact_height,
+                                     const std::string& observation_id,
+                                     const std::string& command_id, bool hud_verified) {
+        if (!accuracy_writer_) return;
+        try {
+            wardogs::AccuracyObservation observation;
+            observation.session_id = session_id_;
+            observation.observation_id = observation_id;
+            observation.command_id = command_id.empty() ? "unavailable" : command_id;
+            observation.station_id = accuracy_station_id_;
+            observation.map_id = utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}));
+            observation.base = base_;
+            observation.firing = firing;
+            observation.impact = impact;
+            observation.impact_height_delta_m = impact_height;
+            observation.height_source = terrain_ ? "terrain" : "assumed_level";
+            observation.terrain_profile = terrain_map_ ? terrain_map_->spec.sha256
+                : (terrain_ ? "unknown" : "none");
+            observation.app_version = WARDOGS_VERSION;
+            observation.command_source = hud_verified ? wardogs::AccuracyCommandSource::hud_observed
+                : wardogs::AccuracyCommandSource::displayed_unverified;
+            observation.sight_verified = observation.discharge_observed = hud_verified;
+            if (!accuracy_writer_->submit(std::move(observation)))
+                accuracy_collection_failed("writer unavailable or queue full");
+        } catch (const std::exception& error) {
+            // Archiving is independent of the already accepted correction.
+            // A disk/metadata error must not falsely reject or roll back it.
+            accuracy_collection_failed(error.what());
+        }
+    }
+
     void reset_continuous_calibration() {
+        advance_accuracy_station();
         reset_hud_observation();
         ++calibration_epoch_;
         wardogs::log_info("continuous.reset previous_count=" +
@@ -5268,7 +5435,7 @@ private:
             if (replace_assumed_history) candidate.reset();
             if (!candidate)
                 candidate.emplace(base_, wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0},
-                                  wardogs::ContinuousCorrectionMode::local_only, true);
+                                  wardogs::ContinuousCorrectionMode::local_only, true, true);
             const auto impact_height_delta = target_height_delta(impact);
             observed_impact_height = impact_height_delta;
             const auto assessment = candidate->add_landing(firing, impact, impact_height_delta);
@@ -5317,6 +5484,10 @@ private:
                        << " provisional=" << assessment.provisional
                        << " scatter_available=" << assessment.scatter_available
                        << " sight_residual_scatter_m=" << assessment.empirical_scatter_m
+                       << " range_prediction_applied=" << assessment.range_prediction_applied
+                       << " range_prediction_targets=" << assessment.range_prediction_target_count
+                       << " range_prediction_offset_mil=" << assessment.range_prediction_offset_mil
+                       << " range_prediction_validation_rms_m=" << assessment.range_prediction_residual_m
                        << " hit_radius_m=10 within_radius=" << (observed_miss_m <= 10.0)
                        << " map=" << utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}))
                        << " base=" << base_.x << ',' << base_.y
@@ -5336,6 +5507,8 @@ private:
                       .arg(QString::number(observed_miss_m, 'f', 0), signed_value(bearing_change), signed_value(mil_change))
                 : wardogs::i18n::text(QStringLiteral("Поправка учтена · промах %1 м.\nАзимут %2° · MIL %3; %4."))
                       .arg(QString::number(observed_miss_m, 'f', 0), signed_value(bearing_change), signed_value(mil_change), terrain_status));
+            collect_accuracy_observation(firing, impact, impact_height_delta,
+                                         observation_id, command_id, hud_verified);
             return true;
         } catch (const std::exception& error) {
             if (live_hud_reservation)
@@ -5672,6 +5845,7 @@ private:
         QStringList warnings;
         QStringList corrected_arcs;
         QStringList predicted_arcs;
+        QStringList range_predicted_arcs;
         const auto raw_distance = wardogs::i18n::text(qtext(wardogs::format_distance_meters(result.distance)));
         const auto raw_bearing = qtext(wardogs::format_bearing(result.angle));
         for (const auto [arc, name, card] : std::array{
@@ -5707,10 +5881,15 @@ private:
                 if (continuous_calibration_) {
                     const auto assessment = continuous_calibration_->assess(result.target, arc, height_delta);
                     if (assessment.bearing_prediction_applied) predicted_arcs.push_back(name.toLower());
+                    if (assessment.range_prediction_applied) range_predicted_arcs.push_back(name.toLower());
                     issued << " bearing_prediction_applied=" << assessment.bearing_prediction_applied
                            << " bearing_prediction_targets=" << assessment.bearing_prediction_target_count
                            << " bearing_prediction_offset_deg=" << assessment.bearing_prediction_offset_deg
                            << " bearing_prediction_validation_rms_m=" << assessment.bearing_prediction_residual_m
+                           << " range_prediction_applied=" << assessment.range_prediction_applied
+                           << " range_prediction_targets=" << assessment.range_prediction_target_count
+                           << " range_prediction_offset_mil=" << assessment.range_prediction_offset_mil
+                           << " range_prediction_validation_rms_m=" << assessment.range_prediction_residual_m
                            << " correction_provisional=" << assessment.provisional;
                 }
                 wardogs::log_info(issued.str());
@@ -5778,6 +5957,9 @@ private:
             (terrain_map_ ? wardogs::i18n::text(QStringLiteral(" · %1 · перепад %2 м"))
                 .arg(wardogs::i18n::text(qtext(terrain_map_->spec.display_name))).arg(height_delta, 0, 'f', 1)
                           : wardogs::i18n::text(QStringLiteral(" · рельеф не учтён"))));
+        if (!range_predicted_arcs.isEmpty())
+            vehicle_note_->setText(wardogs::i18n::text(QStringLiteral("Прогноз MIL: %1 · предварительно\n"))
+                .arg(range_predicted_arcs.join(QStringLiteral(", "))) + vehicle_note_->text());
         return false;
     }
 
@@ -5869,6 +6051,9 @@ private:
                 if (continuous_calibration_ && continuous_calibration_->assess(
                         *target_, *arc, target_height_delta(*target_)).bearing_prediction_applied)
                     caption += wardogs::i18n::text(QStringLiteral(" · прогноз азимута"));
+                if (continuous_calibration_ && continuous_calibration_->assess(
+                        *target_, *arc, target_height_delta(*target_)).range_prediction_applied)
+                    caption += wardogs::i18n::text(QStringLiteral(" · прогноз MIL · предварительно"));
             }
             if (vehicle_note_) details.append(vehicle_note_->text());
             if (terrain_assistance_) details.append(terrain_assistance_->text());
@@ -5941,7 +6126,7 @@ private:
         advance_input_epoch();
         ++calibration_epoch_;
         continuous_impact_->clear();
-        if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+        invalidate_accuracy_predictions();
         if (base_set_ && target_ && !ocr_hold_) show_result(*target_);
         try { if (!diagnostic_) wardogs::save_settings(settings_); }
                 catch (const std::exception& e) { wardogs::log_warning("settings.save_failed error=" + std::string(e.what())); }
@@ -7047,7 +7232,7 @@ private:
         if (requested_pause) {
             application_paused_ = true;
             reset_hud_observation();
-            if (continuous_calibration_) continuous_calibration_->invalidate_bearing_prediction();
+            invalidate_accuracy_predictions();
             enter_game_after_terrain_ = false;
             // Release capture chords before attempting any new registration:
             // even a validation/OS failure must leave them free for the game.

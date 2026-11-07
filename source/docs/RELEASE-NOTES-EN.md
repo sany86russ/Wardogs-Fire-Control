@@ -1,5 +1,9 @@
 # WARDOGS Fire Control — release notes
 
+## 2.15.0 — automatic archive and provisional MIL refinement · preparation
+
+Accepted Alt+I landings are saved locally without new mandatory actions. MIL transfer is validated on independent targets and integer commands, restricted to joint range/bearing/height support and never restored from archived sessions. Background HUD capture and flashing frames stay disabled. [Release preparation EN/RU](../../docs/releases/v2.15.0.md) · [Learning details](AUTOMATIC-LEARNING-EN.md).
+
 [Русский](RELEASE-NOTES-RU.md) · [Project overview](../../README.en.md) · [Quick start](QUICKSTART-EN.md)
 
 ## 2.14.0 — left-button helpers and mini-card states · October 31, 2026
