@@ -1558,6 +1558,8 @@ public:
             check("pause_cancels_pending_capture_and_preserves_accepted_model_target_and_card",
                 application_paused_ && !busy_ && !pending_ocr_ && !queued_map_job_ && !map_retry_event_ &&
                 !map_request_context_ && !mouse_timer_->isActive() && !ocr_hold_ &&
+                !hud_context_ && !hud_reading_ && !hud_freshness_timer_->isActive() &&
+                observed_shots_.outstanding_shots() == 0 &&
                 base_ == preserved_base && target_ == preserved_target && history_ == preserved_history &&
                 calibration_epoch_ == preserved_calibration_epoch && observation_count() == preserved_count &&
                 pinned_window_->geometry().topLeft() == preserved_card_rect.topLeft() &&
@@ -1614,10 +1616,17 @@ public:
                 *fields[index] = L"Ctrl+Alt+Shift+F" + std::to_wstring(13 + index);
             settings_.middle_mouse_enabled = false;
             settings_.game_integration_enabled = true;
+            settings_.game_helpers.build.enabled = settings_.game_helpers.team.enabled = true;
+            settings_.game_helpers.build.hotkey = L"Ctrl+Alt+Shift+F22";
+            settings_.game_helpers.team.hotkey = L"Ctrl+Alt+Shift+F23";
             pause_hotkey_ = wardogs::parse_hotkey(L"Ctrl+Alt+Shift+F21");
+            std::atomic_bool helper_foreground{true};
+            const wardogs::GameHelperPlatform helper_platform{
+                [&] { return helper_foreground.load(); }, [](bool) { return true; }, [] { return true; }};
             diagnostic_ = false;
             try {
                 register_hotkeys(settings_, false);
+                game_helper_.start(wardogs::GameHelperMode::build, settings_.game_helpers, helper_platform);
                 const auto previous_listener_epoch = hotkey_listener_epoch_.load();
                 handle_hotkey(8);
                 dispatch_registered_hotkey(8, previous_listener_epoch);
@@ -1640,11 +1649,42 @@ public:
                 check("native_pause_releases_capture_chords_to_windows_and_retains_unlock_return_resume",
                     application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() &&
                     captures_released && controls_retained && !pause_reserved && pause_error == ERROR_HOTKEY_ALREADY_REGISTERED);
+                bool helper_keys_retained = true;
+                int helper_probe = 0x6014;
+                for (const auto& text : {settings_.game_helpers.build.hotkey, settings_.game_helpers.team.hotkey}) {
+                    const auto key = wardogs::parse_hotkey(text);
+                    const bool reserved = RegisterHotKey(nullptr, helper_probe, key.modifiers, key.virtual_key) != FALSE;
+                    const DWORD error = reserved ? ERROR_SUCCESS : GetLastError();
+                    if (reserved) UnregisterHotKey(nullptr, helper_probe);
+                    helper_keys_retained = helper_keys_retained && !reserved && error == ERROR_HOTKEY_ALREADY_REGISTERED;
+                    ++helper_probe;
+                }
+                check("native_capture_pause_preserves_build_worker_and_both_helper_shortcuts",
+                    application_paused_ && helper_keys_retained && game_helper_.running() &&
+                    game_helper_.mode() == wardogs::GameHelperMode::build);
                 handle_hotkey(8);
+                check("native_capture_resume_preserves_the_running_helper",
+                    !application_paused_ && game_helper_.running() &&
+                    game_helper_.mode() == wardogs::GameHelperMode::build);
                 const auto resumed_epoch = input_epoch_;
                 dispatch_registered_hotkey(4, previous_listener_epoch);
                 check("native_resume_rejects_stale_capture_notifications_without_starting_ocr",
                     !application_paused_ && !busy_ && !selecting_ && input_epoch_ == resumed_epoch);
+                game_helper_.start(wardogs::GameHelperMode::team, settings_.game_helpers, helper_platform);
+                handle_hotkey(8);
+                check("native_capture_pause_preserves_team_worker",
+                    application_paused_ && game_helper_.running() &&
+                    game_helper_.mode() == wardogs::GameHelperMode::team);
+                toggle_game_helper(wardogs::GameHelperMode::team, nullptr);
+                check("native_paused_helper_can_still_be_stopped",
+                    application_paused_ && !game_helper_.running());
+                game_helper_.start(wardogs::GameHelperMode::team, settings_.game_helpers, helper_platform);
+                helper_foreground = false;
+                for (int attempt = 0; game_helper_.running() && attempt < 100; ++attempt) Sleep(2);
+                check("native_paused_helper_still_stops_on_game_focus_loss",
+                    application_paused_ && !game_helper_.running() &&
+                    game_helper_.stop_reason() == wardogs::GameHelperStopReason::focus_lost);
+                handle_hotkey(8);
                 settings_.game_integration_enabled = false;
                 register_hotkeys(settings_, false);
                 handle_hotkey(8);
@@ -1652,8 +1692,33 @@ public:
                 check("native_pause_shortcut_can_resume_even_in_manual_only_mode",
                     !application_paused_ && hotkey_listener_.active() && !mouse_listener_.active() && !busy_);
                 {
+                    unregister_hotkeys();
+                    settings_.game_integration_enabled = true;
+                    const auto helper_key = wardogs::parse_hotkey(settings_.game_helpers.build.hotkey);
+                    struct HelperHotkeyReservation {
+                        bool owned;
+                        ~HelperHotkeyReservation() { if (owned) UnregisterHotKey(nullptr, 0x6016); }
+                    } occupied{RegisterHotKey(nullptr, 0x6016,
+                        helper_key.modifiers, helper_key.virtual_key) != FALSE};
+                    if (!occupied.owned) throw std::runtime_error("CI occupied-helper reservation unavailable");
+                    helper_foreground = true;
+                    game_helper_.start(wardogs::GameHelperMode::team, settings_.game_helpers, helper_platform);
+                    const auto preserved_target = target_;
+                    handle_hotkey(8);
+                    check("native_paused_registration_failure_stops_helper_before_resume_only_recovery",
+                        application_paused_ && !game_helper_.running() && hotkey_listener_.active() &&
+                        !mouse_listener_.active() && target_ == preserved_target && !busy_ &&
+                        status_->text().contains(qtext(pause_hotkey_.display)));
+                    UnregisterHotKey(nullptr, 0x6016);
+                    occupied.owned = false;
+                    dispatch_registered_hotkey(8, hotkey_listener_epoch_.load());
+                    check("native_helper_registration_recovery_does_not_restart_stopped_input",
+                        !application_paused_ && !game_helper_.running() && hotkey_listener_.active() &&
+                        target_ == preserved_target && !busy_);
+                }
+                {
                     // Reproduce an external reservation appearing while the
-                    // full set is released. The paused three-action fallback
+                    // full set is released. The paused registration fallback
                     // must not steal a released capture chord, nor lose resume.
                     unregister_hotkeys();
                     settings_.game_integration_enabled = true;
@@ -6806,7 +6871,7 @@ private:
             stop_game_helper();
             if (same) return;
         }
-        if (diagnostic_ || closing_ || application_paused_ || QApplication::activeModalWidget() ||
+        if (diagnostic_ || closing_ || QApplication::activeModalWidget() ||
             !activation_window || GetForegroundWindow() != activation_window ||
             !is_wardogs_window(activation_window)) return;
         const auto& preferences = settings_.game_helpers;
@@ -6949,8 +7014,8 @@ private:
         }
     }
 
-    void unregister_hotkeys() {
-        stop_game_helper();
+    void unregister_hotkeys(bool preserve_helpers = false) {
+        if (!preserve_helpers) stop_game_helper();
         ++hotkey_listener_epoch_;
         hotkey_listener_.stop();
     }
@@ -6986,7 +7051,7 @@ private:
             enter_game_after_terrain_ = false;
             // Release capture chords before attempting any new registration:
             // even a validation/OS failure must leave them free for the game.
-            unregister_hotkeys();
+            unregister_hotkeys(/*preserve_helpers=*/true);
             ++mouse_listener_epoch_;
             mouse_listener_.stop();
             advance_input_epoch();
@@ -7007,7 +7072,7 @@ private:
             application_paused_ = false;
         }
         try {
-            const auto changes = register_hotkeys(settings_);
+            const auto changes = register_hotkeys(settings_, true, /*preserve_helpers=*/true);
             update_action_labels();
             if (pinned_window_)
                 pinned_window_->configure_unlock_hotkey(settings_.pinned_card.unlock_hotkey);
@@ -7020,7 +7085,7 @@ private:
             wardogs::log_error("pause.hotkeys_failed error=" + std::string(error.what()));
             ++mouse_listener_epoch_;
             mouse_listener_.stop();
-            try { register_hotkeys(settings_, false); }
+            try { register_hotkeys(settings_, false, /*preserve_helpers=*/true); }
             catch (const std::exception& recovery) {
                 wardogs::log_error("pause.resume_shortcuts_unavailable error=" + std::string(recovery.what()));
                 try { register_resume_only_hotkey(); }
@@ -7088,6 +7153,9 @@ private:
     }
 
     void register_resume_only_hotkey() {
+        // This error recovery cannot retain the helper's stop shortcut. Never
+        // leave a running input loop after losing that control.
+        stop_game_helper();
         std::vector<wardogs::Hotkey> configured{
             wardogs::parse_hotkey(settings_.region_hotkey),
             wardogs::parse_hotkey(settings_.base_hotkey),
@@ -7145,9 +7213,10 @@ private:
         throw std::invalid_argument("Нет свободного сочетания для паузы захвата");
     }
 
-    QString register_hotkeys(wardogs::AppSettings& settings, bool recover_conflicts = true) {
+    QString register_hotkeys(wardogs::AppSettings& settings, bool recover_conflicts = true,
+                             bool preserve_helpers = false) {
         if (diagnostic_) return {};
-        stop_game_helper();
+        if (!preserve_helpers) stop_game_helper();
         auto configured = std::array{
             wardogs::parse_hotkey(settings.region_hotkey),
             wardogs::parse_hotkey(settings.base_hotkey),
@@ -7172,15 +7241,15 @@ private:
             values.push_back(configured[index]);
             actions.push_back(index);
         }
-        if (!application_paused_) {
-            if (settings.game_helpers.build.enabled) {
-                values.push_back(wardogs::parse_hotkey(settings.game_helpers.build.hotkey));
-                actions.push_back(9);
-            }
-            if (settings.game_helpers.team.enabled) {
-                values.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
-                actions.push_back(10);
-            }
+        // Capture pause leaves helpers and their start/stop shortcuts active.
+        // Their worker keeps enforcing the original foreground HWND/desktop.
+        if (settings.game_helpers.build.enabled) {
+            values.push_back(wardogs::parse_hotkey(settings.game_helpers.build.hotkey));
+            actions.push_back(9);
+        }
+        if (settings.game_helpers.team.enabled) {
+            values.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
+            actions.push_back(10);
         }
         values.push_back(pause_key);
         actions.push_back(8);

@@ -12,7 +12,7 @@ Open **Helpers** from the main window or the application's tray menu. Both helpe
 4. Return to WARDOGS, aim the cursor/sight at the desired object and press the assigned shortcut. Release it and its modifiers to start the loop. You do not need to hold the left mouse button yourself.
 5. Press the same shortcut again to stop. **Stop helpers** is also available in the application and tray menu.
 
-Only one helper runs at a time. Switching the active window, pausing or closing the application stops the loop and releases the left button. Returning to the game **does not restart** it. Opening settings also stops the helper.
+Only one helper runs at a time. Switching the active window or closing the application stops the loop and releases the left button. Returning to the game **does not restart** it. Opening settings also stops the helper. **Capture pause (Ctrl+Alt+P or the pause button) keeps helpers and their start/stop shortcuts active**; game captures, their shortcuts and the middle-button trigger are disabled, pending OCR is cancelled and the reticle is hidden. The last calculation is preserved and manual input remains available. If Windows prevents restoring helper shortcuts, the loop stops and the application reports an error.
 
 ## Build helper
 

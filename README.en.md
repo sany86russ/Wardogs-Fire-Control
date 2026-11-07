@@ -109,7 +109,7 @@ To upgrade from **2.7.0 or earlier**, download the new ZIP manually once. Automa
 
 You do not need to select a custom OCR region for this workflow. Middle-click is passed through to the game and still places its marker. **Capture the gun coordinates again after moving it.** A map change clears current coordinates, session history and corrections; the map name is not read automatically.
 
-**Ctrl+Alt+P** or **Pause / Resume** temporarily disables capture and hides the auxiliary reticle. Gun, target, corrections and history are retained; unfinished OCR is cancelled. Resuming does not take a screenshot by itself. [Complete workflow](source/docs/USAGE-EN.md).
+**Ctrl+Alt+P** or **Pause / Resume** temporarily disables game captures, their shortcuts and the middle-button trigger, cancels pending OCR and hides the auxiliary reticle. **Build helper and Team Piker keep running; their start/stop shortcuts remain available while paused.** Gun, target, corrections and history are retained, and manual input remains available. Resuming does not take a screenshot by itself. [Complete workflow](source/docs/USAGE-EN.md).
 
 ### Manual workflow
 
@@ -200,7 +200,7 @@ Drag the mini card to move it and drag its edges to resize it. It remembers the 
 1. Select a tab and enable its shortcut. Both helpers are disabled in a fresh profile.
 2. Assign a key: defaults are **F6** and **F7**. Set the timing and click **Save**.
 3. Return to WARDOGS, equip the desired tool and aim at the object. Press and release the assigned shortcut to start the loop.
-4. Press it again to stop. **Stop helpers**, application pause, opening settings, changing the active window and closing the app also stop it. Returning to the game does not resume clicks.
+4. Press it again to stop. **Stop helpers**, opening settings, changing the active window and closing the app also stop it. Capture pause **keeps helpers running** and their shortcuts available. Returning to the game does not resume stopped clicks.
 
 | Helper | Initial settings | Additional settings |
 |---|---|---|

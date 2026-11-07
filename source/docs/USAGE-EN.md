@@ -143,7 +143,7 @@ Actual controls can differ from these examples after a Windows hotkey conflict. 
 
 **Helpers** opens the separate Build helper / Team Piker window. Enable the desired shortcut, assign a combination and save. **F6/F7** are the initial assignments, disabled in a fresh profile. Build helper holds LMB for **514 ms** and releases for **33 ms**; the random 0–30 ms pause addition is enabled separately. Team Piker sends **30 ms** clicks with a complete **800 + 100–200 = 900–1000 ms** start-to-start interval.
 
-The same assigned shortcut starts and stops the loop in active WARDOGS; the first click waits for key release. Only one helper runs at a time. Switching windows, pausing, opening settings or closing stop it without automatic resumption. Preferences persist, but a running loop is not restored after restart.
+The same assigned shortcut starts and stops the loop in active WARDOGS; the first click waits for key release. Only one helper runs at a time. Switching windows, opening settings or closing stop it without automatic resumption. Capture pause **keeps helpers running**: their shortcuts remain available while game captures and the reticle are disabled. Preferences persist, but a running loop is not restored after restart.
 
 Both L81 and SPH-2 mini cards display **each** helper's state and actual shortcut: **Off** means its hotkey is disabled; **Ready** means enabled but stopped; **Running** identifies and highlights the active loop. The strip is not a button and does not change the calculation, aim or helper mode. Return to the separate window to edit preferences.
 

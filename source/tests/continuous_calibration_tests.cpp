@@ -1,4 +1,5 @@
 #include "wardogs/continuous_calibration.hpp"
+#include "wardogs/presentation.hpp"
 
 #include <algorithm>
 #include <array>
@@ -522,6 +523,120 @@ int main() {
     check(latest_other_arc.bearing_deg == latest_other_direct.bearing_deg &&
               latest_other_arc.mil == latest_other_direct.mil,
           "the field replay cannot leak high-arc adjustments into the low arc");
+
+    {
+        // Recorded 6-7 November 2026 commands, coordinates and terrain deltas.
+        // Expected
+        // commands come from the original impact_recorded logs, not from an
+        // impact generator. The displayed sight was unverified: this replay
+        // checks model consistency, not counterfactual physical hit accuracy.
+        struct RecordedLanding {
+            Point impact;
+            double impact_height_delta_m;
+            double fired_bearing_deg, fired_mil;
+            double miss_m;
+            double next_bearing_deg, next_mil;
+            double next_computed_bearing_deg, next_computed_mil;
+            std::size_t accepted_count;
+        };
+        const auto replay = [&](Point recorded_base, Point recorded_target,
+                                Arc arc, double target_height_delta_m,
+                                double direct_bearing_deg, double direct_mil,
+                                const auto& landings) {
+            ContinuousCalibration recorded(recorded_base, baseline, ContinuousCorrectionMode::local_only);
+            const Arc other_arc = arc == Arc::high ? Arc::low : Arc::high;
+            const auto other_direct = recorded.solution(recorded_target, other_arc, target_height_delta_m);
+            const auto direct = recorded.solution(recorded_target, arc, target_height_delta_m);
+            close(direct.bearing_deg, direct_bearing_deg,
+                  "November replay retains the recorded initial bearing", 1e-8);
+            close(direct.mil, direct_mil,
+                  "November replay retains the height-aware initial MIL", 1e-8);
+            std::size_t count = 0;
+            for (const auto& landing : landings) {
+                const auto before = displayed_firing_command(recorded.solution(
+                    recorded_target, arc, target_height_delta_m));
+                close(before.bearing_deg, landing.fired_bearing_deg,
+                      "November replay associates the landing with the recorded displayed bearing", 1e-8);
+                check(before.mil == landing.fired_mil,
+                      "November replay uses the recorded integer displayed MIL");
+                close(miss_distance_m(recorded_target, landing.impact), landing.miss_m,
+                      "November replay retains the independently logged impact distance", 1e-7);
+                const auto assessment = recorded.add_landing(
+                    {recorded_target, arc, landing.fired_bearing_deg, landing.fired_mil, target_height_delta_m},
+                    landing.impact, landing.impact_height_delta_m);
+                ++count;
+                const auto after = recorded.solution(recorded_target, arc, target_height_delta_m);
+                close(after.bearing_deg, landing.next_computed_bearing_deg,
+                      "November replay reproduces the logged corrected bearing", 1e-8);
+                close(after.mil, landing.next_computed_mil,
+                      "November replay reproduces the logged corrected MIL with impact height", 1e-8);
+                const auto displayed = displayed_firing_command(after);
+                close(displayed.bearing_deg, landing.next_bearing_deg,
+                      "November replay reproduces the next displayed bearing", 1e-8);
+                check(displayed.mil == landing.next_mil && recorded.sample_count() == count &&
+                          assessment.observation_count == count && assessment.local_observation_count == count &&
+                          assessment.accepted_observation_count == landing.accepted_count,
+                      "November replay preserves all history while reporting retained evidence separately");
+                const auto other = recorded.solution(recorded_target, other_arc, target_height_delta_m);
+                check(other.bearing_deg == other_direct.bearing_deg && other.mil == other_direct.mil &&
+                          recorded.global_calibration().rotation == baseline.rotation,
+                      "November replay cannot alter the opposite arc or the frozen platform baseline");
+            }
+            return recorded;
+        };
+        const std::array<RecordedLanding, 1> bakurani{{
+            {{81.27, 64.76}, -26.30, 235.1, 1231, 23.086792761229461,
+             235.8, 1235, 235.796827020205, 1234.955045665816, 1}}};
+        (void)replay(Point{93.12, 73.24}, Point{81.29, 64.99}, Arc::high, -25.70,
+                     235.10886973777502, 1230.9000929815004, bakurani);
+
+        const std::array<RecordedLanding, 2> ozeti{{
+            {{100.34, 60.04}, -93.65, 260.6, 290, 182.46369501903735,
+             261.0, 368, 261.03650430106904, 367.99036522972375, 1},
+            {{98.78, 59.78}, -86.15, 261.0, 368, 29.068883707497523,
+             261.2, 375, 261.22519337071321, 374.64076723441633, 2}}};
+        (void)replay(Point{122.05, 63.79}, Point{98.52, 59.91}, Arc::low, -81.40,
+                     260.63642266097111, 289.82362210519409, ozeti);
+
+        const Point zesta_base{63.15, 119.53}, zesta_target{70.08, 100.14};
+        constexpr double zesta_target_height = 0.525;
+        constexpr double zesta_direct_mil = 1034.8567769753795;
+        const std::array<RecordedLanding, 3> zestafona{{
+            {{69.08, 102.95}, 2.575, 160.3, 1035, 298.26330649277014,
+             160.3, 934, 160.31316322982491, 933.55890521547803, 1},
+            {{71.27, 97.93}, -1.225, 160.3, 934, 251.00199202396718,
+             160.8, 987, 160.774389546468, 987.17228823498169, 2},
+            {{70.76, 99.10}, -0.075, 160.8, 987, 124.25779653607343,
+             161.1, 1038, 161.13734894987738, 1038.2974924868156, 2}}};
+        auto zesta = replay(zesta_base, zesta_target, Arc::high, zesta_target_height,
+                            160.33307377443825, zesta_direct_mil, zestafona);
+        // Independently reconstructed table/height values in the field report.
+        const std::array<double, 3> required_impact_mil{{1136.297872, 928.071106, 986.047463}};
+        for (std::size_t index = 0; index < zestafona.size(); ++index) {
+            const auto required = required_firing_angles(zesta_base, zestafona[index].impact,
+                baseline, Arc::high, zestafona[index].impact_height_delta_m);
+            close(required.mil, required_impact_mil[index],
+                  "Zestafona replay retains the independent height-aware inverse for each impact", 1e-6);
+        }
+        const auto final = zesta.solution(zesta_target, Arc::high, zesta_target_height);
+        const double final_offset = final.mil - zesta_direct_mil;
+        check(zesta.sample_count() == 3 &&
+                  zesta.assess(zesta_target, Arc::high, zesta_target_height).accepted_observation_count == 2 &&
+                  final_offset >= 0.952537 - 1e-6 && final_offset <= 5.928894 + 1e-6,
+              "Zestafona keeps three history entries but excludes the minus-101-MIL outlier from the retained estimate");
+        // An earlier command for a different target, incorrectly associated
+        // with this target, exceeds the existing command-vector limit. Merely
+        // being an older command is not sufficient grounds for rejection.
+        rejects([&] {
+            zesta.add_landing({zesta_target, Arc::high, 146.1, 1143, zesta_target_height},
+                               zestafona.back().impact, zestafona.back().impact_height_delta_m);
+        }, "Zestafona rejects a geometrically incompatible stale command");
+        const auto after_stale = zesta.solution(zesta_target, Arc::high, zesta_target_height);
+        check(zesta.sample_count() == 3 && after_stale.bearing_deg == final.bearing_deg &&
+                  after_stale.mil == final.mil &&
+                  zesta.assess(zesta_target, Arc::high, zesta_target_height).accepted_observation_count == 2,
+              "a rejected stale field snapshot leaves the exact history and final command intact");
+    }
 
     for (Arc arc : {Arc::low, Arc::high}) {
         ContinuousCalibration noisy(base, baseline, ContinuousCorrectionMode::local_only);
