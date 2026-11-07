@@ -1690,5 +1690,33 @@
   {
     "ru": "В Windows не установлен пакет OCR для языка ",
     "en": "Windows has no OCR language pack for "
+  },
+  {
+    "ru": "\nMIL заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка по таблице ≈%2 м; прогноз предварительный.",
+    "en": "\nMIL predicted from %1 different targets at this emplacement. Sight-table validation error ≈%2 m; this prediction is provisional."
+  },
+  {
+    "ru": "MIL: прогноз по %1 целям · предварительно",
+    "en": "MIL: prediction from %1 targets · provisional"
+  },
+  {
+    "ru": "\nАзимут заранее уточнён по %1 разным целям этой стоянки. Проверочная ошибка боковой модели ≈%2 м; это не радиус попадания. После поворота орудия заново задайте его позицию.",
+    "en": "\nAzimuth predicted from %1 different targets at this emplacement. Bearing-model validation error ≈%2 m; this is not a hit radius. Set the gun position again after rotating the vehicle."
+  },
+  {
+    "ru": "Учтено попаданий: %1/%2. Согласованные поправки азимута и MIL могут заранее уточнять новые цели внутри изученной области этой стоянки и траектории.",
+    "en": "Recorded impacts: %1/%2. Consistent azimuth and MIL corrections may predict new targets inside the observed area for this emplacement and trajectory."
+  },
+  {
+    "ru": "Автосохранение наблюдений недоступно. Расчёт и Alt+I продолжают работать; подробности в журнале.",
+    "en": "Automatic observation saving is unavailable. Calculations and Alt+I remain available; see the log for details."
+  },
+  {
+    "ru": "Прогноз MIL: %1 · предварительно\n",
+    "en": "MIL prediction: %1 · provisional\n"
+  },
+  {
+    "ru": " · прогноз MIL · предварительно",
+    "en": " · provisional MIL prediction"
   }
 ]

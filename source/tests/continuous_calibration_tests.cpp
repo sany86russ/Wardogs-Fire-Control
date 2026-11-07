@@ -1340,6 +1340,179 @@ int main() {
               "each validation fold refits shrink without using the held-out target label", 1e-7);
     }
 
+    // A range prior is opt-in and learned from ordinary independent targets.
+    // The forward observations below model a fixed sight bias on an elevated
+    // plane independently of the predictor's held-out fitting procedure.
+    for (const auto arc : {Arc::low, Arc::high}) {
+        const double bias = arc == Arc::low ? 12.0 : -12.0;
+        const std::array learned_targets{
+            polar_target(1800.0, 350.0), polar_target(2000.0, 0.0), polar_target(2200.0, 10.0)};
+        const auto new_target = polar_target(2100.0, 5.0);
+        const auto nominal = corrected_solution(base, new_target, baseline, arc);
+        ContinuousCalibration automatic(base, baseline, ContinuousCorrectionMode::local_only, true, true);
+        const auto learn_range = [&](ContinuousCalibration& learner, Point point, double offset,
+                                     double height = 0.0) {
+            const auto firing = learner.firing_snapshot(point, arc, height);
+            learner.add_landing(firing, impact_with_firing_bias_on_height(
+                base, firing, 1.0, offset, height), height);
+        };
+        learn_range(automatic, learned_targets[0], bias);
+        for (int repeat = 0; repeat < 7; ++repeat) learn_range(automatic, learned_targets[0], bias);
+        learn_range(automatic, learned_targets[1], bias);
+        check(!automatic.assess(new_target, arc).range_prediction_applied,
+              "two independent targets cannot enable automatic range transfer regardless of repeat count");
+        learn_range(automatic, learned_targets[2], bias);
+        const auto inferred = automatic.solution(new_target, arc);
+        const auto evidence = automatic.assess(new_target, arc);
+        double quantization_squared_error = 0.0;
+        for (const auto point : learned_targets) {
+            const auto expected = corrected_solution(base, point, baseline, arc);
+            const double quantization_error = sph2_distance_for_mil(std::round(expected.mil), arc) -
+                calculate_shot(base, point).distance * 100.0;
+            quantization_squared_error += quantization_error * quantization_error;
+        }
+        close(inferred.mil, nominal.mil + bias,
+              "three consistent independent targets predict same-arc first-shot MIL", 1e-8);
+        close(std::remainder(inferred.bearing_deg - nominal.bearing_deg, 360.0), 1.0,
+              "independent range and bearing priors can improve the same fresh command", 1e-8);
+        check(evidence.range_prediction_applied && evidence.range_prediction_target_count == 3 &&
+                  evidence.local_observation_count == 0 &&
+                  evidence.provisional,
+              "automatic range transfer reports held-out sight error and remains provisional");
+        close(evidence.range_prediction_residual_m,
+              std::sqrt(quantization_squared_error / learned_targets.size()),
+              "held-out residual includes the independently calculated whole-MIL quantization error", 1e-8);
+        const FiringSnapshot uncorrected_firing{new_target, arc, nominal.bearing_deg, nominal.mil};
+        const auto nominal_impact = impact_with_firing_bias_on_height(base, uncorrected_firing, 1.0, bias, 0.0);
+        const auto automatic_impact = impact_with_firing_bias_on_height(
+            base, automatic.firing_snapshot(new_target, arc), 1.0, bias, 0.0);
+        check(miss_distance_m(new_target, automatic_impact) < 1e-6 &&
+                  miss_distance_m(new_target, nominal_impact) > 10.0,
+              "the independent constant-bias forward model improves a withheld target before Alt+I");
+        check(!automatic.assess(learned_targets[0], arc).range_prediction_applied,
+              "established same-target local MIL correction has priority over transferred prediction");
+        const auto other_arc = arc == Arc::low ? Arc::high : Arc::low;
+        check(!automatic.assess(new_target, other_arc).range_prediction_applied &&
+                  !automatic.assess(polar_target(2300.0, 5.0), arc).range_prediction_applied &&
+                  !automatic.assess(polar_target(1700.0, 5.0), arc).range_prediction_applied &&
+                  !automatic.assess(polar_target(2100.0, 50.0), arc).range_prediction_applied &&
+                  !automatic.assess(new_target, arc, 1.0).range_prediction_applied,
+              "range transfer never extrapolates arc range bearing or observed target height");
+        check(!automatic.assess(polar_target(2100.0, 350.0), arc).range_prediction_applied &&
+                  !automatic.assess(polar_target(2100.0, 5.000001), arc).range_prediction_applied,
+              "marginal range and sector coverage cannot certify unseen joint geometry or a band around a line");
+        close(automatic.solution(polar_target(2100.0, 350.0), arc).mil,
+              corrected_solution(base, polar_target(2100.0, 350.0), baseline, arc).mil,
+              "unsupported joint geometry retains the uncorrected range command", 1e-8);
+        const auto prior_count = automatic.sample_count();
+        const auto local_before_pause = automatic.solution(learned_targets[0], arc);
+        automatic.invalidate_bearing_prediction();
+        check(automatic.sample_count() == prior_count &&
+                  !automatic.assess(new_target, arc).range_prediction_applied &&
+                  !automatic.assess(new_target, arc).bearing_prediction_applied &&
+                  automatic.solution(learned_targets[0], arc).mil == local_before_pause.mil,
+              "pose or pause invalidation withdraws both priors without deleting local observations");
+        for (const auto point : learned_targets) learn_range(automatic, point, bias);
+        check(automatic.assess(new_target, arc).range_prediction_applied,
+              "range transfer can resume only after three fresh independent target observations");
+        const auto before_rejection = automatic.solution(new_target, arc);
+        const auto retained_count = automatic.sample_count();
+        rejects([&] {
+            auto invalid = automatic.firing_snapshot(new_target, arc);
+            invalid.mil = std::numeric_limits<double>::quiet_NaN();
+            automatic.add_landing(invalid, new_target);
+        }, "an invalid observation cannot replace a validated automatic range candidate");
+        check(automatic.sample_count() == retained_count &&
+                  automatic.solution(new_target, arc).mil == before_rejection.mil &&
+                  automatic.assess(new_target, arc).range_prediction_applied,
+              "transactional rejection retains the exact previous range prediction");
+        // This target genuinely needs a different local setting. Its own
+        // observation overrides transfer and withdraws the conflicting prior.
+        learn_range(automatic, new_target, -bias);
+        close(automatic.solution(new_target, arc).mil, nominal.mil - bias,
+              "a fresh target's own observation overrides the previous shared range prior", 1e-8);
+        check(!automatic.assess(polar_target(2050.0, 3.0), arc).range_prediction_applied,
+              "a conflicting independent target withdraws the shared MIL candidate");
+        automatic.clear();
+        check(automatic.sample_count() == 0 && !automatic.assess(new_target, arc).range_prediction_applied,
+              "reset removes automatic range evidence without requiring calibration actions");
+
+        ContinuousCalibration legacy(base, baseline, ContinuousCorrectionMode::local_only, true);
+        for (const auto point : learned_targets) learn_range(legacy, point, bias);
+        close(legacy.solution(new_target, arc).mil, nominal.mil,
+              "existing constructor users retain the original bearing-only behavior", 1e-8);
+        check(!legacy.assess(new_target, arc).range_prediction_applied,
+              "range learning remains explicitly opt-in for existing API users");
+
+        for (const auto offsets : {std::array{2.0, 12.0, 12.0}, std::array{12.0, 12.0, 100.0}}) {
+            ContinuousCalibration inconsistent(base, baseline, ContinuousCorrectionMode::local_only, false, true);
+            for (std::size_t index = 0; index < learned_targets.size(); ++index)
+                learn_range(inconsistent, learned_targets[index], offsets[index]);
+            check(!inconsistent.assess(new_target, arc).range_prediction_applied,
+                  "a same-sign candidate that harms a held-out target cannot activate automatic range transfer");
+            close(inconsistent.solution(new_target, arc).mil, nominal.mil,
+                  "a large outlier group cannot silently poison the next target's MIL", 1e-8);
+        }
+
+        ContinuousCalibration triangular(base, baseline, ContinuousCorrectionMode::local_only, false, true);
+        for (const auto point : {polar_target(1800.0, 350.0), polar_target(2200.0, 350.0),
+                                  polar_target(2200.0, 10.0)}) learn_range(triangular, point, bias);
+        check(triangular.assess(polar_target(2100.0, 355.0), arc).range_prediction_applied &&
+                  triangular.assess(polar_target(2100.0, 350.0), arc).range_prediction_applied &&
+                  triangular.assess(polar_target(2000.0, 0.0), arc).range_prediction_applied,
+              "joint support includes a polygon interior and both axis and diagonal closed boundaries across north");
+        check(!triangular.assess(polar_target(1900.0, 5.0), arc).range_prediction_applied &&
+                  !triangular.assess(polar_target(2000.0, 0.000001), arc).range_prediction_applied,
+              "joint support rejects rectangle corners and points beyond the diagonal without an arbitrary tolerance band");
+
+        // A fractional improvement can change a displayed integer MIL in the
+        // wrong direction. Every fold must score exactly what the player sees.
+        const double fractional_mil = arc == Arc::low ? 100.1 : 1000.1;
+        const double fractional_range = sph2_distance_for_mil(fractional_mil, arc);
+        const std::array fractional_biases{0.3, 0.59, 0.59};
+        ContinuousCalibration quantized(base, baseline, ContinuousCorrectionMode::local_only, false, true);
+        for (std::size_t index = 0; index < fractional_biases.size(); ++index) {
+            const double bearing = static_cast<double>(index) * 5.0;
+            const auto point = polar_target(fractional_range, bearing);
+            const auto displayed = displayed_firing_command(quantized.solution(point, arc));
+            const double landing_range = sph2_distance_for_mil(displayed.mil - fractional_biases[index], arc);
+            quantized.add_landing({point, arc, displayed.bearing_deg, displayed.mil},
+                                  polar_target(landing_range, bearing));
+        }
+        const auto fractional_target = polar_target(fractional_range, 7.5);
+        const double uncorrected_quantized_error = std::abs(sph2_distance_for_mil(
+            std::round(fractional_mil) - fractional_biases[0], arc) - fractional_range);
+        const double rounded_candidate_error = std::abs(sph2_distance_for_mil(
+            std::round(fractional_mil + fractional_biases[1]) - fractional_biases[0], arc) - fractional_range);
+        check(rounded_candidate_error > uncorrected_quantized_error &&
+                  !quantized.assess(fractional_target, arc).range_prediction_applied,
+              "a candidate that worsens a displayed integer command on a held-out target is rejected");
+        check(displayed_firing_command(quantized.solution(fractional_target, arc)).mil == std::round(fractional_mil),
+              "quantization rejection leaves the original whole-MIL command unchanged for a new target");
+
+        ContinuousCalibration sloping_support(base, baseline, ContinuousCorrectionMode::local_only, false, true);
+        learn_range(sloping_support, polar_target(1600.0, 0.0), bias, -50.0);
+        learn_range(sloping_support, polar_target(1800.0, 0.0), bias, 0.0);
+        learn_range(sloping_support, polar_target(2000.0, 0.0), bias, 50.0);
+        check(sloping_support.assess(polar_target(1900.0, 0.0), arc, 25.0).range_prediction_applied,
+              "joint three-dimensional support admits a new target interpolated on a range-height line");
+        check(!sloping_support.assess(polar_target(1900.0, 0.0), arc, -20.0).range_prediction_applied,
+              "separate range and height bounds cannot certify an unobserved joint range-height combination");
+
+        ContinuousCalibration volumetric(base, baseline, ContinuousCorrectionMode::local_only, false, true);
+        // Alternating corners of a feature-space cube form a tetrahedron.
+        // Every pairwise projection is a rectangle, but its 3-D hull is smaller.
+        learn_range(volumetric, polar_target(1800.0, 350.0), bias, -50.0);
+        learn_range(volumetric, polar_target(2200.0, 350.0), bias, 50.0);
+        learn_range(volumetric, polar_target(1800.0, 10.0), bias, 50.0);
+        learn_range(volumetric, polar_target(2200.0, 10.0), bias, -50.0);
+        check(volumetric.assess(polar_target(2000.0, 0.0), arc, 0.0).range_prediction_applied &&
+                  volumetric.assess(polar_target(2000.0, 0.0), arc, -50.0).range_prediction_applied,
+              "four noncoplanar observations support a volume interior and closed tetrahedron edge");
+        check(!volumetric.assess(polar_target(1840.0, 352.0), arc, 40.0).range_prediction_applied,
+              "a target inside every pairwise projection but outside the three-dimensional hull receives no range transfer");
+    }
+
     if (failures) return 1;
     std::cout << "All continuous calibration tests passed\n";
 }

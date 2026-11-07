@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.14.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.15.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -101,7 +101,7 @@ if(MSVC)
 endif()
 
 
-add_library(wardogs_missions STATIC src/fire_missions.cpp)
+add_library(wardogs_missions STATIC src/fire_missions.cpp src/accuracy_observations.cpp)
 target_include_directories(wardogs_missions PUBLIC include)
 target_link_libraries(wardogs_missions PUBLIC wardogs_core Qt6::Core PRIVATE shell32 ole32)
 target_compile_definitions(wardogs_missions PRIVATE UNICODE _UNICODE NOMINMAX)
@@ -193,6 +193,11 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/USAGE-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/GAME-HELPERS-RU.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/GAME-HELPERS-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/AUTOMATIC-LEARNING-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/AUTOMATIC-LEARNING-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/SPH2-VALIDATION-RU.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/SPH2-VALIDATION-EN.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/continuous-calibration.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/LOCALIZATION.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/CALCULATIONS-EN.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASE-NOTES-EN.md"
@@ -299,6 +304,12 @@ add_executable(wardogs_fire_missions_tests tests/fire_missions_tests.cpp)
 target_link_libraries(wardogs_fire_missions_tests PRIVATE wardogs_missions)
 target_compile_options(wardogs_fire_missions_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_fire_missions_tests COMMAND wardogs_fire_missions_tests)
+
+add_executable(wardogs_accuracy_observations_tests tests/accuracy_observations_tests.cpp)
+target_link_libraries(wardogs_accuracy_observations_tests PRIVATE wardogs_missions)
+target_compile_options(wardogs_accuracy_observations_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_accuracy_observations_tests COMMAND wardogs_accuracy_observations_tests)
+set_tests_properties(wardogs_accuracy_observations_tests PROPERTIES TIMEOUT 60)
 
 add_executable(wardogs_planning_ui_tests tests/planning_dialog_tests.cpp)
 target_link_libraries(wardogs_planning_ui_tests PRIVATE wardogs_planning_ui)

@@ -15,6 +15,8 @@
 
 ![WARDOGS Fire Control 2.14.0 main window — calculation and separate Helpers button](docs/screenshots/en-main-2.14.0.png)
 
+**2.15.0 in development:** automatic local storage of marked impacts and provisional MIL prediction for new targets from consistent observations. The normal workflow and Alt+I remain; no background HUD reader or flashing frame returns. [How learning works](source/docs/AUTOMATIC-LEARNING-EN.md). The published stable version is still 2.14.0.
+
 A native screenshot of the actual app. Demonstration coordinates and statuses are synthetic; capture does not use the game or send game input. It does not validate hit accuracy.
 
 > An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. Publisher approval for OCR, overlays and left-button automation has not been established. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Randomization does not provide anti-cheat protection. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
@@ -149,7 +151,7 @@ Middle-clicking the impact creates a new target. Enter a manual impact through *
 
 A local correction applies to the same arc near the target and fades to zero at **50 m**. An impact is accepted only within **20% of horizontal range and 400 m simultaneously**; command compatibility and the permitted MIL are also checked. Incompatible observations are rejected, retaining the previous valid command. Repeated observations do not keep adding the same correction; history is limited to **256 impacts**.
 
-After observations at at least three distinct targets from a stationary gun, a consistent **provisional bearing prediction** may apply to another target within the validated envelope. It is explicitly labelled, does not transfer a general MIL correction and does not guarantee a hit. Pause, weapon or manual arc changes withdraw prediction transfer while retaining local history.
+After observations at at least three distinct targets from a stationary gun, a consistent **provisional bearing prediction** may apply to another target within the validated envelope. Stable 2.14 predicts bearing only. The 2.15 source separately validates provisional MIL transfer inside the jointly supported observation region. Pause, weapon or manual arc changes withdraw prediction transfer while retaining local history.
 
 The app does not observe firing, actual sight settings or chassis tilt. Alt+I refers to the command displayed when reading starts. If the chassis changes attitude at the same coordinates, **reset corrections manually**. [Ranging calculations and limits](source/docs/SPH2-VALIDATION-EN.md).
 
