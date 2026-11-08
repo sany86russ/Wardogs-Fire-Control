@@ -257,8 +257,9 @@ def verify_snapshot(path, language, scale, mode):
                     widget_surface(name, widget)
     elif mode in ('helpers', 'helpers-team'):
         for tabs in named('gameHelpersTabs', visible=True):
-            check(tabs.get('count') == 2 and tabs.get('currentIndex') == (mode == 'helpers-team'),
-                  'Helpers must expose the requested one of two separate pages')
+            check(isinstance(tabs.get('tabs'), list) and len(tabs['tabs']) == 3 and
+                  tabs.get('count') == 3 and tabs.get('currentIndex') == (mode == 'helpers-team'),
+                  'Helpers must expose all three pages and select the requested helper')
         for name in ('helperTitle', 'helperStopped', 'helperBoundaries'):
             for widget in named(name, visible=True):
                 widget_surface(name, widget, minimum_foreground=10, label=True, meaningful_text=True)
