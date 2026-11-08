@@ -924,7 +924,12 @@ public:
                         if (mode == QStringLiteral("helpers-humanizer")) {
                             const int top = field->parentWidget()->mapTo(scroll->widget(), QPoint{}).y();
                             scroll->verticalScrollBar()->setValue(top);
-                        } else scroll->ensureWidgetVisible(field);
+                        } else {
+                            // Spin boxes expose a caret rectangle to
+                            // ensureWidgetVisible; frame the complete control.
+                            const QPoint center = field->mapTo(scroll->widget(), field->rect().center());
+                            scroll->ensureVisible(center.x(), center.y(), 0, field->height() / 2 + 8);
+                        }
                         QApplication::processEvents();
                     }
         }
