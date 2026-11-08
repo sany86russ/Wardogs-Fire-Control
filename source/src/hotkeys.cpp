@@ -15,6 +15,30 @@
 namespace wardogs {
 namespace {
 
+struct NamedKey { std::wstring_view name; UINT code; };
+constexpr NamedKey named_keys[]{
+    {L"Mouse4", VK_XBUTTON1}, {L"Mouse5", VK_XBUTTON2},
+    {L"Backspace", VK_BACK}, {L"CapsLock", VK_CAPITAL}, {L"Pause", VK_PAUSE},
+    {L"PrintScreen", VK_SNAPSHOT}, {L"ScrollLock", VK_SCROLL}, {L"NumLock", VK_NUMLOCK},
+    {L"Clear", VK_CLEAR}, {L"Apps", VK_APPS}, {L"Sleep", VK_SLEEP},
+    {L"Multiply", VK_MULTIPLY}, {L"Add", VK_ADD}, {L"Separator", VK_SEPARATOR},
+    {L"Subtract", VK_SUBTRACT}, {L"Decimal", VK_DECIMAL}, {L"Divide", VK_DIVIDE},
+    {L"Semicolon", VK_OEM_1}, {L"Plus", VK_OEM_PLUS}, {L"Comma", VK_OEM_COMMA},
+    {L"Minus", VK_OEM_MINUS}, {L"Period", VK_OEM_PERIOD}, {L"Slash", VK_OEM_2},
+    {L"Backtick", VK_OEM_3}, {L"BracketLeft", VK_OEM_4}, {L"Backslash", VK_OEM_5},
+    {L"BracketRight", VK_OEM_6}, {L"Apostrophe", VK_OEM_7}, {L"OEM8", VK_OEM_8},
+    {L"OEM102", VK_OEM_102},
+    {L"VolumeMute", VK_VOLUME_MUTE}, {L"VolumeDown", VK_VOLUME_DOWN}, {L"VolumeUp", VK_VOLUME_UP},
+    {L"MediaNext", VK_MEDIA_NEXT_TRACK}, {L"MediaPrevious", VK_MEDIA_PREV_TRACK},
+    {L"MediaStop", VK_MEDIA_STOP}, {L"MediaPlayPause", VK_MEDIA_PLAY_PAUSE},
+    {L"BrowserBack", VK_BROWSER_BACK}, {L"BrowserForward", VK_BROWSER_FORWARD},
+    {L"BrowserRefresh", VK_BROWSER_REFRESH}, {L"BrowserStop", VK_BROWSER_STOP},
+    {L"BrowserSearch", VK_BROWSER_SEARCH}, {L"BrowserFavorites", VK_BROWSER_FAVORITES},
+    {L"BrowserHome", VK_BROWSER_HOME}, {L"LaunchMail", VK_LAUNCH_MAIL},
+    {L"LaunchMedia", VK_LAUNCH_MEDIA_SELECT}, {L"LaunchApp1", VK_LAUNCH_APP1},
+    {L"LaunchApp2", VK_LAUNCH_APP2}
+};
+
 std::wstring trim(std::wstring value) {
     const auto first = std::find_if_not(value.begin(), value.end(), std::iswspace);
     const auto last = std::find_if_not(value.rbegin(), value.rend(), std::iswspace).base();
@@ -57,16 +81,16 @@ std::wstring key_display(UINT key) {
     if (key == VK_RIGHT) return L"Right";
     if ((key >= L'A' && key <= L'Z') || (key >= L'0' && key <= L'9'))
         return std::wstring{static_cast<wchar_t>(key)};
-    const UINT scan_code = MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
-    wchar_t label[64]{};
-    if (scan_code && GetKeyNameTextW(static_cast<LONG>(scan_code << 16), label,
-                                   static_cast<int>(std::size(label))) > 0)
-        return label;
+    if (key >= VK_NUMPAD0 && key <= VK_NUMPAD9)
+        return L"Numpad" + std::to_wstring(key - VK_NUMPAD0);
+    for (const auto& named : named_keys)
+        if (named.code == key) return std::wstring(named.name);
     return L"VK" + std::to_wstring(key);
 }
 
 std::wstring canonical_display(UINT modifiers, UINT key) {
     std::wstring result;
+    if (modifiers & MOD_WIN) result += L"Win+";
     if (modifiers & MOD_CONTROL) result += L"Ctrl+";
     if (modifiers & MOD_ALT) result += L"Alt+";
     if (modifiers & MOD_SHIFT) result += L"Shift+";
@@ -76,6 +100,10 @@ std::wstring canonical_display(UINT modifiers, UINT key) {
 }  // namespace
 
 Hotkey parse_hotkey(std::wstring_view text) {
+    std::wstring normalized = trim(std::wstring(text));
+    if (normalized == L"+") normalized = L"Plus";
+    else if (normalized.ends_with(L"++")) normalized.replace(normalized.size() - 1, 1, L"Plus");
+    text = normalized;
     if (trim(std::wstring{text}).empty())
         throw std::invalid_argument("Горячая клавиша не может быть пустой");
     std::vector<std::wstring> parts;
@@ -93,6 +121,20 @@ Hotkey parse_hotkey(std::wstring_view text) {
     }
     if (parts.empty()) {
         throw std::invalid_argument("Горячая клавиша не может быть пустой");
+    }
+    // Qt PortableText spells keypad bindings as Num+1 / Ctrl+Num+1.
+    const auto num = std::find(parts.begin(), parts.end(), L"NUM");
+    if (num != parts.end()) {
+        if (num + 2 != parts.end())
+            throw std::invalid_argument("Эта клавиша не поддерживается");
+        auto& value = *(num + 1);
+        if (value.size() == 1 && value[0] >= L'0' && value[0] <= L'9') value = L"NUMPAD" + value;
+        else if (value == L"PLUS") value = L"ADD";
+        else if (value == L"-") value = L"SUBTRACT";
+        else if (value == L"*") value = L"MULTIPLY";
+        else if (value == L"/") value = L"DIVIDE";
+        else if (value == L"." || value == L",") value = L"DECIMAL";
+        parts.erase(num);
     }
 
     UINT modifiers = MOD_NOREPEAT;
@@ -148,6 +190,44 @@ Hotkey parse_hotkey(std::wstring_view text) {
         else if (part == L"DOWN") key = VK_DOWN;
         else if (part == L"LEFT") key = VK_LEFT;
         else if (part == L"RIGHT") key = VK_RIGHT;
+        else if (part.starts_with(L"NUMPAD") && part.size() == 7 && part[6] >= L'0' && part[6] <= L'9')
+            key = VK_NUMPAD0 + part[6] - L'0';
+        else if (part == L"XBUTTON1" || part == L"MB4" || part == L"MOUSEBUTTON4") key = VK_XBUTTON1;
+        else if (part == L"XBUTTON2" || part == L"MB5" || part == L"MOUSEBUTTON5") key = VK_XBUTTON2;
+        else if (part == L"=" || part == L"EQUAL") key = VK_OEM_PLUS;
+        else if (part == L";") key = VK_OEM_1;
+        else if (part == L",") key = VK_OEM_COMMA;
+        else if (part == L"-") key = VK_OEM_MINUS;
+        else if (part == L".") key = VK_OEM_PERIOD;
+        else if (part == L"/") key = VK_OEM_2;
+        else if (part == L"`" || part == L"~") key = VK_OEM_3;
+        else if (part == L"[") key = VK_OEM_4;
+        else if (part == L"\\") key = VK_OEM_5;
+        else if (part == L"]") key = VK_OEM_6;
+        else if (part == L"'") key = VK_OEM_7;
+        else if (part == L"BACKTAB") {
+            key = VK_TAB;
+            if (!(modifiers & MOD_SHIFT)) {
+                modifiers |= MOD_SHIFT;
+                display_modifiers.push_back(L"Shift");
+            }
+        }
+        else if (part == L"MEDIANEXTTRACK") key = VK_MEDIA_NEXT_TRACK;
+        else if (part == L"MEDIAPREVIOUSTRACK" || part == L"MEDIAPREVIOUS") key = VK_MEDIA_PREV_TRACK;
+        else if (part == L"TOGGLEMUTE") key = VK_VOLUME_MUTE;
+        else if (part == L"MEDIAPLAY" || part == L"MEDIAPAUSE") key = VK_MEDIA_PLAY_PAUSE;
+        else {
+            for (const auto& named : named_keys)
+                if (part == upper(std::wstring(named.name))) { key = named.code; break; }
+            if (!key && part.starts_with(L"VK")) {
+                try {
+                    std::size_t used{};
+                    const auto code = std::stoul(part.substr(2), &used,
+                        part.substr(2).starts_with(L"0X") ? 16 : 10);
+                    if (used == part.size() - 2 && code > 0 && code <= 255) key = static_cast<UINT>(code);
+                } catch (const std::exception&) { /* Invalid numeric key is rejected below. */ }
+            }
+        }
         if (!key) {
             throw std::invalid_argument("Эта клавиша не поддерживается");
         }
@@ -163,6 +243,21 @@ Hotkey parse_hotkey(std::wstring_view text) {
     if (!display.empty()) display += L'+';
     display += key_display(key);
     return {modifiers, key, display};
+}
+
+Hotkey hotkey_from_native(UINT virtual_key, UINT modifiers) {
+    if (!virtual_key || virtual_key > 255)
+        throw std::invalid_argument("Неверный код горячей клавиши или модификатора");
+    return {modifiers | MOD_NOREPEAT, virtual_key, canonical_display(modifiers, virtual_key)};
+}
+
+bool is_mouse_hotkey(const Hotkey& hotkey) noexcept {
+    return hotkey.virtual_key == VK_XBUTTON1 || hotkey.virtual_key == VK_XBUTTON2;
+}
+
+bool is_physical_hotkey_event(std::uint32_t flags, bool mouse) noexcept {
+    return (flags & (mouse ? (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED) :
+        (LLKHF_INJECTED | LLKHF_LOWER_IL_INJECTED))) == 0;
 }
 
 void validate_unique_hotkeys(std::span<const Hotkey> hotkeys) {
@@ -188,10 +283,31 @@ void validate_global_hotkeys(std::span<const Hotkey> hotkeys) {
         if (hotkey.virtual_key == 0 || hotkey.virtual_key > 0xFF ||
             (hotkey.modifiers & ~allowed_modifiers) != 0)
             throw std::invalid_argument("Неверный код горячей клавиши или модификатора");
-        if (hotkey.virtual_key == VK_F12)
-            throw std::invalid_argument("F12 зарезервирована Windows для отладчика. Выберите другую клавишу");
         if ((hotkey.modifiers & MOD_WIN) != 0)
             throw std::invalid_argument("Сочетания с Win зарезервированы Windows. Используйте Alt, Ctrl или Shift");
+        if (hotkey.virtual_key == VK_SHIFT || hotkey.virtual_key == VK_CONTROL ||
+            hotkey.virtual_key == VK_MENU || (hotkey.virtual_key >= VK_LSHIFT && hotkey.virtual_key <= VK_RMENU) ||
+            hotkey.virtual_key == VK_LWIN || hotkey.virtual_key == VK_RWIN)
+            throw std::invalid_argument("Сочетание должно содержать одну обычную клавишу");
+        if ((hotkey.virtual_key == VK_DELETE &&
+                (hotkey.modifiers & (MOD_CONTROL | MOD_ALT)) == (MOD_CONTROL | MOD_ALT)) ||
+            (hotkey.virtual_key == VK_ESCAPE &&
+                (hotkey.modifiers & (MOD_CONTROL | MOD_SHIFT)) == (MOD_CONTROL | MOD_SHIFT)))
+            throw std::invalid_argument("Это системное сочетание Windows. Выберите другое");
+    }
+}
+
+void validate_reload_input_hotkeys(std::span<const Hotkey> active,
+                                   bool reload_enabled) {
+    if (!reload_enabled) return;
+    constexpr UINT modifier_mask = MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
+    for (const auto& hotkey : active) {
+        const bool arrow = hotkey.virtual_key == VK_UP || hotkey.virtual_key == VK_DOWN ||
+            hotkey.virtual_key == VK_LEFT || hotkey.virtual_key == VK_RIGHT;
+        if (arrow && (hotkey.modifiers & modifier_mask) == 0)
+            throw std::invalid_argument("При включённой автоперезарядке стрелки без модификаторов нельзя назначать горячими клавишами. Добавьте Ctrl, Alt или Shift");
+        if (hotkey.virtual_key == L'R' && (hotkey.modifiers & modifier_mask) == 0)
+            throw std::invalid_argument("При включённой автоперезарядке R запускает перезарядку. Добавьте Ctrl, Alt или Shift к горячей клавише");
     }
 }
 
@@ -222,10 +338,21 @@ std::optional<std::size_t> HotkeyMatcher::handle_key_event(
     return std::nullopt;
 }
 
+std::optional<std::size_t> HotkeyMatcher::handle_hook_event(UINT virtual_key, bool pressed,
+    UINT active_modifiers, std::uint32_t flags, bool mouse) {
+    if (!is_physical_hotkey_event(flags, mouse)) return std::nullopt;
+    return handle_key_event(virtual_key, pressed, active_modifiers);
+}
+
 struct GlobalHotkeyListener::Impl {
     static constexpr int first_hotkey_id = 0x4000;
     static constexpr DWORD lifecycle_timeout_ms = 2000;
     static constexpr UINT modifier_mask = MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
+    static constexpr UINT hook_message = WM_APP + 0x168;
+
+    static bool hook_backed(const Hotkey& hotkey) noexcept {
+        return is_mouse_hotkey(hotkey) || hotkey.virtual_key == VK_F12;
+    }
 
     struct State {
         std::vector<Hotkey> requested_hotkeys;
@@ -240,12 +367,60 @@ struct GlobalHotkeyListener::Impl {
         std::atomic<bool> installed{};
         std::atomic<bool> had_registrations{};
         std::atomic<bool> unregistered{true};
+        std::vector<bool> registered;
+        std::unique_ptr<HotkeyMatcher> hook_matcher;
+        std::array<bool, 256> hook_keys{};
+        HHOOK mouse_hook{};
+        HHOOK keyboard_hook{};
 
         ~State() { if (ready) CloseHandle(ready); }
     };
 
     std::shared_ptr<State> state;
     HANDLE thread{};
+    static inline thread_local State* hook_state{};
+
+    static UINT current_modifiers() noexcept {
+        UINT modifiers{};
+        if (GetAsyncKeyState(VK_CONTROL) & 0x8000) modifiers |= MOD_CONTROL;
+        if (GetAsyncKeyState(VK_MENU) & 0x8000) modifiers |= MOD_ALT;
+        if (GetAsyncKeyState(VK_SHIFT) & 0x8000) modifiers |= MOD_SHIFT;
+        if ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) modifiers |= MOD_WIN;
+        return modifiers;
+    }
+
+    static void hook_event(UINT key, bool down, DWORD flags, bool mouse) noexcept {
+        const auto state = hook_state;
+        if (!state || key >= state->hook_keys.size() || !state->hook_keys[key] ||
+            state->stopping.load(std::memory_order_acquire)) return;
+        const auto action = state->hook_matcher->handle_hook_event(key, down,
+            current_modifiers(), flags, mouse);
+        if (action)
+            PostThreadMessageW(state->thread_id.load(std::memory_order_relaxed), hook_message,
+                static_cast<WPARAM>(*action), reinterpret_cast<LPARAM>(GetForegroundWindow()));
+    }
+
+    static LRESULT CALLBACK mouse_callback(int code, WPARAM message, LPARAM data) noexcept {
+        if (code >= 0 && (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP)) {
+            const auto& event = *reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+            const auto button = HIWORD(event.mouseData);
+            if (button == XBUTTON1 || button == XBUTTON2)
+                hook_event(button == XBUTTON1 ? VK_XBUTTON1 : VK_XBUTTON2,
+                    message == WM_XBUTTONDOWN, event.flags, true);
+        }
+        return CallNextHookEx(nullptr, code, message, data);
+    }
+
+    static LRESULT CALLBACK keyboard_callback(int code, WPARAM message, LPARAM data) noexcept {
+        if (code >= 0 && (message == WM_KEYDOWN || message == WM_SYSKEYDOWN ||
+                         message == WM_KEYUP || message == WM_SYSKEYUP)) {
+            const auto& event = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
+            if (event.vkCode == VK_F12)
+                hook_event(event.vkCode, message == WM_KEYDOWN || message == WM_SYSKEYDOWN,
+                    event.flags, false);
+        }
+        return CallNextHookEx(nullptr, code, message, data);
+    }
 
     static unsigned __stdcall run(void* parameter) noexcept {
         std::unique_ptr<std::shared_ptr<State>> owner{
@@ -257,11 +432,18 @@ struct GlobalHotkeyListener::Impl {
         PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
         std::size_t registered_count = 0;
         try {
+            state->registered.assign(state->hotkeys.size(), false);
+            state->hook_matcher = std::make_unique<HotkeyMatcher>(state->hotkeys);
             for (std::size_t index = 0; index < state->hotkeys.size(); ++index) {
                 if (state->stopping.load(std::memory_order_acquire)) break;
                 const auto& requested = state->requested_hotkeys[index];
-                // Only these explicit combinations reach this process. No
-                // keyboard hook, async-key polling, or raw input is requested.
+                if (hook_backed(requested)) {
+                    state->hook_keys[requested.virtual_key] = true;
+                    ++registered_count;
+                    continue;
+                }
+                // Ordinary keyboard combinations retain exclusive Windows
+                // reservations and the existing bounded conflict policy.
                 bool registered = RegisterHotKey(nullptr,
                     first_hotkey_id + static_cast<int>(index),
                     requested.modifiers | MOD_NOREPEAT, requested.virtual_key) != FALSE;
@@ -313,9 +495,30 @@ struct GlobalHotkeyListener::Impl {
                     break;
                 }
                 ++registered_count;
+                state->registered[index] = true;
                 state->had_registrations.store(true, std::memory_order_release);
             }
+            if (registered_count == state->hotkeys.size() && !state->stopping.load(std::memory_order_acquire)) {
+                hook_state = state.get();
+                if (state->hook_keys[VK_XBUTTON1] || state->hook_keys[VK_XBUTTON2]) {
+                    state->mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, mouse_callback,
+                        GetModuleHandleW(nullptr), 0);
+                    if (!state->mouse_hook) state->startup_error.store(GetLastError());
+                }
+                if (!state->startup_error.load() && state->hook_keys[VK_F12]) {
+                    state->keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_callback,
+                        GetModuleHandleW(nullptr), 0);
+                    if (!state->keyboard_hook) state->startup_error.store(GetLastError());
+                }
+                if (state->mouse_hook || state->keyboard_hook)
+                    state->had_registrations.store(true, std::memory_order_release);
+                if (state->startup_error.load()) {
+                    for (std::size_t index = 0; index < state->hotkeys.size(); ++index)
+                        if (hook_backed(state->hotkeys[index])) { state->failed_index.store(index); break; }
+                }
+            }
             if (registered_count == state->hotkeys.size() &&
+                !state->startup_error.load() &&
                 !state->stopping.load(std::memory_order_acquire))
                 state->installed.store(true, std::memory_order_release);
             SetEvent(state->ready);
@@ -326,11 +529,22 @@ struct GlobalHotkeyListener::Impl {
                     if (received < 0) log_error("Ошибка ожидания горячих клавиш Windows.");
                     break;
                 }
+                if (message.message == hook_message && message.hwnd == nullptr) {
+                    const auto index = static_cast<std::size_t>(message.wParam);
+                    if (index < state->hotkeys.size() && hook_backed(state->hotkeys[index]) &&
+                        reinterpret_cast<HWND>(message.lParam) == GetForegroundWindow() &&
+                        !state->stopping.load(std::memory_order_acquire)) {
+                        try { state->callback(index); }
+                        catch (...) { log_error("Ошибка обработчика горячей клавиши."); }
+                    }
+                    continue;
+                }
                 if (message.message != WM_HOTKEY || message.hwnd != nullptr ||
                     message.wParam < first_hotkey_id ||
                     message.wParam >= first_hotkey_id + registered_count ||
                     state->stopping.load(std::memory_order_acquire)) continue;
                 const auto index = static_cast<std::size_t>(message.wParam - first_hotkey_id);
+                if (!state->registered[index]) continue;
                 const auto& hotkey = state->hotkeys[index];
                 if (static_cast<UINT>(HIWORD(message.lParam)) != hotkey.virtual_key ||
                     (static_cast<UINT>(LOWORD(message.lParam)) & modifier_mask) !=
@@ -348,9 +562,15 @@ struct GlobalHotkeyListener::Impl {
             log_error("Не удалось обработать горячие клавиши.");
         }
         state->installed.store(false, std::memory_order_release);
+        hook_state = nullptr;
+        if (state->mouse_hook && !UnhookWindowsHookEx(state->mouse_hook))
+            state->unregistered.store(false, std::memory_order_release);
+        if (state->keyboard_hook && !UnhookWindowsHookEx(state->keyboard_hook))
+            state->unregistered.store(false, std::memory_order_release);
         // Cleanup happens on the same thread that registered the combinations.
         // A partially registered set is rolled back before this thread exits.
         for (std::size_t index = 0; index < registered_count; ++index) {
+            if (!state->registered[index]) continue;
             if (!UnregisterHotKey(nullptr, first_hotkey_id + static_cast<int>(index))) {
                 state->unregistered.store(false, std::memory_order_release);
                 log_warning("Windows не смогла освободить горячую клавишу.");

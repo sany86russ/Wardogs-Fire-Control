@@ -11,6 +11,7 @@
 // its declaration here avoids expanding the public capture API for tests.
 namespace wardogs::detail {
 std::size_t checked_capture_pixel_count(std::int64_t width, std::int64_t height);
+std::size_t checked_reload_capture_pixel_count(std::int64_t width, std::int64_t height);
 }
 
 namespace {
@@ -59,6 +60,28 @@ int main(int argc, char** argv) {
             "oversized skinny input is rejected before multiplication");
     rejects([] { checked_capture_pixel_count(16385, 1); },
             "capture and OCR use the same maximum physical dimension");
+    using wardogs::detail::checked_reload_capture_pixel_count;
+    check(checked_reload_capture_pixel_count(7680, 2160) == 16'588'800 &&
+          checked_reload_capture_pixel_count(7680, 4320) == 33'177'600,
+          "reload capture separately accepts ultrawide and 8K full-window discovery");
+    check(checked_reload_capture_pixel_count(8000, 5000) == 40'000'000 &&
+          checked_reload_capture_pixel_count(16384, 1) == 16384 &&
+          checked_reload_capture_pixel_count(1, 8192) == 8192,
+          "reload capture accepts its exact pixel and dimension boundaries");
+    rejects([] { checked_reload_capture_pixel_count(8000, 5001); },
+            "reload capture rejects one row beyond its separate 40 MP budget");
+    rejects([] { checked_reload_capture_pixel_count(16385, 1); },
+            "reload capture rejects excessive width before resource allocation");
+    rejects([] { checked_reload_capture_pixel_count(1, 8193); },
+            "reload capture rejects excessive height before resource allocation");
+    rejects([] { checked_reload_capture_pixel_count(0, 10); }, "reload capture rejects zero width");
+    rejects([] { checked_reload_capture_pixel_count(10, -1); }, "reload capture rejects negative height");
+    rejects([] {
+        checked_reload_capture_pixel_count(std::numeric_limits<std::int64_t>::max(),
+                                           std::numeric_limits<std::int64_t>::max());
+    }, "reload capture rejects extreme dimensions without an overflowing product");
+    rejects([] { checked_capture_pixel_count(7680, 2160); },
+            "ordinary text OCR capture retains its existing 16 MP rejection despite the reload API");
     const auto chat = wardogs::make_chat_search_rect({-1920, -100, 0, 980});
     check(chat.left == -1920 && chat.top == -100 && chat.right == -960 && chat.bottom == 440,
           "chat search follows physical client coordinates on a negative-origin monitor");

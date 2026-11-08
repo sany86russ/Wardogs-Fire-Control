@@ -62,14 +62,16 @@ Drag the mini card to a second monitor and drag its edges to resize it. Position
 
 A locked card passes clicks to the game. The default unlock shortcut is **Ctrl+Alt+Q**; the card's header shows the current shortcut. Map, height status and target remain below the values. Hover over a caption for model details; capture warnings remain visible.
 
-## Build helper and Team Piker — separate from calculations
+## Helpers — separate from calculations
 
 1. Open **Helpers** in the main window or tray, select a tab and enable its shortcut.
 2. Check the settings: **Build helper — 514 ms LMB hold / 33 ms pause**, randomization off; **Team Piker — 800 + 100–200 ms**, giving 900–1000 ms between click starts.
-3. Assign a shortcut or retain **F6/F7**, then click **Save**. Both helpers are disabled in a fresh profile.
-4. With WARDOGS active, press and release the shortcut to start; press it again to stop. Only one helper runs at a time. Switching windows and closing stop the loop; returning to the game does not resume it. **Ctrl+Alt+P / the pause button disables game captures and the reticle while keeping helpers and their shortcuts active.**
+3. Assign a shortcut or retain **F6/F7/F8**, then click **Save**. All helpers are disabled in a fresh profile. Mouse4/Mouse5 and Ctrl/Alt/Shift combinations can also be assigned.
+4. With WARDOGS active, press and release the shortcut to start; press it again to stop. Only one helper runs at a time. Switching windows and closing stop the loop; returning to the game does not resume it. **Ctrl+Alt+P / the pause button disables game captures and the reticle while keeping Build helper / Team Piker and their shortcuts active.**
 
-All preferences persist, but both loops remain stopped after restart. The **L81/SPH-2** mini-card strip shows **Off / Ready / Running** and actual shortcuts. It is read-only and highlights the active helper.
+For SPH-2, arm F8 once, then press R after each shot: the helper reads four rows using one frame per row and sends 16 keys. Default hold / key gap / sequence gap are **50 / 90 / 750 ms**. Key and sequence Humanizer can be enabled independently. Switching windows interrupts current input while preserving waiting for a new R; capture pause interrupts the SPH-2 cycle. Press F8 again to disarm.
+
+All preferences persist, but all helpers remain stopped after restart. The **L81/SPH-2** mini-card strip shows **Off / Ready / Running / Waiting for R** and actual shortcuts. It is read-only and highlights the active helper.
 
 Input automation may lead to an account ban under WARDOGS rules; publisher approval is unconfirmed, and randomization does not provide anti-cheat protection. [Detailed instructions](GAME-HELPERS-EN.md).
 

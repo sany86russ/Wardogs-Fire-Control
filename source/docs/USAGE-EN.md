@@ -143,13 +143,15 @@ Actual controls can differ from these examples after a Windows hotkey conflict. 
 
 ## Helpers and the mini card
 
-**Helpers** opens the separate Build helper / Team Piker window. Enable the desired shortcut, assign a combination and save. **F6/F7** are the initial assignments, disabled in a fresh profile. Build helper holds LMB for **514 ms** and releases for **33 ms**; the random 0–30 ms pause addition is enabled separately. Team Piker sends **30 ms** clicks with a complete **800 + 100–200 = 900–1000 ms** start-to-start interval.
+**Helpers** opens the separate Build helper / Team Piker / SPH-2 window. Enable the desired shortcut, assign a combination and save. **F6/F7/F8** are the initial assignments, disabled in a fresh profile. Mouse4/Mouse5 and Ctrl/Alt/Shift chords are supported. Build helper holds LMB for **514 ms** and releases for **33 ms**; the random 0–30 ms pause addition is enabled separately. Team Piker sends **30 ms** clicks with a complete **800 + 100–200 = 900–1000 ms** start-to-start interval.
 
-The same assigned shortcut starts and stops the loop in active WARDOGS; the first click waits for key release. Only one helper runs at a time. Switching windows, opening settings or closing stop it without automatic resumption. Capture pause **keeps helpers running**: their shortcuts remain available while game captures and the reticle are disabled. Preferences persist, but a running loop is not restored after restart.
+The same assigned shortcut starts and stops the loop in active WARDOGS; the first click waits for key release. Only one helper runs at a time. Switching windows, opening settings or closing stop it without automatic resumption. Capture pause **keeps Build helper / Team Piker running**: their shortcuts remain available while game captures and the reticle are disabled. Preferences persist, but a running loop is not restored after restart.
 
-Both L81 and SPH-2 mini cards display **each** helper's state and actual shortcut: **Off** means its hotkey is disabled; **Ready** means enabled but stopped; **Running** identifies and highlights the active loop. The strip is not a button and does not change the calculation, aim or helper mode. Return to the separate window to edit preferences.
+For SPH-2, F8 arms persistent waiting for R. Each R reload starts four snapshots and 16 key presses, then waits for R again. Default timing is **50 / 90 / 750 ms**; key and sequence Humanizer are independently configurable and default to off. Switching windows or pausing capture interrupts the SPH-2 cycle while preserving waiting for a fresh R. Press F8 again or Stop helpers to disarm.
 
-This is explicit left-button automation using standard Windows `SendInput`. WARDOGS rules provide sanctions for macros; publisher approval is unconfirmed, and randomization does not provide protection. [Full instructions and limits](GAME-HELPERS-EN.md).
+Both L81 and SPH-2 mini cards display **each** helper's state and actual shortcut: **Off** means its hotkey is disabled; **Ready** means enabled but stopped; **Running** identifies and highlights the active loop. **Waiting for R** identifies armed auto reload between cycles. The strip is not a button and does not change the calculation, aim or helper mode. Return to the separate window to edit preferences.
+
+This is explicit keyboard and left-button automation using standard Windows `SendInput`. WARDOGS rules provide sanctions for macros; publisher approval is unconfirmed, and randomization does not provide protection. [Full instructions and limits](GAME-HELPERS-EN.md).
 
 ## Data and limits
 

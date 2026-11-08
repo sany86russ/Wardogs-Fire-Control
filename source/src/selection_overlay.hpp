@@ -18,7 +18,7 @@ public:
     SelectionOverlay(const SelectionOverlay&) = delete;
     SelectionOverlay& operator=(const SelectionOverlay&) = delete;
 
-    bool begin(Callback callback);
+    bool begin(Callback callback, QString instructions = {});
     void cancel();
     // Diagnostic rendering of this selector's own paint output. Requires an
     // active selector window and never copies pixels from the desktop.
@@ -42,4 +42,5 @@ private:
     POINT end_{};
     HMONITOR monitor_{};
     Callback callback_;
+    QString instructions_;
 };

@@ -4,7 +4,7 @@
 
 The updater is available starting with **2.8.0**. It uses public stable releases of [sany86russ/Wardogs-Fire-Control](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
 
-The current release is **2.14.0**: [changes EN/RU](releases/v2.14.0.md) · [complete portable package](https://github.com/sany86russ/Wardogs-Fire-Control/releases/download/v2.14.0/WardogsFireControl-v2.14.0-win-x64.zip). It adds separate Build helper / Team Piker tools and their statuses on L81/SPH-2 mini cards. Shortcuts and timing persist; both loops remain stopped after updating. Coordinate OCR, calculations, Alt+I and saved data remain available. [Helper setup and limits](../source/docs/GAME-HELPERS-EN.md).
+The current release is **2.16.0**: [changes EN/RU](releases/v2.16.0.md) · [complete portable package](https://github.com/sany86russ/Wardogs-Fire-Control/releases/download/v2.16.0/WardogsFireControl-v2.16.0-win-x64.zip). It adds SPH-2 auto reload through F8 → R, 50 / 90 / 750 ms timing, independent Humanizer and side mouse shortcuts. The release also includes automatic Alt+I impact archives and provisional MIL refinement. Shortcuts and custom timing persist; all helpers remain stopped after updating. Coordinate OCR, calculations, Alt+I and saved data remain available. [Helper setup and limits](../source/docs/GAME-HELPERS-EN.md).
 
 ## Using the updater
 
@@ -18,7 +18,7 @@ Finish your current calculation before updating. Coordinates, history and sessio
 
 ## First upgrade from an older version
 
-Versions **2.7.0 and earlier** cannot update themselves. Download `WardogsFireControl-v2.14.0-win-x64.zip` from Assets once and extract the **entire** archive into a separate folder. Launch the new package. Settings and heights are restored from your Windows profile.
+Versions **2.7.0 and earlier** cannot update themselves. Download `WardogsFireControl-v2.16.0-win-x64.zip` from Assets once and extract the **entire** archive into a separate folder. Launch the new package. Settings and heights are restored from your Windows profile.
 
 ## Requirements and verification
 

@@ -4,22 +4,22 @@
 
 **A WARDOGS mortar and artillery calculator for L81 and SPH-2, on Windows 10/11 x64.** Calculate range, bearing and MIL from map coordinates, select an SPH-2 arc and optionally refine aim from an actual impact. Enter coordinates manually or capture them with local OCR; view the solution in the main window or an always-on-top mini card.
 
-[![Version](https://img.shields.io/badge/version-2.14.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.16.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-update)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#interface-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
 
 [Русский](README.md) · **English** · [Download for Windows](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Quick start](source/docs/QUICKSTART-EN.md) · [Report an issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
 
-**Version 2.14.0:** a separate **Build helper / Team Piker** window, persistent shortcuts and timing, and both helper statuses on L81 and SPH-2 mini cards. Helpers are enabled separately; their loops remain stopped after launch. [Full release EN/RU](docs/releases/v2.14.0.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
+**Version 2.16.0:** an **SPH-2 reload** helper, persistent **F8 → R** operation, configurable **50 / 90 / 750 ms** timing, independent Humanizer controls and **Mouse4 / Mouse5** with keyboard chords for every helper. [Full release EN/RU](docs/releases/v2.16.0.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
 
-![WARDOGS Fire Control 2.14.0 main window — calculation and separate Helpers button](docs/screenshots/en-main-2.14.0.png)
+![WARDOGS Fire Control 2.16.0 main window — calculation and game helpers](docs/screenshots/en-main-2.16.0.png)
 
-**2.15.0 in development:** automatic local storage of marked impacts and provisional MIL prediction for new targets from consistent observations. The normal workflow and Alt+I remain; no background HUD reader or flashing frame returns. [How learning works](source/docs/AUTOMATIC-LEARNING-EN.md). The published stable version is still 2.14.0.
+**2.16.0** also publishes automatic learning, which stores marked impacts locally and provisionally refines MIL for new targets from consistent observations. The normal workflow and Alt+I remain; background sight reading and a flashing frame are not used. [How learning works](source/docs/AUTOMATIC-LEARNING-EN.md).
 
 A native screenshot of the actual app. Demonstration coordinates and statuses are synthetic; capture does not use the game or send game input. It does not validate hit accuracy.
 
-> An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. Publisher approval for OCR, overlays and left-button automation has not been established. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Randomization does not provide anti-cheat protection. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
+> An unofficial community utility for the **WARDOGS game**, not affiliated with BULKHEAD and not intended for real weapons. Publisher approval for OCR, overlays and input automation has not been established. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Randomization does not provide anti-cheat protection. Read the [game interaction rules and limits](source/docs/ANTICHEAT-EN.md) before use.
 
 ## Contents
 
@@ -30,7 +30,7 @@ A native screenshot of the actual app. Demonstration coordinates and statuses ar
 - [SPH-2 ranging](#sph-2-ranging)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Interface and settings](#interface-and-settings)
-- [Build helper and Team Piker](#build-helper-and-team-piker)
+- [Game helpers](#game-helpers)
 - [Maps and elevations](#maps-and-elevations)
 - [OCR and coordinate review](#ocr-and-coordinate-review)
 - [How the calculations work](#how-the-calculations-work)
@@ -53,11 +53,12 @@ A native screenshot of the actual app. Demonstration coordinates and statuses ar
 | **Manual input** | Typed or pasted coordinates without game capture |
 | **Mini card and auxiliary reticle** | Aim over other windows; size, opacity and locking; remembered card monitor and placement |
 | **SPH-2 ranging** | Optional **Alt+I** correction, miss distance and the bearing/MIL change already applied |
+| **SPH-2 automatic learning** | A local archive of accepted impacts and provisional MIL transfer to compatible new targets |
 | **SPH-2 terrain** | Elevation correction and an approximate ground-intersection assessment with a compatible local pack |
 | **Positions and flight** | Target shifts, saved points, ground profiles and personal flight-time observations |
 | **History** | Up to 12 session targets, 64 recent accepted points and 500 named records |
 | **Capture pause** | **Ctrl+Alt+P** releases capture shortcuts, F4 and middle-click while retaining the solution |
-| **Build helper / Team Piker** | A separate left-button helper window, configurable shortcuts and timing, persistent preferences and stop on window changes |
+| **Build helper / Team Piker / SPH-2** | Construction, clicking and reload helpers with assigned keys, side mouse buttons, timing and Humanizer |
 | **Russian and English** | Interface and help switching without a restart |
 | **GitHub updates** | New-version checks and complete-package installation with SHA-256 verification |
 
@@ -68,7 +69,7 @@ The app calculates aiming values. The player sets bearing and MIL, fires and che
 **Requirements:** Windows 10/11 x64. Running the app does not require administrator privileges, Qt SDK, Visual Studio or Python.
 
 1. Open the [latest stable release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Under **Assets**, download **WardogsFireControl-v2.14.0-win-x64.zip**.
+2. Under **Assets**, download **WardogsFireControl-v2.16.0-win-x64.zip**.
 3. **Extract the complete ZIP** to a separate folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** from that folder.
 
@@ -79,13 +80,13 @@ Do not move only the EXE: the other DLLs and the `platforms` and `models` folder
 Compare the result with **SHA256SUMS.txt** from the same release:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.14.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.16.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 With GitHub CLI installed, you can also verify the build's origin:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.14.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.16.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Update inside the app
@@ -111,7 +112,7 @@ To upgrade from **2.7.0 or earlier**, download the new ZIP manually once. Automa
 
 You do not need to select a custom OCR region for this workflow. Middle-click is passed through to the game and still places its marker. **Capture the gun coordinates again after moving it.** A map change clears current coordinates, session history and corrections; the map name is not read automatically.
 
-**Ctrl+Alt+P** or **Pause / Resume** temporarily disables game captures, their shortcuts and the middle-button trigger, cancels pending OCR and hides the auxiliary reticle. **Build helper and Team Piker keep running; their start/stop shortcuts remain available while paused.** Gun, target, corrections and history are retained, and manual input remains available. Resuming does not take a screenshot by itself. [Complete workflow](source/docs/USAGE-EN.md).
+**Ctrl+Alt+P** or **Pause / Resume** temporarily disables game captures, their shortcuts and the middle-button trigger, cancels pending OCR and hides the auxiliary reticle. **Build helper and Team Piker keep running; their start/stop shortcuts remain available while paused.** The current SPH-2 reload cycle is interrupted; after resuming, an armed helper waits for a fresh R. Gun, target, corrections and history are retained, and manual input remains available. Resuming does not take a screenshot by itself. [Complete workflow](source/docs/USAGE-EN.md).
 
 ### Manual workflow
 
@@ -151,11 +152,11 @@ Middle-clicking the impact creates a new target. Enter a manual impact through *
 
 A local correction applies to the same arc near the target and fades to zero at **50 m**. An impact is accepted only within **20% of horizontal range and 400 m simultaneously**; command compatibility and the permitted MIL are also checked. Incompatible observations are rejected, retaining the previous valid command. Repeated observations do not keep adding the same correction; history is limited to **256 impacts**.
 
-After observations at at least three distinct targets from a stationary gun, a consistent **provisional bearing prediction** may apply to another target within the validated envelope. Stable 2.14 predicts bearing only. The 2.15 source separately validates provisional MIL transfer inside the jointly supported observation region. Pause, weapon or manual arc changes withdraw prediction transfer while retaining local history.
+After observations from at least three independent targets at a stationary gun position, the application checks a consistent **provisional bearing and MIL prediction** for a new target inside the jointly supported region. MIL transfer requires improved held-out errors without worsening an individual validation target; the target’s own local correction takes priority. Accepted impacts are stored automatically in a local archive, which does not restore the previous gun position after a restart. Pause, weapon changes and manual arc changes disable transfer until fresh observations are collected. [How learning works](source/docs/AUTOMATIC-LEARNING-EN.md).
 
 The app does not observe firing, actual sight settings or chassis tilt. Alt+I refers to the command displayed when reading starts. If the chassis changes attitude at the same coordinates, **reset corrections manually**. [Ranging calculations and limits](source/docs/SPH2-VALIDATION-EN.md).
 
-![SPH-2 mini card 2.14.0 — aiming values and helper statuses](docs/screenshots/en-vehicle-pinned-helpers-2.14.0.png)
+![SPH-2 mini card 2.16.0 — aiming values and helper statuses](docs/screenshots/en-vehicle-pinned-helpers-2.16.0.png)
 
 The card shows a synthetic solution and demonstration helper statuses. The strip displays actual assigned shortcuts; highlighting indicates a running loop, not a confirmed in-game hammer hit.
 
@@ -177,6 +178,7 @@ These are **defaults**. Occupied artillery shortcuts can use an available altern
 | Temporarily select a line and read the target | **Alt+V** |
 | Start / stop Build helper, after enabling its shortcut | **F6** |
 | Start / stop Team Piker, after enabling its shortcut | **F7** |
+| Arm / stop SPH-2 reload waiting | **F8**, then **R** starts each reload |
 
 Configure capture combinations under **Settings → Shortcuts**. If the complete supported set cannot be registered, the app displays an error and rolls registration back. Game capture requires the active WARDOGS window; global registration still reserves the combinations. Pause releases capture shortcuts, F4 and middle-click; return, unlock and resume controls remain available.
 
@@ -195,26 +197,30 @@ Drag the mini card to move it and drag its edges to resize it. It remembers the 
 
 **Positions and flight** opens target shifts, recent and named points, ground profiles and personal flight-time observations. Shifting left/right/closer/farther by **10/25/50/100 m** changes target coordinates; it is separate from ranging. Restore saved points explicitly after confirming the map; old ranging corrections are not restored automatically.
 
-## Build helper and Team Piker
+## Game helpers
 
-**Helpers** in the main window and tray menu opens a separate **Build helper / Team Piker** tabbed window. These settings are separate from artillery calculations.
+**Helpers** in the main window and tray menu opens three tabs: **Build helper / Team Piker / SPH-2 · reload**. Their preferences are separate from artillery calculations.
 
-1. Select a tab and enable its shortcut. Both helpers are disabled in a fresh profile.
-2. Assign a key: defaults are **F6** and **F7**. Set the timing and click **Save**.
-3. Return to WARDOGS, equip the desired tool and aim at the object. Press and release the assigned shortcut to start the loop.
-4. Press it again to stop. **Stop helpers**, opening settings, changing the active window and closing the app also stop it. Capture pause **keeps helpers running** and their shortcuts available. Returning to the game does not resume stopped clicks.
+1. Select a tab and enable its shortcut. All helpers are disabled in a fresh profile.
+2. Click **START / STOP key** and press a key, chord or **Mouse4 / Mouse5**. Ctrl/Alt/Shift are supported, including **Shift+Alt+F4** and **Ctrl+Mouse4**. Defaults are **F6 / F7 / F8**.
+3. Set the intervals and click **Save**. In the game, the assigned shortcut enables the helper; pressing it again stops it.
 
 | Helper | Initial settings | Additional settings |
 |---|---|---|
-| **Build helper** | Hold LMB for **514 ms**, release for **33 ms**; **547 ms** cycle | Hold and pause; optional random **0–30 ms** pause addition, disabled by default |
-| **Team Piker** | A **30 ms** click; **800 + 100–200 ms** between click starts, giving **900–1000 ms** | Base interval, randomization switch and addition range |
+| **Build helper · F6** | Hold LMB for **514 ms**, release for **33 ms**; **547 ms** cycle | Hold and pause; optional **0–30 ms** pause addition, disabled by default |
+| **Team Piker · F7** | A **30 ms** click; **800 + 100–200 ms** between click starts, giving **900–1000 ms** | Base interval, randomization switch and addition range |
+| **SPH-2 · F8 → R** | **50 ms** hold, **90 ms** between keys, **750 ms** between sequences | All three intervals; independent Humanizer additions of **0–30 ms** for keys and **0–200 ms** between sequences, both disabled |
 
-Shortcuts, timing and switches persist, but both loops remain stopped after a fresh app launch. Only one helper runs at a time. A read-only strip on both **L81 and SPH-2** mini cards shows each helper's state and actual assigned shortcut; the active mode is highlighted. Clicking the strip does not start input.
+The **50 / 90 / 750 ms** defaults apply to new profiles and missing settings. Updating preserves saved intervals; adjust them on the SPH-2 tab if required.
 
-![Build helper 2.14.0 — hold, pause and assigned shortcut](docs/screenshots/en-helpers-build-2.14.0.png)
-![Team Piker 2.14.0 — interval and random addition](docs/screenshots/en-helpers-team-2.14.0.png)
+**SPH-2:** press F8 once in the game, then press and release **R** after each shot. After 500 ms the helper reads four arrows from one snapshot and sends those keys in order; it repeats this **four times — 16 keys**. Arrow shapes are detected independently of the circle or background, and the search region is selected automatically for the current resolution. A manual region is also available. The helper returns to **Waiting for R** after a cycle; no new F8 is required before the next shot. Animation and green acceptance indicators are not checked.
 
-Helpers use ordinary `SendInput`, checking the exact foreground window and active desktop; they do not elevate privileges or conceal synthetic events. This does not establish publisher permission or protection from sanctions. The project owner selected **514/33**; hammer-release discussions do not establish universal timing. [Detailed setup and limits](source/docs/GAME-HELPERS-EN.md).
+Only one helper runs at a time. Switching windows interrupts input: Build helper and Team Piker require a new start, while armed SPH-2 waits for a fresh R in the game. Capture pause keeps left-button helpers running but interrupts the current reload; a new R is required after resuming. **Stop helpers**, opening settings and closing the application turn all modes off. Preferences persist, but every helper starts stopped after launching the application. Mini cards show the actual shortcuts and current states.
+
+![SPH-2 reload 2.16.0 — automatic search and timing controls](docs/screenshots/en-helpers-reload-2.16.0.png)
+![Humanizer 2.16.0 — independent random delay ranges](docs/screenshots/en-helpers-humanizer-2.16.0.png)
+
+Input uses standard Windows `SendInput` and is tied to the original foreground window. Win shortcuts and protected system commands are unavailable. With SPH-2 enabled, plain R and arrows are reserved for reloading; add a modifier to use them as shortcuts. Mouse4/Mouse5 and F12 also reach the game or another application. The project owner selected the **514/33** hammer preset; release-after-hit discussions do not establish universal timing. [Detailed setup and limits](source/docs/GAME-HELPERS-EN.md).
 
 ## Maps and elevations
 
@@ -251,7 +257,7 @@ The link is pinned to the compatible **v1.4.0** pack; new or arbitrarily modifie
 
 The main workflow uses **Paddle PP-OCRv6 Small through RapidOCR / ONNX Runtime on the CPU**. The model is bundled and recognition is local. Optional **Windows OCR** is for a custom region and needs a suitable English Windows OCR component; selecting it does not change the main Alt+X and middle-click paths.
 
-**Alt+X** searches for a complete pair in the active chat draft, not old messages. In the quick workflow, targets and impacts use separate labelled **X/Y** fields in a bounded cursor neighbourhood inside the active game window. Automatic acceptance requires two trustworthy matching pairs from separate screenshots with consistent context; a request is limited to **four frames**. Version 2.14.0 has no periodic sight-HUD reading or continuous screen scanning.
+**Alt+X** searches for a complete pair in the active chat draft, not old messages. In the quick workflow, targets and impacts use separate labelled **X/Y** fields in a bounded cursor neighbourhood inside the active game window. Automatic acceptance requires two trustworthy matching pairs from separate screenshots with consistent context; a request is limited to **four frames**. There is no periodic sight-HUD reading or continuous screen scanning. The separately armed SPH-2 reload helper takes four snapshots only after R.
 
 Clipped, weak or competing pairs open review. The previous command is hidden until reading is resolved. Repeating capture can replace an uncertain result; choose or correct a pair in the main window and accept it explicitly. **Reject** restores the previous solution. A changed task prevents late OCR from replacing the new target.
 
@@ -276,7 +282,7 @@ Automatic ground assessment checks the selected arc's **baseline model trajector
 
 ## Local data and privacy
 
-Calculations, OCR and terrain processing run on your PC. The app does not read game memory or inject code. The player sets the sight. Separately enabled helpers send ordinary left-button events through Windows `SendInput`; they do not recognize the equipped tool or conceal synthetic input. Main game captures stay inside the active WARDOGS window; additional OCR reads a user-selected screen region. This does not establish anti-cheat approval. The clipboard is read when you click **Paste**, without background monitoring.
+Calculations, OCR and terrain processing run on your PC. The app does not read game memory or inject code. The player sets the sight. Separately enabled helpers send ordinary left-button or arrow-key events through Windows `SendInput`; left-button helpers do not recognize the equipped tool, and synthetic input is not concealed. Main game captures stay inside the active WARDOGS window; additional OCR reads a user-selected screen region. This does not establish anti-cheat approval. The clipboard is read when you click **Paste**, without background monitoring.
 
 Profile: `%LOCALAPPDATA%\WardogsFireControl`.
 
@@ -286,6 +292,7 @@ Profile: `%LOCALAPPDATA%\WardogsFireControl`.
 | Additional-tool parameters | `planning.ini` |
 | Recent accepted points | `recent-fire-missions.json` |
 | Named records | `fire-missions.json` |
+| Accepted SPH-2 observations | `accuracy-observations.json` · up to 4096 entries / 8 MiB |
 | Personal flight-time observations | `flight-profiles.json` |
 | Imported elevations | `terrain-packs` |
 | Logs | `logs` |
@@ -298,20 +305,22 @@ Logs contain OCR and calculation diagnostics and may include game coordinates an
 
 ## RU and EN screenshots
 
-Native screenshots of the actual **2.14.0** application with synthetic calculations and helper states. Capture does not use the game or send real left-button input; images do not establish in-game accuracy or anti-cheat approval.
+Native screenshots of the actual **2.16.0** application with synthetic calculations and helper states; older Build helper, Team Piker and L81 views are labelled 2.14.0. Capture does not use the game or send real game input; images do not establish in-game accuracy or anti-cheat approval.
 
 | Window | Русский | English |
 |---|---|---|
-| Main window | [Открыть](docs/screenshots/ru-main-2.14.0.png) | [Open](docs/screenshots/en-main-2.14.0.png) |
-| Build helper | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
-| Team Piker | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
-| L81 mini card and helpers | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |
-| SPH-2 mini card and helpers | [Открыть](docs/screenshots/ru-vehicle-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-vehicle-pinned-helpers-2.14.0.png) |
+| Main window | [Открыть](docs/screenshots/ru-main-2.16.0.png) | [Open](docs/screenshots/en-main-2.16.0.png) |
+| Build helper (2.14.0) | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
+| Team Piker (2.14.0) | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
+| L81 mini card (2.14.0) | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |
+| SPH-2 reload | [Открыть](docs/screenshots/ru-helpers-reload-2.16.0.png) | [Open](docs/screenshots/en-helpers-reload-2.16.0.png) |
+| SPH-2 Humanizer | [Открыть](docs/screenshots/ru-helpers-humanizer-2.16.0.png) | [Open](docs/screenshots/en-helpers-humanizer-2.16.0.png) |
+| SPH-2 mini card and helpers | [Открыть](docs/screenshots/ru-vehicle-pinned-helpers-2.16.0.png) | [Open](docs/screenshots/en-vehicle-pinned-helpers-2.16.0.png) |
 
 <details>
 <summary>Historical 2.13.2 settings and help</summary>
 
-These retained images document the previous version and do not show the new 2.14.0 features.
+These retained images document the previous version and do not show the new 2.16.0 features.
 
 ![EN settings 2.13.2](docs/screenshots/en-settings-2.13.2.png)
 ![EN help 2.13.2](docs/screenshots/en-help-2.13.2.png)
@@ -325,6 +334,8 @@ These retained images document the previous version and do not show the new 2.14
 | [Quick start EN](source/docs/QUICKSTART-EN.md) / [RU](source/docs/QUICKSTART-RU.md) | First solution, shortcuts, OCR and profile |
 | [Workflow EN](source/docs/USAGE-EN.md) / [RU](source/docs/USAGE-RU.md) | Selected command, ranging, points and additional tools |
 | [Calculations EN](source/docs/CALCULATIONS-EN.md) / [RU](source/docs/CALCULATIONS-RU.md) | Tables, formulas, elevations, sources and limits |
+| [SPH-2 learning EN](source/docs/AUTOMATIC-LEARNING-EN.md) / [RU](source/docs/AUTOMATIC-LEARNING-RU.md) | Automatic accepted-impact storage and provisional MIL transfer |
+| [Helpers EN](source/docs/GAME-HELPERS-EN.md) / [RU](source/docs/GAME-HELPERS-RU.md) | Build helper, Team Piker, SPH-2 reload, Humanizer and shortcuts |
 | [Architecture EN](source/docs/ARCHITECTURE-EN.md) / [RU](source/docs/ARCHITECTURE-RU.md) | Modules, threads and state |
 | [Game interaction EN](source/docs/ANTICHEAT-EN.md) / [RU](source/docs/ANTICHEAT-RU.md) | Capture, system input and approval boundaries |
 | [ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) / [RU](source/docs/RELEASE-NOTES-RU.md) | Complete change history |

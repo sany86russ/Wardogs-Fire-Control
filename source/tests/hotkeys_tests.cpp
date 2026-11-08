@@ -95,9 +95,94 @@ int main() {
     const std::array debugger_reserved{wardogs::parse_hotkey(L"Alt+F12")};
     rejects([&] { wardogs::validate_global_hotkeys(windows_reserved); },
             "Windows-logo combinations stay with the OS");
-    rejects([&] { wardogs::validate_global_hotkeys(debugger_reserved); },
-            "F12 stays reserved for Windows debuggers");
+    wardogs::validate_global_hotkeys(debugger_reserved);
+    check(debugger_reserved[0].virtual_key == VK_F12,
+          "F12 is accepted through the non-consuming keyboard listener");
+    for (const auto& [text, code] : std::array<std::pair<const wchar_t*, UINT>, 18>{{
+            {L"Mouse4", VK_XBUTTON1}, {L"XButton1", VK_XBUTTON1}, {L"MB5", VK_XBUTTON2},
+            {L"Backspace", VK_BACK}, {L"CapsLock", VK_CAPITAL}, {L"Pause", VK_PAUSE},
+            {L"PrintScreen", VK_SNAPSHOT}, {L"Numpad9", VK_NUMPAD9}, {L"Num+1", VK_NUMPAD1},
+            {L"Num++", VK_ADD}, {L"Ctrl++", VK_OEM_PLUS}, {L";", VK_OEM_1},
+            {L"Backslash", VK_OEM_5}, {L"VolumeMute", VK_VOLUME_MUTE},
+            {L"MediaNext", VK_MEDIA_NEXT_TRACK}, {L"BrowserBack", VK_BROWSER_BACK},
+            {L"VK226", VK_OEM_102}, {L"VK0xBC", VK_OEM_COMMA}}}) {
+        const auto parsed = wardogs::parse_hotkey(text);
+        check(parsed.virtual_key == code, "keyboard families and side-button aliases retain their native code");
+        check(wardogs::parse_hotkey(parsed.display).virtual_key == code,
+              "native key displays round trip without depending on keyboard layout");
+    }
+    const auto triple = wardogs::parse_hotkey(L"Shift+Alt+F4");
+    check(triple.virtual_key == VK_F4 && triple.modifiers == (MOD_SHIFT | MOD_ALT | MOD_NOREPEAT),
+          "two modifiers and a function key form one three-key shortcut");
+    for (const auto* text : {L"Backtab", L"Shift+Backtab", L"Ctrl+Shift+Backtab"}) {
+        const auto backtab = wardogs::parse_hotkey(text);
+        check(backtab.virtual_key == VK_TAB && (backtab.modifiers & MOD_SHIFT) != 0 &&
+              backtab.display.find(L"Shift+Shift") == std::wstring::npos &&
+              wardogs::parse_hotkey(backtab.display) == backtab,
+              "Backtab aliases add Shift at most once and retain a round-trippable display");
+    }
+    const auto all_modifiers = wardogs::parse_hotkey(L"Ctrl+Alt+Shift+Mouse4");
+    check(wardogs::is_mouse_hotkey(all_modifiers) && all_modifiers.virtual_key == VK_XBUTTON1 &&
+          all_modifiers.modifiers == (MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT),
+          "side mouse buttons support all three ordinary modifiers");
+    for (const auto* reserved : {L"Ctrl+Alt+Delete", L"Ctrl+Shift+Esc", L"VK16"}) {
+        const std::array value{wardogs::parse_hotkey(reserved)};
+        rejects([&] { wardogs::validate_global_hotkeys(value); },
+                "secure Windows sequences and modifier-only pseudo keys are rejected clearly");
+    }
+    {
+        const std::array values{all_modifiers, wardogs::parse_hotkey(L"Mouse5"),
+                                wardogs::parse_hotkey(L"Shift+F12")};
+        wardogs::HotkeyMatcher matcher(values);
+        check(!matcher.handle_hook_event(VK_XBUTTON1, true, MOD_CONTROL | MOD_ALT | MOD_SHIFT,
+                    LLMHF_INJECTED, true), "injected mouse events do not trigger or acquire debounce state");
+        check(matcher.handle_hook_event(VK_XBUTTON1, true, MOD_CONTROL | MOD_ALT | MOD_SHIFT, 0, true) == 0,
+              "a physical side button matches its exact modifiers");
+        check(!matcher.handle_hook_event(VK_XBUTTON1, true, MOD_CONTROL | MOD_ALT | MOD_SHIFT, 0, true),
+              "a held side button cannot repeat the toggle");
+        matcher.handle_hook_event(VK_XBUTTON1, false, 0, 0, true);
+        check(!matcher.handle_hook_event(VK_XBUTTON1, true, MOD_CONTROL | MOD_ALT, 0, true),
+              "a missing modifier cannot activate a side-button chord");
+        matcher.handle_hook_event(VK_XBUTTON1, false, 0, 0, true);
+        check(matcher.handle_hook_event(VK_XBUTTON2, true, 0, 0, true) == 1,
+              "the other physical side button keeps its independent action index");
+        check(!matcher.handle_hook_event(VK_F12, true, MOD_SHIFT, LLKHF_INJECTED, false),
+              "injected F12 does not trigger the keyboard hook binding");
+        check(matcher.handle_hook_event(VK_F12, true, MOD_SHIFT, 0, false) == 2,
+              "physical F12 is matched with the selected modifiers");
+        matcher.handle_hook_event(VK_F12, false, 0, LLKHF_INJECTED, false);
+        check(!matcher.handle_hook_event(VK_F12, true, MOD_SHIFT, 0, false),
+              "an injected key release cannot re-arm a held physical shortcut");
+        matcher.handle_hook_event(VK_F12, false, 0, 0, false);
+        check(matcher.handle_hook_event(VK_F12, true, MOD_SHIFT, 0, false) == 2,
+              "a physical key release re-arms the next explicit press");
+    }
     rejects([&] { wardogs::validate_global_hotkeys({}); }, "an empty registration set is rejected");
+    for (const auto* direction : {L"Up", L"Down", L"Left", L"Right"}) {
+        const auto arrow = wardogs::parse_hotkey(direction);
+        const std::array plain{arrow};
+        rejects([&] { wardogs::validate_reload_input_hotkeys(plain, true); },
+                "reload input cannot collide with any registered unmodified arrow");
+        auto repeatable = arrow;
+        repeatable.modifiers &= ~MOD_NOREPEAT;
+        const std::array no_repeat_flag{repeatable};
+        rejects([&] { wardogs::validate_reload_input_hotkeys(no_repeat_flag, true); },
+                "repeat flags do not hide a generated-arrow conflict");
+        wardogs::validate_reload_input_hotkeys(plain, false);
+        for (const UINT modifier : {MOD_CONTROL, MOD_ALT, MOD_SHIFT}) {
+            auto modified = arrow;
+            modified.modifiers |= modifier;
+            const std::array chorded{modified};
+            wardogs::validate_reload_input_hotkeys(chorded, true);
+        }
+    }
+    wardogs::validate_reload_input_hotkeys({}, true);
+    const std::array reload_key{wardogs::parse_hotkey(L"R")};
+    rejects([&] { wardogs::validate_reload_input_hotkeys(reload_key, true); },
+            "the armed reload trigger R cannot also toggle a helper");
+    wardogs::validate_reload_input_hotkeys(reload_key, false);
+    const std::array modified_reload_key{wardogs::parse_hotkey(L"Alt+R")};
+    wardogs::validate_reload_input_hotkeys(modified_reload_key, true);
 
     wardogs::GlobalHotkeyListener listener;
     check(!listener.active(), "a new listener has no OS registrations");
@@ -344,6 +429,40 @@ int main() {
         std::cerr << "FAIL: registration lifecycle: " << error.what() << '\n';
     }
     listener.stop();
+
+    try {
+        const std::array mixed{wardogs::parse_hotkey(L"Ctrl+Alt+Shift+Mouse4"),
+            wardogs::parse_hotkey(L"Ctrl+Alt+Shift+F18"),
+            wardogs::parse_hotkey(L"Ctrl+Alt+Shift+Mouse5"),
+            wardogs::parse_hotkey(L"Ctrl+Alt+Shift+F12")};
+        std::atomic<int> mixed_callbacks{};
+        std::atomic<std::size_t> dispatched{static_cast<std::size_t>(-1)};
+        const auto before = own_threads();
+        listener.start(mixed, [&](std::size_t index) { dispatched.store(index); ++mixed_callbacks; });
+        check(listener.active(), "keyboard reservations and physical side/F12 hooks install together");
+        DWORD worker{};
+        for (const DWORD candidate : own_threads())
+            if (std::find(before.begin(), before.end(), candidate) == before.end()) worker = candidate;
+        check(worker != 0, "the mixed listener owns one message thread");
+        if (worker) {
+            PostThreadMessageW(worker, WM_HOTKEY, 0x4000,
+                MAKELPARAM(MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_XBUTTON1));
+            PostThreadMessageW(worker, WM_HOTKEY, 0x4003,
+                MAKELPARAM(MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F12));
+            PostThreadMessageW(worker, WM_HOTKEY, 0x4001,
+                MAKELPARAM(MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F18));
+            check(wait_for([&] { return mixed_callbacks.load() >= 1; }) && mixed_callbacks == 1 && dispatched == 1,
+                  "hook-only indices reject WM_HOTKEY and the normal key preserves its original action index");
+        }
+        listener.stop();
+        check(!listener.active(), "mixed keyboard/mouse/F12 listener shuts down and releases its hooks");
+        OwnedReservation released{test_registration_id + 32, mixed[1]};
+        check(released.release(), "mixed-listener shutdown releases the normal Windows reservation");
+    } catch (const std::exception& error) {
+        ++failures;
+        listener.stop();
+        std::cerr << "FAIL: side-button/F12 lifecycle: " << error.what() << '\n';
+    }
 
     // Exercise the complete eight-action settings set on a real Windows
     // registration thread. These uncommon chords belong only to this test;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.15.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.16.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -20,7 +20,7 @@ qt_add_resources(wardogs_i18n localization
     BASE translations
     FILES translations/main.json translations/dialogs.json
           translations/errors.json translations/common.json translations/planning.json translations/helpers.json
-          translations/helper_errors.json translations/helper_runtime.json translations/pinned_helpers.json translations/qtbase_ru.json
+          translations/helper_errors.json translations/helper_runtime.json translations/pinned_helpers.json translations/reload_helper.json translations/reload_runtime.json translations/qtbase_ru.json
 )
 
 add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)
@@ -77,6 +77,9 @@ add_library(wardogs_core
     src/coordinates.cpp
     src/ghost_reticle.cpp
     src/game_helpers.cpp
+    src/reload_vision.cpp
+    src/reload_helper.cpp
+    src/reload_region.cpp
     src/hotkeys.cpp
     src/image.cpp
     src/logger.cpp
@@ -126,6 +129,7 @@ if(WIN32)
         src/direction_plot.cpp
         src/ghost_reticle_window.cpp
         src/game_helpers_dialog.cpp
+        src/hotkey_capture_edit.cpp
         src/main_window.cpp
         src/pinned_result_window.cpp
         src/selection_overlay.cpp
@@ -251,8 +255,48 @@ target_compile_options(wardogs_game_helpers_tests PRIVATE /W4 /permissive- /utf-
 add_test(NAME wardogs_game_helpers_tests COMMAND wardogs_game_helpers_tests)
 set_tests_properties(wardogs_game_helpers_tests PROPERTIES TIMEOUT 20)
 
+add_executable(wardogs_reload_vision_tests tests/reload_vision_tests.cpp)
+target_link_libraries(wardogs_reload_vision_tests PRIVATE wardogs_core user32 ole32)
+target_compile_definitions(wardogs_reload_vision_tests PRIVATE WARDOGS_TEST_SOURCE_DIR=L"${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(wardogs_reload_vision_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_vision_tests COMMAND wardogs_reload_vision_tests)
+set_tests_properties(wardogs_reload_vision_tests PROPERTIES TIMEOUT 90)
+
+add_executable(wardogs_reload_vision_probe tools/reload_vision_probe.cpp src/capture.cpp)
+target_link_libraries(wardogs_reload_vision_probe PRIVATE wardogs_core Qt6::Gui user32 gdi32 ole32)
+target_compile_options(wardogs_reload_vision_probe PRIVATE /W4 /permissive- /utf-8)
+add_custom_command(TARGET wardogs_reload_vision_probe POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::Core>" "$<TARGET_FILE:Qt6::Gui>"
+        "$<TARGET_FILE_DIR:wardogs_reload_vision_probe>")
+
+add_executable(wardogs_reload_helper_tests tests/reload_helper_tests.cpp)
+target_link_libraries(wardogs_reload_helper_tests PRIVATE wardogs_core user32)
+target_compile_options(wardogs_reload_helper_tests PRIVATE /W4 /permissive- /utf-8)
+
+add_executable(wardogs_reload_trigger_tests tests/reload_trigger_tests.cpp)
+target_include_directories(wardogs_reload_trigger_tests PRIVATE include)
+target_compile_options(wardogs_reload_trigger_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_trigger_tests COMMAND wardogs_reload_trigger_tests)
+set_tests_properties(wardogs_reload_trigger_tests PROPERTIES TIMEOUT 10)
+add_test(NAME wardogs_reload_helper_tests COMMAND wardogs_reload_helper_tests)
+set_tests_properties(wardogs_reload_helper_tests PROPERTIES TIMEOUT 30)
+
+add_executable(wardogs_reload_region_tests tests/reload_region_tests.cpp)
+target_link_libraries(wardogs_reload_region_tests PRIVATE wardogs_core)
+target_compile_options(wardogs_reload_region_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_region_tests COMMAND wardogs_reload_region_tests)
+set_tests_properties(wardogs_reload_region_tests PROPERTIES TIMEOUT 10)
+
+add_executable(wardogs_reload_capture_tests tests/reload_capture_tests.cpp src/capture.cpp)
+target_link_libraries(wardogs_reload_capture_tests PRIVATE wardogs_core user32 gdi32)
+target_compile_definitions(wardogs_reload_capture_tests PRIVATE WARDOGS_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(wardogs_reload_capture_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_capture_tests COMMAND wardogs_reload_capture_tests)
+set_tests_properties(wardogs_reload_capture_tests PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
+
 add_executable(wardogs_game_helpers_dialog_tests
-    tests/game_helpers_dialog_tests.cpp src/game_helpers_dialog.cpp)
+    tests/game_helpers_dialog_tests.cpp src/game_helpers_dialog.cpp src/hotkey_capture_edit.cpp)
 target_include_directories(wardogs_game_helpers_dialog_tests PRIVATE src include)
 target_link_libraries(wardogs_game_helpers_dialog_tests PRIVATE
     wardogs_planning_ui wardogs_i18n wardogs_core Qt6::Widgets)
@@ -260,6 +304,15 @@ target_compile_definitions(wardogs_game_helpers_dialog_tests PRIVATE UNICODE _UN
 target_compile_options(wardogs_game_helpers_dialog_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_game_helpers_dialog_tests COMMAND wardogs_game_helpers_dialog_tests -platform offscreen)
 set_tests_properties(wardogs_game_helpers_dialog_tests PROPERTIES TIMEOUT 20)
+
+add_executable(wardogs_hotkey_capture_tests
+    tests/hotkey_capture_edit_tests.cpp src/hotkey_capture_edit.cpp)
+target_include_directories(wardogs_hotkey_capture_tests PRIVATE src include)
+target_link_libraries(wardogs_hotkey_capture_tests PRIVATE wardogs_i18n wardogs_core Qt6::Widgets user32)
+target_compile_definitions(wardogs_hotkey_capture_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_hotkey_capture_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_hotkey_capture_tests COMMAND wardogs_hotkey_capture_tests -platform offscreen)
+set_tests_properties(wardogs_hotkey_capture_tests PROPERTIES TIMEOUT 20)
 
 foreach(hud_test IN ITEMS sph_hud shot_observation aim_alignment)
     add_executable(wardogs_${hud_test}_tests tests/${hud_test}_tests.cpp)

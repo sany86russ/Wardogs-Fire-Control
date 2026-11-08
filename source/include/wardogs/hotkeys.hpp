@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -22,9 +23,20 @@ struct Hotkey {
 };
 
 Hotkey parse_hotkey(std::wstring_view text);
+// Canonical, layout-independent names for native virtual keys (including
+// Mouse4/Mouse5). Useful when a settings field records a physical shortcut.
+Hotkey hotkey_from_native(UINT virtual_key, UINT modifiers);
+[[nodiscard]] bool is_mouse_hotkey(const Hotkey& hotkey) noexcept;
+// Hook events never synthesize or consume input. Injected events are ignored.
+[[nodiscard]] bool is_physical_hotkey_event(std::uint32_t flags, bool mouse) noexcept;
 void validate_unique_hotkeys(std::span<const Hotkey> hotkeys);
 // Checks documented RegisterHotKey restrictions before any OS registration.
 void validate_global_hotkeys(std::span<const Hotkey> hotkeys);
+// Reload synthesizes unmodified arrow keys. An enabled action registered on
+// one of those keys could consume the input or trigger another helper. Only
+// active assignments are supplied; disabled stored shortcuts stay editable.
+void validate_reload_input_hotkeys(std::span<const Hotkey> active,
+                                  bool reload_enabled);
 
 class HotkeyMatcher {
 public:
@@ -32,6 +44,8 @@ public:
 
     std::optional<std::size_t> handle_key_event(UINT virtual_key, bool pressed,
                                                 UINT active_modifiers);
+    std::optional<std::size_t> handle_hook_event(UINT virtual_key, bool pressed,
+        UINT active_modifiers, std::uint32_t flags, bool mouse);
 
 private:
     std::vector<Hotkey> hotkeys_;

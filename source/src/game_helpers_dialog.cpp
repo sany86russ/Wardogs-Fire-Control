@@ -1,4 +1,5 @@
 #include "game_helpers_dialog.hpp"
+#include "hotkey_capture_edit.hpp"
 #include "localization.hpp"
 #include "window_title_bar.hpp"
 #include "wardogs/hotkeys.hpp"
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <array>
 #include <exception>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -79,24 +81,27 @@ QSpinBox* milliseconds(QFormLayout* form, const char* caption, const char* name,
 }
 
 QKeySequenceEdit* hotkey(QFormLayout* form, const std::wstring& value, const char* name) {
-    auto* edit = new QKeySequenceEdit(QKeySequence(QString::fromStdWString(value)));
+    auto* edit = new HotkeyCaptureEdit(value);
     edit->setObjectName(QString::fromLatin1(name));
     edit->setMaximumSequenceLength(1);
     edit->setFinishingKeyCombinations({QKeyCombination(Qt::Key_Tab),
                                        QKeyCombination(Qt::Key_Backtab)});
     edit->setAccessibleName(helper_text("Клавиша СТАРТ / СТОП"));
-    edit->setToolTip(helper_text("Нажмите сочетание в этом поле. Повторное нажатие в игре останавливает цикл."));
+    edit->setToolTip(helper_text("Нажмите клавишу, сочетание или боковую кнопку мыши в этом поле. Повторное нажатие в игре останавливает помощника."));
     form->addRow(helper_text("Клавиша СТАРТ / СТОП"), edit);
     return edit;
 }
 
 std::wstring chord(const QKeySequenceEdit* edit) {
+    if (const auto* capture = dynamic_cast<const HotkeyCaptureEdit*>(edit)) return capture->binding();
     return edit->keySequence().toString(QKeySequence::PortableText).toStdWString();
 }
 }  // namespace
 
-GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidget* parent)
-    : QDialog(parent), original_settings_(settings) {
+GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidget* parent,
+                                     ReloadRegionSelector select_reload_region)
+    : QDialog(parent), original_settings_(settings),
+      reload_region_selector_(std::move(select_reload_region)), reload_region_(settings.game_helpers.reload) {
     using namespace wardogs::game_helpers_limits;
     configure_frameless_window(this);
     setObjectName(QStringLiteral("gameHelpersDialog"));
@@ -135,7 +140,7 @@ GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidg
     auto* title = new QLabel(helper_text("Игровые помощники"));
     title->setObjectName(QStringLiteral("helperTitle"));
     root->addWidget(title);
-    root->addWidget(paragraph("Два отдельных сценария ЛКМ. Настройки помощников не влияют на артиллерийские расчёты."));
+    root->addWidget(paragraph("Строительство, клики и перезарядка SPH-2. Настройки помощников не влияют на артиллерийские расчёты."));
     auto* stopped = paragraph("Остановлены · запуск только по вашей клавише в игре");
     stopped->setObjectName(QStringLiteral("helperStopped"));
     root->addWidget(stopped);
@@ -194,8 +199,57 @@ GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidg
     team_page->addWidget(paragraph("Интервал измеряется между началами кликов и уже включает короткое нажатие 30 мс. По умолчанию: 800 + случайные 100–200 = 900–1000 мс."));
     team_page->addStretch();
 
-    root->addWidget(paragraph("1. Включите нужную клавишу и сохраните настройки.\n2. Вернитесь в WARDOGS и нажмите её для старта.\n3. Нажмите повторно для остановки. Смена окна останавливает цикл; возврат в игру его не возобновляет."));
-    auto* boundaries = paragraph("Одновременно работает один помощник. После запуска программы оба цикла остановлены. Правила WARDOGS ограничивают макросы и эксплуатацию ошибок; возможны санкции. Разрешение издателя не получено. Рандомизация меняет только ритм.");
+    const auto& reload = settings.game_helpers.reload;
+    auto* reload_page = page_for(tabs, helper_text("SPH-2 · перезарядка"));
+    reload_page->addWidget(paragraph("Распознаёт направления стрелок активной перезарядки и нажимает клавиши ↑ ↓ ← →. В игре должны быть назначены эти клавиши для Active Reload."));
+    auto* reload_control = card(reload_page, "Управление");
+    reload_enabled_ = new QCheckBox(helper_text("Включить горячую клавишу перезарядки SPH-2"));
+    reload_enabled_->setObjectName(QStringLiteral("reloadHelperEnabled"));
+    reload_enabled_->setChecked(reload.enabled);
+    reload_control->addRow(reload_enabled_);
+    reload_hotkey_ = hotkey(reload_control, reload.hotkey, "reloadHelperHotkey");
+    auto* reload_capture = card(reload_page, "Область стрелок");
+    reload_automatic_ = new QCheckBox(helper_text("Находить стрелки автоматически (рекомендуется)"));
+    reload_automatic_->setObjectName(QStringLiteral("reloadAutomaticRegion"));
+    reload_automatic_->setChecked(reload.automatic_region);
+    reload_capture->addRow(reload_automatic_);
+    reload_select_ = new QPushButton(helper_text("Выбрать область вручную…"));
+    reload_select_->setObjectName(QStringLiteral("reloadSelectRegionButton"));
+    reload_select_->setEnabled(static_cast<bool>(reload_region_selector_));
+    reload_capture->addRow(reload_select_);
+    reload_summary_ = paragraph("");
+    reload_summary_->setObjectName(QStringLiteral("reloadRegionSummary"));
+    reload_summary_->setProperty("helperSummary", true);
+    reload_page->addWidget(reload_summary_);
+    auto* reload_timing = card(reload_page, "Ритм перезарядки");
+    reload_hold_ = milliseconds(reload_timing, "Удержание клавиши", "reloadHelperHold", minimum_reload_hold_ms, maximum_reload_hold_ms, reload.hold_ms);
+    reload_key_gap_ = milliseconds(reload_timing, "Пауза между клавишами", "reloadHelperKeyGap", minimum_reload_key_gap_ms, maximum_reload_key_gap_ms, reload.key_gap_ms);
+    reload_stage_gap_ = milliseconds(reload_timing, "Пауза между комбинациями", "reloadHelperStageGap", minimum_reload_stage_gap_ms, maximum_reload_stage_gap_ms, reload.stage_gap_ms);
+    reload_random_form_ = card(reload_page, "Humanizer");
+    reload_key_random_ = new QCheckBox(helper_text("Рандомизация нажатий и пауз между клавишами"));
+    reload_key_random_->setObjectName(QStringLiteral("reloadKeyRandom"));
+    reload_key_random_->setChecked(reload.key_random_enabled);
+    reload_random_form_->addRow(reload_key_random_);
+    reload_key_random_min_ = milliseconds(reload_random_form_, "Добавка к клавишам от", "reloadKeyRandomMin", 0, maximum_random_ms, reload.key_random_min_ms);
+    reload_key_random_max_ = milliseconds(reload_random_form_, "Добавка к клавишам до", "reloadKeyRandomMax", 0, maximum_random_ms, reload.key_random_max_ms);
+    reload_stage_random_ = new QCheckBox(helper_text("Рандомизация переходов между комбинациями"));
+    reload_stage_random_->setObjectName(QStringLiteral("reloadStageRandom"));
+    reload_stage_random_->setChecked(reload.stage_random_enabled);
+    reload_random_form_->addRow(reload_stage_random_);
+    reload_stage_random_min_ = milliseconds(reload_random_form_, "Добавка к переходам от", "reloadStageRandomMin", 0, maximum_random_ms, reload.stage_random_min_ms);
+    reload_stage_random_max_ = milliseconds(reload_random_form_, "Добавка к переходам до", "reloadStageRandomMax", 0, maximum_random_ms, reload.stage_random_max_ms);
+    reload_timing_summary_ = paragraph("");
+    reload_timing_summary_->setObjectName(QStringLiteral("reloadTimingSummary"));
+    reload_timing_summary_->setProperty("helperSummary", true);
+    reload_page->addWidget(reload_timing_summary_);
+    reload_page->addWidget(paragraph("Humanizer независимо добавляет случайную задержку к каждому нажатию, паузе между клавишами и переходу между комбинациями. По умолчанию выключен: добавка к клавишам 0–30 мс, к переходам 0–200 мс."));
+    reload_page->addWidget(paragraph("Один кадр — четыре стрелки — четыре нажатия. Каждое нажатие R запускает четыре комбинации, пока помощник включён."));
+    reload_page->addWidget(paragraph("Клавиша СТАРТ / СТОП включает ожидание R. После перезарядки помощник ждёт следующего R. Повторное нажатие выключает режим."));
+    reload_page->addStretch();
+    connect(reload_select_, &QPushButton::clicked, this, &GameHelpersDialog::select_reload_region);
+
+    root->addWidget(paragraph("1. Включите нужную клавишу и сохраните настройки.\n2. Вернитесь в WARDOGS и нажмите её для старта.\n3. Нажмите повторно для остановки. Смена окна останавливает ввод; SPH-2 сохраняет ожидание следующего R."));
+    auto* boundaries = paragraph("Одновременно работает один помощник. После запуска программы все помощники остановлены. Правила WARDOGS ограничивают макросы и эксплуатацию ошибок; возможны санкции. Разрешение издателя не получено. Рандомизация меняет только ритм.");
     boundaries->setObjectName(QStringLiteral("helperBoundaries"));
     boundaries->setWordWrap(true);
     root->addWidget(boundaries);
@@ -214,9 +268,11 @@ GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidg
     outer->addWidget(content, 1);
 
     for (auto* spin : {build_hold_, build_pause_, build_random_min_, build_random_max_,
-                       team_interval_, team_random_min_, team_random_max_})
+                       team_interval_, team_random_min_, team_random_max_, reload_hold_, reload_key_gap_, reload_stage_gap_,
+                       reload_key_random_min_, reload_key_random_max_, reload_stage_random_min_, reload_stage_random_max_})
         connect(spin, &QSpinBox::valueChanged, this, [this] { update_summaries(); });
-    for (auto* check : {build_enabled_, build_random_, team_enabled_, team_random_})
+    for (auto* check : {build_enabled_, build_random_, team_enabled_, team_random_, reload_enabled_, reload_automatic_,
+                        reload_key_random_, reload_stage_random_})
         connect(check, &QCheckBox::toggled, this, [this] { update_summaries(); });
     update_summaries();
     wardogs::i18n::watch(this);
@@ -237,6 +293,19 @@ wardogs::GameHelpersPreferences GameHelpersDialog::preferences() const {
     result.team.random_enabled = team_random_->isChecked();
     result.team.random_min_ms = team_random_min_->value();
     result.team.random_max_ms = team_random_max_->value();
+    result.reload = reload_region_;
+    result.reload.enabled = reload_enabled_->isChecked();
+    result.reload.hotkey = chord(reload_hotkey_);
+    result.reload.automatic_region = reload_automatic_->isChecked();
+    result.reload.hold_ms = reload_hold_->value();
+    result.reload.key_gap_ms = reload_key_gap_->value();
+    result.reload.stage_gap_ms = reload_stage_gap_->value();
+    result.reload.key_random_enabled = reload_key_random_->isChecked();
+    result.reload.key_random_min_ms = reload_key_random_min_->value();
+    result.reload.key_random_max_ms = reload_key_random_max_->value();
+    result.reload.stage_random_enabled = reload_stage_random_->isChecked();
+    result.reload.stage_random_min_ms = reload_stage_random_min_->value();
+    result.reload.stage_random_max_ms = reload_stage_random_max_->value();
     return result;
 }
 
@@ -244,6 +313,17 @@ void GameHelpersDialog::update_summaries() {
     const auto value = preferences();
     build_hotkey_->setEnabled(value.build.enabled);
     team_hotkey_->setEnabled(value.team.enabled);
+    reload_hotkey_->setEnabled(value.reload.enabled);
+    if (value.reload.automatic_region) {
+        reload_summary_->setText(helper_text("Автоматический поиск четырёх стрелок в окне WARDOGS. Разрешение экрана задавать не нужно."));
+    } else if (wardogs::valid_reload_region(value.reload)) {
+        reload_summary_->setText(helper_text("Ручная область: слева %1 %, сверху %2 %, ширина %3 %, высота %4 %. Размер подстраивается под окно игры.")
+            .arg(value.reload.left / 100.0, 0, 'f', 1).arg(value.reload.top / 100.0, 0, 'f', 1)
+            .arg((value.reload.right - value.reload.left) / 100.0, 0, 'f', 1)
+            .arg((value.reload.bottom - value.reload.top) / 100.0, 0, 'f', 1));
+    } else {
+        reload_summary_->setText(helper_text("Ручная область ещё не выбрана. Выделите полосу со всеми четырьмя стрелками или включите автоматический поиск."));
+    }
     build_random_min_->setEnabled(value.build.random_enabled);
     build_random_max_->setEnabled(value.build.random_enabled);
     team_random_min_->setEnabled(value.team.random_enabled);
@@ -252,6 +332,22 @@ void GameHelpersDialog::update_summaries() {
     build_timing_form_->setRowVisible(build_random_max_, value.build.random_enabled);
     team_timing_form_->setRowVisible(team_random_min_, value.team.random_enabled);
     team_timing_form_->setRowVisible(team_random_max_, value.team.random_enabled);
+    reload_key_random_min_->setEnabled(value.reload.key_random_enabled);
+    reload_key_random_max_->setEnabled(value.reload.key_random_enabled);
+    reload_stage_random_min_->setEnabled(value.reload.stage_random_enabled);
+    reload_stage_random_max_->setEnabled(value.reload.stage_random_enabled);
+    reload_random_form_->setRowVisible(reload_key_random_min_, value.reload.key_random_enabled);
+    reload_random_form_->setRowVisible(reload_key_random_max_, value.reload.key_random_enabled);
+    reload_random_form_->setRowVisible(reload_stage_random_min_, value.reload.stage_random_enabled);
+    reload_random_form_->setRowVisible(reload_stage_random_max_, value.reload.stage_random_enabled);
+    const int key_min = value.reload.key_random_enabled ? value.reload.key_random_min_ms : 0;
+    const int key_max = value.reload.key_random_enabled ? value.reload.key_random_max_ms : 0;
+    const int stage_min = value.reload.stage_random_enabled ? value.reload.stage_random_min_ms : 0;
+    const int stage_max = value.reload.stage_random_enabled ? value.reload.stage_random_max_ms : 0;
+    reload_timing_summary_->setText(helper_text("Клавиша: %1–%2 мс · пауза: %3–%4 мс\nМежду комбинациями: %5–%6 мс")
+        .arg(value.reload.hold_ms + key_min).arg(value.reload.hold_ms + key_max)
+        .arg(value.reload.key_gap_ms + key_min).arg(value.reload.key_gap_ms + key_max)
+        .arg(value.reload.stage_gap_ms + stage_min).arg(value.reload.stage_gap_ms + stage_max));
     const int build_min = value.build.pause_ms + (value.build.random_enabled ? value.build.random_min_ms : 0);
     const int build_max = value.build.pause_ms + (value.build.random_enabled ? value.build.random_max_ms : 0);
     build_summary_->setText(helper_text("ЛКМ %1 мс → пауза %2–%3 мс\nПолный цикл: %4–%5 мс")
@@ -274,20 +370,49 @@ void GameHelpersDialog::accept_if_valid() {
             original_settings_.pinned_card.unlock_hotkey, original_settings_.exit_game_mode_hotkey};
         std::vector<wardogs::Hotkey> keys;
         for (const auto& key : artillery) keys.push_back(wardogs::parse_hotkey(key));
-        // Validate both stored assignments even if disabled, but reserve only
+        // Validate stored assignments even if disabled, but reserve only
         // enabled helpers when checking against the artillery shortcuts.
         for (const auto& entry : {std::pair{value.build.enabled, value.build.hotkey},
-                                  std::pair{value.team.enabled, value.team.hotkey}}) {
+                                  std::pair{value.team.enabled, value.team.hotkey},
+                                  std::pair{value.reload.enabled, value.reload.hotkey}}) {
             const auto parsed = wardogs::parse_hotkey(entry.second);
             const std::array one{parsed};
             wardogs::validate_global_hotkeys(one);
-            if (parsed.virtual_key == VK_ESCAPE)
-                throw std::invalid_argument("Esc используется для закрытия окон; выберите другую клавишу помощника");
             if (entry.first) keys.push_back(parsed);
         }
         wardogs::validate_unique_hotkeys(keys);
+        wardogs::validate_reload_input_hotkeys(keys, value.reload.enabled);
         QDialog::accept();
     } catch (const std::exception& error) {
+        show_error(wardogs::i18n::text(QString::fromUtf8(error.what())));
+    }
+}
+
+void GameHelpersDialog::select_reload_region() {
+    if (!reload_region_selector_) return;
+    // Hiding a QDialog ends its exec() loop. Keep the modal editor alive while
+    // making its surface invisible for the native region selector.
+    const qreal previous_opacity = windowOpacity();
+    const bool was_enabled = isEnabled();
+    setWindowOpacity(0.0);
+    setEnabled(false);
+    const auto restore_editor = [&] {
+        setEnabled(was_enabled);
+        setWindowOpacity(previous_opacity);
+        if (isVisible()) activateWindow();
+    };
+    try {
+        const auto chosen = reload_region_selector_(preferences().reload);
+        if (chosen) {
+            if (!wardogs::valid_reload_region(*chosen))
+                throw std::invalid_argument("Выберите область стрелок внутри окна WARDOGS или включите автоматический поиск");
+            reload_region_ = *chosen;
+            reload_automatic_->setChecked(false);
+            update_summaries();
+        }
+        restore_editor();
+    } catch (const std::exception& error) {
+        restore_editor();
         show_error(wardogs::i18n::text(QString::fromUtf8(error.what())));
     }
 }
