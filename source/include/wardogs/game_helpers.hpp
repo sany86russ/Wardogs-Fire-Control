@@ -9,7 +9,7 @@
 
 namespace wardogs {
 
-enum class GameHelperMode { none, build, team };
+enum class GameHelperMode { none, build, team, reload };
 enum class GameHelperStopReason {
     none, requested, focus_lost, input_failed, callback_failed, activation_timeout
 };
@@ -65,6 +65,7 @@ public:
     // 10 ms while running. Neither stop nor focus restoration auto-starts.
     void stop() noexcept;
     [[nodiscard]] bool running() const noexcept;
+    [[nodiscard]] bool release_pending() const noexcept;
     [[nodiscard]] GameHelperMode mode() const noexcept;
     [[nodiscard]] GameHelperStopReason stop_reason() const noexcept;
     [[nodiscard]] std::string last_error() const;

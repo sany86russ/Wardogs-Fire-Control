@@ -7,6 +7,9 @@
 #include "settings_dialog.hpp"
 #include "game_helpers_dialog.hpp"
 #include "wardogs/game_helpers.hpp"
+#include "wardogs/reload_helper.hpp"
+#include "wardogs/reload_region.hpp"
+#include "wardogs/reload_trigger.hpp"
 #include "planning_dialog.hpp"
 #include "update_ui.hpp"
 #include "ghost_reticle_window.hpp"
@@ -44,6 +47,7 @@
 #include <QBoxLayout>
 #include <QClipboard>
 #include <QChar>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QUuid>
 #include <QDir>
@@ -394,6 +398,72 @@ bool is_wardogs_window(HWND window) {
 
 bool wardogs_is_foreground() { return is_wardogs_window(GetForegroundWindow()); }
 
+RECT reload_client_bounds(HWND window) {
+    RECT client{};
+    POINT origin{};
+    if (!window || !IsWindowVisible(window) || IsIconic(window) ||
+        !GetClientRect(window, &client) || !ClientToScreen(window, &origin) ||
+        client.right <= 0 || client.bottom <= 0)
+        throw std::runtime_error("Не удалось определить размер окна WARDOGS.");
+    return {origin.x, origin.y, origin.x + client.right, origin.y + client.bottom};
+}
+
+struct ReloadCaptureContext {
+    HWND window{};
+    RECT client{};
+    wardogs::ImageRect search{};
+    std::optional<wardogs::ImageRect> tracked;
+    unsigned observed_frames{};
+
+    bool unchanged() const {
+        if (!wardogs::helper_window_allows_input(reinterpret_cast<std::uintptr_t>(window)) ||
+            !is_wardogs_window(window)) return false;
+        try { const auto current = reload_client_bounds(window); return EqualRect(&client, &current); }
+        catch (const std::exception&) { return false; }
+    }
+
+    std::optional<wardogs::ReloadObservation> observe() {
+        if (!unchanged()) throw std::runtime_error("Окно игры изменилось. Запустите помощник заново.");
+        const auto area = tracked.value_or(search);
+        const RECT physical{client.left + area.left, client.top + area.top,
+                            client.left + area.right, client.top + area.bottom};
+        const auto monitor = MonitorFromPoint({physical.left, physical.top}, MONITOR_DEFAULTTONULL);
+        MONITORINFO info{sizeof(info)};
+        if (!monitor || !GetMonitorInfoW(monitor, &info) ||
+            physical.left < info.rcMonitor.left || physical.top < info.rcMonitor.top ||
+            physical.right > info.rcMonitor.right || physical.bottom > info.rcMonitor.bottom)
+            throw std::runtime_error("Область стрелок должна находиться внутри одного монитора");
+        auto frame = wardogs::capture_reload_screen(wardogs::make_capture_region(monitor, physical));
+        if (!unchanged()) throw std::runtime_error("Окно игры изменилось. Запустите помощник заново.");
+        auto observation = wardogs::detect_reload_sequence(frame);
+        std::ostringstream diagnostic;
+        diagnostic.imbue(std::locale::classic());
+        diagnostic << "reload.capture frame=" << ++observed_frames
+            << " size=" << frame.width << 'x' << frame.height
+            << " tracked=" << (tracked ? 1 : 0) << " arrows=" << (observation ? 1 : 0);
+        if (observation) {
+            auto& bounds = observation->bounds;
+            bounds.left += area.left; bounds.right += area.left;
+            bounds.top += area.top; bounds.bottom += area.top;
+            diagnostic << " confidence=" << observation->confidence << " steps=";
+            for (const auto& arrow : observation->arrows)
+                diagnostic << "URDL"[static_cast<int>(arrow.direction)] << (arrow.accepted ? '+' : '-');
+            // Acquire once, then use this same padded strip for the next
+            // three snapshots. Arrow animation never moves the capture area.
+            if (!tracked) {
+                const int padding = std::max(16, bounds.bottom - bounds.top);
+                tracked = wardogs::ImageRect{
+                    std::max(search.left, bounds.left - padding),
+                    std::max(search.top, bounds.top - padding),
+                    std::min(search.right, bounds.right + padding),
+                    std::min(search.bottom, bounds.bottom + padding)};
+            }
+        }
+        wardogs::log_info(diagnostic.str());
+        return observation;
+    }
+};
+
 struct AutomaticChatCapture { wardogs::CaptureRegion region; HWND window{}; };
 
 AutomaticChatCapture automatic_chat_capture_region() {
@@ -703,7 +773,8 @@ public:
             mode != QStringLiteral("recognition-bottom") && mode != QStringLiteral("tutorial-bottom") &&
             mode != QStringLiteral("tutorial-keys") && mode != QStringLiteral("tutorial-help") &&
             mode != QStringLiteral("tutorial") && mode != QStringLiteral("notice") &&
-            mode != QStringLiteral("helpers") && mode != QStringLiteral("helpers-team")) {
+            mode != QStringLiteral("helpers") && mode != QStringLiteral("helpers-team") &&
+            mode != QStringLiteral("helpers-reload") && mode != QStringLiteral("helpers-humanizer")) {
             terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
             base_input_->setText(QStringLiteral("80 80"));
             manual_base();
@@ -713,10 +784,22 @@ public:
         std::unique_ptr<QTemporaryDir> planning_snapshot_data;
         std::unique_ptr<QDialog> dialog;
         QWidget* view = this;
-        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team")) {
+        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team") ||
+            mode == QStringLiteral("helpers-reload") || mode == QStringLiteral("helpers-humanizer")) {
             dialog = std::make_unique<GameHelpersDialog>(settings_);
             if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs")))
-                tabs->setCurrentIndex(mode == QStringLiteral("helpers-team") ? 1 : 0);
+                tabs->setCurrentIndex(mode == QStringLiteral("helpers-reload") ||
+                                      mode == QStringLiteral("helpers-humanizer") ? 2 :
+                                      mode == QStringLiteral("helpers-team") ? 1 : 0);
+            if (mode == QStringLiteral("helpers-humanizer")) {
+                // Display-only expansion; preferences and running state are
+                // never persisted or activated by a diagnostic snapshot.
+                for (const auto* name : {"reloadKeyRandom", "reloadStageRandom"}) {
+                    auto* control = dialog->findChild<QCheckBox*>(QString::fromLatin1(name));
+                    if (!control) return false;
+                    control->setChecked(true);
+                }
+            }
         }
         else if (mode == QStringLiteral("settings") || mode.startsWith(QStringLiteral("recognition"))) {
             dialog = std::make_unique<SettingsDialog>(settings_);
@@ -828,14 +911,20 @@ public:
             QApplication::processEvents();
             QApplication::processEvents();
         }
-        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team")) {
+        if (mode == QStringLiteral("helpers") || mode == QStringLiteral("helpers-team") ||
+            mode == QStringLiteral("helpers-reload") || mode == QStringLiteral("helpers-humanizer")) {
             if (auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs")))
                 if (auto* scroll = qobject_cast<QScrollArea*>(tabs->currentWidget()))
                     if (auto* field = dialog->findChild<QWidget*>(mode == QStringLiteral("helpers")
-                            ? QStringLiteral("buildHelperHold") : QStringLiteral("teamPikerInterval"))) {
+                            ? QStringLiteral("buildHelperHold") : mode == QStringLiteral("helpers-team")
+                            ? QStringLiteral("teamPikerInterval") : mode == QStringLiteral("helpers-humanizer")
+                            ? QStringLiteral("reloadKeyRandom") : QStringLiteral("reloadHelperStageGap"))) {
                         // Like a user scrolling a smaller/high-DPI display,
                         // expose the timing field before checking its pixels.
-                        scroll->ensureWidgetVisible(field);
+                        if (mode == QStringLiteral("helpers-humanizer")) {
+                            const int top = field->parentWidget()->mapTo(scroll->widget(), QPoint{}).y();
+                            scroll->verticalScrollBar()->setValue(top);
+                        } else scroll->ensureWidgetVisible(field);
                         QApplication::processEvents();
                     }
         }
@@ -901,6 +990,16 @@ public:
             // Display-only fixture. No runner or synthetic input is started.
             pinned_window_->set_helpers_status(sample, mode == QStringLiteral("pinned-helpers")
                 ? wardogs::GameHelperMode::build : wardogs::GameHelperMode::team);
+            QApplication::processEvents();
+        }
+        if (mode == QStringLiteral("vehicle-pinned-reload")) {
+            wardogs::GameHelpersPreferences sample;
+            sample.build.enabled = sample.team.enabled = sample.reload.enabled = true;
+            // Display-only fixture: neither an armed trigger nor an input
+            // runner is started, and the user profile remains untouched.
+            pinned_window_->set_helpers_status(sample, wardogs::GameHelperMode::reload, true);
+            pinned_window_->set_workflow_status(wardogs::i18n::text(
+                QStringLiteral("Перезарядка SPH-2 включена · ожидание R")));
             QApplication::processEvents();
         }
         const QFileInfo file(path);
@@ -1168,16 +1267,68 @@ public:
             QTimer::singleShot(0, this, [&helpers_opened] {
                 if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
                     auto* tabs = dialog->findChild<QTabWidget*>(QStringLiteral("gameHelpersTabs"));
-                    helpers_opened = tabs && tabs->count() == 2;
+                    helpers_opened = tabs && tabs->count() == 3 &&
+                        dialog->findChild<QCheckBox*>(QStringLiteral("reloadAutomaticRegion"));
                     dialog->reject();
                 }
             });
             click("gameHelpersButton");
-            check("helpers_navigation_opens_two_modes_and_cancel_preserves_preferences",
-                helpers_opened && settings_.game_helpers == before && !game_helper_.running());
+            check("helpers_navigation_opens_three_modes_and_cancel_preserves_preferences",
+                helpers_opened && settings_.game_helpers == before && !game_helper_.running() && !reload_helper_.running());
             toggle_game_helper(wardogs::GameHelperMode::build, nullptr);
+            toggle_reload_helper(nullptr);
             check("helpers_never_start_in_diagnostic_or_without_game_foreground",
-                !game_helper_.running() && !before.build.enabled && !before.team.enabled);
+                !game_helper_.running() && !reload_helper_.running() &&
+                !before.build.enabled && !before.team.enabled && !before.reload.enabled);
+        }
+        {
+            // Exercise the real UI controller while the worker normally owns
+            // a key. release_pending() is not a failure until the worker stops.
+            const auto before = settings_;
+            HWND fixture = CreateWindowExW(0, L"STATIC", L"Reload trigger fixture", 0,
+                0, 0, 1, 1, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
+            check("reload_arming_fixture_has_a_valid_hidden_window", fixture != nullptr);
+            if (fixture) {
+                std::atomic<int> downs{}, ups{};
+                settings_.game_integration_enabled = true;
+                settings_.game_helpers.reload.enabled = true;
+                reload_trigger_window_ = fixture;
+                reload_trigger_.arm(false);
+                toggle_game_helper(wardogs::GameHelperMode::build, nullptr);
+                toggle_game_helper(wardogs::GameHelperMode::team, nullptr);
+                check("other_helper_shortcuts_outside_game_preserve_reload_arming",
+                    reload_trigger_.armed() && !game_helper_.running() && !reload_helper_.running());
+                reload_cycle_started_ = true;
+                last_started_helper_ = wardogs::GameHelperMode::reload;
+                wardogs::ReloadObservation white;
+                white.bounds = {10, 10, 210, 50};
+                white.confidence = 1.0;
+                for (std::size_t slot = 0; slot < white.arrows.size(); ++slot)
+                    white.arrows[slot] = {static_cast<wardogs::ReloadDirection>(slot), false};
+                wardogs::ReloadHelperTiming timing;
+                timing.hold_ms = 500;
+                reload_helper_.start({[] { return true; }, [] { return true; },
+                    [white] { return std::optional{white}; },
+                    [&](wardogs::ReloadDirection, bool down) {
+                        if (down) ++downs; else ++ups;
+                        return true;
+                    }}, timing);
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+                while (!reload_helper_.release_pending() && reload_helper_.running() &&
+                       std::chrono::steady_clock::now() < deadline) Sleep(1);
+                const bool held = reload_helper_.running() && reload_helper_.release_pending();
+                poll_reload_trigger();
+                check("armed_reload_controller_preserves_a_normal_worker_key_hold",
+                    held && reload_trigger_.armed() && reload_helper_.running() && reload_helper_.release_pending());
+                stop_game_helper();
+                check("armed_reload_controller_stop_releases_only_the_fake_owned_key",
+                    downs == 1 && ups == 1 && !reload_helper_.release_pending() && !reload_trigger_.armed());
+                DestroyWindow(fixture);
+            }
+            settings_ = before;
+            last_started_helper_ = wardogs::GameHelperMode::none;
+            reload_cycle_started_ = false;
+            update_game_helper_status();
         }
         map_confirmed_ = false;
         update_readiness();
@@ -3194,10 +3345,19 @@ private:
     std::unique_ptr<wardogs::WindowsOcr> windows_;
     wardogs::GlobalHotkeyListener hotkey_listener_;
     wardogs::GameHelperRunner game_helper_;
+    wardogs::ReloadHelperRunner reload_helper_;
+    wardogs::ReloadTrigger reload_trigger_;
+    HWND reload_trigger_window_{};
+    bool reload_cycle_started_{};
+    bool displayed_reload_waiting_{};
+    wardogs::ReloadHelperState displayed_reload_state_{wardogs::ReloadHelperState::stopped};
+    int displayed_reload_count_{};
+    wardogs::GameHelperMode last_started_helper_{wardogs::GameHelperMode::none};
     wardogs::GameHelperMode displayed_helper_mode_{wardogs::GameHelperMode::none};
     wardogs::GameHelperStopReason displayed_helper_reason_{wardogs::GameHelperStopReason::none};
     std::string displayed_helper_error_;
     QTimer* game_helper_status_timer_{};
+    QTimer* reload_trigger_timer_{};
     QPushButton *helpers_button_{}, *stop_helpers_button_{};
     wardogs::GlobalMouseListener mouse_listener_;
     std::atomic_uint64_t hotkey_listener_epoch_{};
@@ -4039,6 +4199,11 @@ private:
         game_helper_status_timer_->setInterval(100);
         connect(game_helper_status_timer_, &QTimer::timeout, this, &MainWindow::update_game_helper_status);
         if (!diagnostic_) game_helper_status_timer_->start();
+        reload_trigger_timer_ = new QTimer(this);
+        reload_trigger_timer_->setTimerType(Qt::PreciseTimer);
+        reload_trigger_timer_->setInterval(10);
+        connect(reload_trigger_timer_, &QTimer::timeout, this, &MainWindow::poll_reload_trigger);
+        if (!diagnostic_) reload_trigger_timer_->start();
         connect(language_selector_, &QComboBox::currentIndexChanged, this, [this](int index) {
             change_language(index == 1 ? wardogs::UiLanguage::english : wardogs::UiLanguage::russian);
         });
@@ -7016,45 +7181,78 @@ private:
     }
 
     void sync_pinned_helpers() {
-        if (pinned_window_) pinned_window_->set_helpers_status(settings_.game_helpers, game_helper_.mode());
+        if (pinned_window_) pinned_window_->set_helpers_status(settings_.game_helpers,
+            reload_trigger_.armed() || reload_helper_.running()
+                ? wardogs::GameHelperMode::reload : game_helper_.mode(),
+            reload_trigger_.armed() && !reload_helper_.running());
     }
 
     void update_game_helper_status() {
         sync_pinned_helpers();
-        const auto mode = game_helper_.mode();
+        const auto mode = reload_trigger_.armed() || reload_helper_.running()
+            ? wardogs::GameHelperMode::reload : game_helper_.mode();
+        const bool waiting = reload_trigger_.armed() && !reload_helper_.running();
         const auto reason = game_helper_.stop_reason();
-        const auto error = game_helper_.last_error();
+        const auto reload_state = last_started_helper_ == wardogs::GameHelperMode::reload && reload_cycle_started_
+            ? reload_helper_.state() : wardogs::ReloadHelperState::stopped;
+        const auto reload_count = last_started_helper_ == wardogs::GameHelperMode::reload && reload_cycle_started_
+            ? reload_helper_.sent_count() : 0;
+        const auto error = last_started_helper_ == wardogs::GameHelperMode::reload
+                ? (reload_cycle_started_ ? reload_helper_.last_error() : std::string{}) : game_helper_.last_error();
         if (mode == displayed_helper_mode_ && reason == displayed_helper_reason_ &&
-            error == displayed_helper_error_) return;
+            error == displayed_helper_error_ && reload_state == displayed_reload_state_ &&
+            reload_count == displayed_reload_count_ && waiting == displayed_reload_waiting_) return;
         displayed_helper_mode_ = mode;
         displayed_helper_reason_ = reason;
         displayed_helper_error_ = error;
+        displayed_reload_state_ = reload_state;
+        displayed_reload_count_ = reload_count;
+        displayed_reload_waiting_ = waiting;
         if (helpers_button_) helpers_button_->setText(wardogs::i18n::text(
             mode == wardogs::GameHelperMode::build ? QStringLiteral("Build helper · работает") :
             mode == wardogs::GameHelperMode::team ? QStringLiteral("Team Piker · работает") :
+            mode == wardogs::GameHelperMode::reload ? QStringLiteral("SPH-2 · перезарядка работает") :
             QStringLiteral("Помощники")));
         if (stop_helpers_button_) stop_helpers_button_->setVisible(mode != wardogs::GameHelperMode::none);
         if (tray_) tray_->setToolTip(mode == wardogs::GameHelperMode::none
             ? QStringLiteral("WARDOGS Fire Control") : QStringLiteral("WARDOGS Fire Control · ") +
-                (mode == wardogs::GameHelperMode::build ? QStringLiteral("Build helper") : QStringLiteral("Team Piker")));
+                (mode == wardogs::GameHelperMode::build ? QStringLiteral("Build helper") :
+                 mode == wardogs::GameHelperMode::team ? QStringLiteral("Team Piker") : QStringLiteral("SPH-2 reload")));
+        if (mode == wardogs::GameHelperMode::reload) {
+            if (waiting) {
+                if (!error.empty()) set_status(wardogs::i18n::text(
+                    QStringLiteral("Цикл SPH-2 остановлен: %1 · ожидание R"))
+                    .arg(wardogs::i18n::text(QString::fromUtf8(error.c_str()))), true);
+                else set_status(wardogs::i18n::text(QStringLiteral("Перезарядка SPH-2 включена · ожидание R")));
+            } else set_status(wardogs::i18n::text(reload_state == wardogs::ReloadHelperState::verifying
+                    ? QStringLiteral("Перезарядка SPH-2: нажатия · отправлено %1 из 16")
+                    : QStringLiteral("Перезарядка SPH-2: следующий кадр · отправлено %1 из 16")).arg(reload_count));
+        }
         if (mode == wardogs::GameHelperMode::none) {
             if (!error.empty()) set_status(wardogs::i18n::text(QStringLiteral("Помощник остановлен: ")) +
                 wardogs::i18n::text(QString::fromUtf8(error.c_str())), true);
-            else set_status(wardogs::i18n::text(QStringLiteral("Помощник остановлен")));
+            else set_status(wardogs::i18n::text(reload_state == wardogs::ReloadHelperState::completed
+                ? QStringLiteral("SPH-2: отправлены 4 комбинации · 16 нажатий")
+                : QStringLiteral("Помощник остановлен")));
             wardogs::log_info("helper.stopped");
         }
     }
 
     void stop_game_helper() {
+        const bool was_armed = reload_trigger_.armed();
+        reload_trigger_.disarm();
+        reload_trigger_window_ = nullptr;
         game_helper_.stop();
+        reload_helper_.stop();
+        if (!reload_helper_.release_pending()) reload_cycle_started_ = false;
+        if (was_armed) wardogs::log_info("helper.disarmed mode=sph2_reload");
         update_game_helper_status();
     }
 
     void toggle_game_helper(wardogs::GameHelperMode mode, HWND activation_window) {
-        if (game_helper_.running()) {
-            const bool same = game_helper_.mode() == mode;
+        if (game_helper_.running() && game_helper_.mode() == mode) {
             stop_game_helper();
-            if (same) return;
+            return;
         }
         if (diagnostic_ || closing_ || QApplication::activeModalWidget() ||
             !activation_window || GetForegroundWindow() != activation_window ||
@@ -7062,6 +7260,15 @@ private:
         const auto& preferences = settings_.game_helpers;
         if ((mode == wardogs::GameHelperMode::build && !preferences.build.enabled) ||
             (mode == wardogs::GameHelperMode::team && !preferences.team.enabled)) return;
+        // A shortcut in another application must not turn off a different
+        // helper. Switch modes only after accepting a valid game activation.
+        stop_game_helper();
+        if (game_helper_.release_pending() || reload_helper_.release_pending()) {
+            const auto error = reload_helper_.release_pending()
+                ? reload_helper_.last_error() : game_helper_.last_error();
+            set_status(wardogs::i18n::text(QString::fromUtf8(error.c_str())), true);
+            return;
+        }
         const auto hotkey = wardogs::parse_hotkey(mode == wardogs::GameHelperMode::build
             ? preferences.build.hotkey : preferences.team.hotkey);
         try {
@@ -7080,6 +7287,7 @@ private:
                         !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
                         !(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
                 }});
+            last_started_helper_ = mode;
             wardogs::log_info(mode == wardogs::GameHelperMode::build
                 ? "helper.started mode=build" : "helper.started mode=team");
             update_game_helper_status();
@@ -7088,10 +7296,143 @@ private:
         }
     }
 
+    void toggle_reload_helper(HWND activation_window) {
+        if (reload_trigger_.armed() || reload_helper_.running()) { stop_game_helper(); return; }
+        if (diagnostic_ || closing_ || application_paused_ || selecting_ ||
+            !settings_.game_integration_enabled || !settings_.game_helpers.reload.enabled ||
+            QApplication::activeModalWidget() || !activation_window ||
+            GetForegroundWindow() != activation_window || !is_wardogs_window(activation_window)) return;
+        stop_game_helper();
+        if (game_helper_.release_pending() || reload_helper_.release_pending()) {
+            const auto error = reload_helper_.release_pending()
+                ? reload_helper_.last_error() : game_helper_.last_error();
+            set_status(wardogs::i18n::text(QString::fromUtf8(error.c_str())), true);
+            return;
+        }
+        reload_trigger_window_ = activation_window;
+        reload_cycle_started_ = false;
+        reload_trigger_.arm((GetAsyncKeyState('R') & 0x8000) != 0);
+        last_started_helper_ = wardogs::GameHelperMode::reload;
+        wardogs::log_info("helper.armed mode=sph2_reload trigger=R");
+        update_game_helper_status();
+    }
+
+    void poll_reload_trigger() {
+        if (!reload_trigger_.armed()) return;
+        if (closing_ || !settings_.game_integration_enabled || !settings_.game_helpers.reload.enabled ||
+            !reload_trigger_window_ || !IsWindow(reload_trigger_window_) ||
+            (!reload_helper_.running() && reload_helper_.release_pending())) {
+            stop_game_helper();
+            return;
+        }
+        const bool down = (GetAsyncKeyState('R') & 0x8000) != 0;
+        bool modifiers_clear = true;
+        for (const int key : {VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN})
+            if (GetAsyncKeyState(key) & 0x8000) modifiers_clear = false;
+        const bool eligible = !application_paused_ && !selecting_ && !QApplication::activeModalWidget() &&
+            modifiers_clear && GetForegroundWindow() == reload_trigger_window_ &&
+            is_wardogs_window(reload_trigger_window_) && wardogs::helper_window_allows_input(
+                reinterpret_cast<std::uintptr_t>(reload_trigger_window_));
+        if (reload_trigger_.update(eligible, down, reload_helper_.running(),
+                                  std::chrono::steady_clock::now()))
+            begin_reload_cycle(reload_trigger_window_);
+    }
+
+    void begin_reload_cycle(HWND activation_window) {
+        if (!reload_trigger_.armed() || reload_helper_.running() ||
+            activation_window != GetForegroundWindow()) return;
+        try {
+            const auto hotkey = wardogs::parse_hotkey(settings_.game_helpers.reload.hotkey);
+            auto context = std::make_shared<ReloadCaptureContext>();
+            context->window = activation_window;
+            context->client = reload_client_bounds(activation_window);
+            context->search = wardogs::reload_search_rect(
+                context->client.right - context->client.left, context->client.bottom - context->client.top,
+                settings_.game_helpers.reload);
+            reload_helper_.start({
+                [context] { return context->unchanged(); },
+                [hotkey] {
+                    for (const auto key : {static_cast<int>(hotkey.virtual_key), VK_CONTROL,
+                             VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, 0x52})
+                        if (GetAsyncKeyState(key) & 0x8000) return false;
+                    return true;
+                },
+                [context] { return context->observe(); },
+                [context](wardogs::ReloadDirection direction, bool pressed) {
+                    if (pressed) {
+                        if (!context->unchanged()) return false;
+                        // Do not combine a synthetic direction with a physical
+                        // modifier or another direction held by the player.
+                        for (const int key : {VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN,
+                                             VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT})
+                            if (GetAsyncKeyState(key) & 0x8000) return false;
+                    }
+                    return wardogs::send_reload_key(reinterpret_cast<std::uintptr_t>(context->window),
+                                                     direction, pressed);
+                }}, wardogs::reload_helper_timing(settings_.game_helpers.reload));
+            reload_cycle_started_ = true;
+            last_started_helper_ = wardogs::GameHelperMode::reload;
+            wardogs::log_info("helper.started mode=sph2_reload");
+            update_game_helper_status();
+        } catch (const std::exception& error) {
+            // A failed cycle does not turn off the user's persistent mode.
+            // The next fresh R can start another independently captured cycle.
+            set_status(wardogs::i18n::text(QStringLiteral("Не удалось запустить помощник: ")) + error_text(error), true);
+        }
+    }
+
+    std::optional<wardogs::ReloadHelperPreferences> select_reload_helper_region(
+        const wardogs::ReloadHelperPreferences& preferences) {
+        if (diagnostic_ || closing_ || selecting_ || busy_) return std::nullopt;
+        // Only identify a visible window; never activate or open the process.
+        struct Search { HWND window{}; unsigned count{}; bool failed{}; } search;
+        EnumWindows([](HWND candidate, LPARAM context_data) noexcept -> BOOL {
+            auto& result = *reinterpret_cast<Search*>(context_data);
+            try {
+                if (IsWindowVisible(candidate) && !IsIconic(candidate) && is_wardogs_window(candidate)) {
+                    result.window = candidate; ++result.count;
+                }
+            } catch (...) { result.failed = true; return FALSE; }
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&search));
+        if (search.failed || search.count != 1)
+            throw std::runtime_error("Для выбора области откройте одно окно WARDOGS");
+        const auto original = reload_client_bounds(search.window);
+        std::optional<wardogs::ReloadHelperPreferences> result;
+        QString failure;
+        bool finished{};
+        QEventLoop loop;
+        hide_for_selection();
+        const bool started = selector_.begin([&](std::optional<wardogs::CaptureRegion> region, QString error) {
+            failure = error;
+            if (region) {
+                try {
+                    const auto client = reload_client_bounds(search.window);
+                    if (!EqualRect(&original, &client))
+                        throw std::runtime_error("Окно игры изменилось. Выберите область заново.");
+                    const auto physical = wardogs::resolve_capture_region(*region);
+                    result = wardogs::select_reload_region(preferences,
+                        client.right - client.left, client.bottom - client.top,
+                        {physical.left - client.left, physical.top - client.top,
+                         physical.right - client.left, physical.bottom - client.top});
+                } catch (const std::exception& exception) { failure = error_text(exception); }
+            }
+            finished = true; loop.quit();
+        }, QStringLiteral("Выделите полосу стрелок перезарядки с небольшим отступом\nEsc или правая кнопка — отмена"));
+        if (started && !finished) loop.exec();
+        if (!finished) selector_.cancel();
+        if (!closing_) restore_after_selection();
+        if (!started) throw std::runtime_error("Не удалось начать выбор области");
+        if (!failure.isEmpty()) throw std::runtime_error(utf8(failure));
+        return result;
+    }
+
     void edit_game_helpers() {
         stop_game_helper();
         if (closing_) return;
-        GameHelpersDialog dialog(settings_, this);
+        GameHelpersDialog dialog(settings_, this, [this](const auto& preferences) {
+            return select_reload_helper_region(preferences);
+        });
         unregister_hotkeys();
         for (;;) {
             if (dialog.exec() != QDialog::Accepted) {
@@ -7231,6 +7572,9 @@ private:
         const bool requested_pause = !application_paused_;
         if (requested_pause) {
             application_paused_ = true;
+            // Unlike the mouse helpers, reload requires screen capture.
+            reload_helper_.stop();
+            update_game_helper_status();
             reset_hud_observation();
             invalidate_accuracy_predictions();
             enter_game_after_terrain_ = false;
@@ -7354,7 +7698,10 @@ private:
             configured.push_back(wardogs::parse_hotkey(settings_.game_helpers.build.hotkey));
         if (settings_.game_helpers.team.enabled)
             configured.push_back(wardogs::parse_hotkey(settings_.game_helpers.team.hotkey));
+        if (settings_.game_helpers.reload.enabled)
+            configured.push_back(wardogs::parse_hotkey(settings_.game_helpers.reload.hotkey));
         wardogs::validate_unique_hotkeys(configured);
+        wardogs::validate_reload_input_hotkeys(configured, settings_.game_helpers.reload.enabled);
         std::vector<wardogs::Hotkey> attempted(configured.begin(), configured.end());
         const QPointer<MainWindow> self(this);
         // Each retry here follows a registered but incompatible modifier
@@ -7417,7 +7764,10 @@ private:
             complete.push_back(wardogs::parse_hotkey(settings.game_helpers.build.hotkey));
         if (settings.game_helpers.team.enabled)
             complete.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
+        if (settings.game_helpers.reload.enabled)
+            complete.push_back(wardogs::parse_hotkey(settings.game_helpers.reload.hotkey));
         wardogs::validate_unique_hotkeys(complete);
+        wardogs::validate_reload_input_hotkeys(complete, settings.game_helpers.reload.enabled);
         const auto pause_key = available_pause_hotkey(complete, pause_hotkey_);
         std::vector<wardogs::Hotkey> values;
         std::vector<std::size_t> actions;
@@ -7435,6 +7785,10 @@ private:
         if (settings.game_helpers.team.enabled) {
             values.push_back(wardogs::parse_hotkey(settings.game_helpers.team.hotkey));
             actions.push_back(10);
+        }
+        if (settings.game_helpers.reload.enabled) {
+            values.push_back(wardogs::parse_hotkey(settings.game_helpers.reload.hotkey));
+            actions.push_back(11);
         }
         values.push_back(pause_key);
         actions.push_back(8);
@@ -7459,6 +7813,7 @@ private:
             QMetaObject::invokeMethod(self, [self, actions, index, listener_epoch, activation_window] {
                 if (!self || listener_epoch != self->hotkey_listener_epoch_ || index >= actions.size()) return;
                 auto* const window = self.data();
+                if (actions[index] == 11) { window->toggle_reload_helper(activation_window); return; }
                 if (actions[index] == 9 || actions[index] == 10) {
                     window->toggle_game_helper(actions[index] == 9
                         ? wardogs::GameHelperMode::build : wardogs::GameHelperMode::team, activation_window);
@@ -7481,7 +7836,8 @@ private:
                 if (actions[index] < configured.size()) configured[actions[index]] = actual[index];
                 else if (actions[index] == 8) next_pause_key = actual[index];
                 else {
-                    auto& key = actions[index] == 9 ? helper_preferences.build.hotkey : helper_preferences.team.hotkey;
+                    auto& key = actions[index] == 9 ? helper_preferences.build.hotkey :
+                        actions[index] == 10 ? helper_preferences.team.hotkey : helper_preferences.reload.hotkey;
                     if (wardogs::parse_hotkey(key) != actual[index]) {
                         throw std::invalid_argument("Клавиша помощника занята. Откройте «Помощники» и назначьте другую клавишу");
                     }
@@ -7493,8 +7849,10 @@ private:
             auto all_effective = std::vector<wardogs::Hotkey>(configured.begin(), configured.end());
             if (helper_preferences.build.enabled) all_effective.push_back(wardogs::parse_hotkey(helper_preferences.build.hotkey));
             if (helper_preferences.team.enabled) all_effective.push_back(wardogs::parse_hotkey(helper_preferences.team.hotkey));
+            if (helper_preferences.reload.enabled) all_effective.push_back(wardogs::parse_hotkey(helper_preferences.reload.hotkey));
             all_effective.push_back(next_pause_key);
             wardogs::validate_unique_hotkeys(all_effective);
+            wardogs::validate_reload_input_hotkeys(all_effective, helper_preferences.reload.enabled);
             auto changes = apply_registered_hotkeys(settings, configured);
             settings.game_helpers = helper_preferences;
             pause_hotkey_ = std::move(next_pause_key);
@@ -7710,7 +8068,8 @@ int run_application(int argc, char* argv[]) {
     };
     QString snapshot_path, snapshot_mode;
     for (const auto& mode : {QStringLiteral("ui"), QStringLiteral("manual-ui"), QStringLiteral("compact-ui"), QStringLiteral("pinned-ui"), QStringLiteral("review-ui"),
-                            QStringLiteral("settings-ui"), QStringLiteral("helpers-ui"), QStringLiteral("helpers-team-ui"),
+                            QStringLiteral("settings-ui"), QStringLiteral("helpers-ui"), QStringLiteral("helpers-team-ui"), QStringLiteral("helpers-reload-ui"),
+                            QStringLiteral("helpers-humanizer-ui"),
                             QStringLiteral("tutorial-ui"), QStringLiteral("notice-ui"),
                             QStringLiteral("vehicle-ui"), QStringLiteral("vehicle-pinned-ui"),
                             QStringLiteral("vehicle-pinned-locked-ui"), QStringLiteral("vehicle-pinned-menu-ui"),
@@ -7720,7 +8079,7 @@ int run_application(int argc, char* argv[]) {
                             QStringLiteral("first-start-ui"), QStringLiteral("workspace-sidebar-ui"),
                             QStringLiteral("standalone-ui"),
                             QStringLiteral("pinned-menu-ui"), QStringLiteral("pinned-locked-ui"),
-                            QStringLiteral("pinned-helpers-ui"), QStringLiteral("vehicle-pinned-helpers-ui"),
+                            QStringLiteral("pinned-helpers-ui"), QStringLiteral("vehicle-pinned-helpers-ui"), QStringLiteral("vehicle-pinned-reload-ui"),
                             QStringLiteral("reticle-ui"), QStringLiteral("selection-ui"),
                             QStringLiteral("recognition-hotkeys"), QStringLiteral("recognition-reticle"),
                             QStringLiteral("review-bottom-ui"), QStringLiteral("manual-bottom-ui"),

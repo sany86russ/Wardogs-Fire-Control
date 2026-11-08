@@ -267,10 +267,11 @@ int main() {
               fixture.downs() == 1 && !runner.last_error().empty(),
               "repeated release rejection stops instead of sending additional presses");
         check(rejects([&] { runner.start(GameHelperMode::team, fast_preferences(), fixture.platform()); }) &&
-              fixture.downs() == 1,
+              fixture.downs() == 1 && runner.release_pending(),
               "unreleased ownership blocks a replacement run");
         fixture.up_accepted = true;
         runner.stop();
+        check(!runner.release_pending(), "recovered release clears the cross-helper ownership gate");
         runner.start(GameHelperMode::team, fast_preferences(), fixture.platform());
         check(wait_for([&] { return fixture.downs() >= 2; }),
               "an explicitly recovered release permits a fresh run");

@@ -13,6 +13,7 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTimer>
 
 #include <iostream>
 #include <stdexcept>
@@ -50,11 +51,16 @@ void defaults_and_editing() {
     wardogs::AppSettings settings;
     GameHelpersDialog dialog(settings);
     check(dialog.preferences() == settings.game_helpers, "opening dialog preserves all stored helper preferences");
-    check(!dialog.preferences().build.enabled && !dialog.preferences().team.enabled,
-          "both helper shortcuts are opt-in on a new profile");
+    check(!dialog.preferences().build.enabled && !dialog.preferences().team.enabled && !dialog.preferences().reload.enabled,
+          "all helper shortcuts are opt-in on a new profile");
     auto* tabs = child<QTabWidget>(dialog, "gameHelpersTabs");
-    check(tabs->count() == 2 && tabs->tabText(0) == QStringLiteral("Build helper") &&
-          tabs->tabText(1) == QStringLiteral("Team Piker"), "two helpers share one tabbed dialog");
+    check(tabs->count() == 3 && tabs->tabText(0) == QStringLiteral("Build helper") &&
+          tabs->tabText(1) == QStringLiteral("Team Piker") &&
+          tabs->tabText(2) == QStringLiteral("SPH-2 · перезарядка"), "three helpers share one tabbed dialog");
+    check(child<QCheckBox>(dialog, "reloadAutomaticRegion")->isChecked() &&
+          !child<QKeySequenceEdit>(dialog, "reloadHelperHotkey")->isEnabled() &&
+          !child<QPushButton>(dialog, "reloadSelectRegionButton")->isEnabled(),
+          "reload defaults to automatic search without reserving a shortcut or offering an unavailable selector");
     check(child<QLabel>(dialog, "buildCycleSummary")->text().contains(QStringLiteral("547")),
           "build default cycle is 514 held plus 33 released");
     check(child<QLabel>(dialog, "teamCycleSummary")->text().contains(QStringLiteral("900–1000")),
@@ -107,6 +113,60 @@ void validation() {
     wardogs::AppSettings settings;
     settings.game_helpers.build.enabled = true;
     settings.game_helpers.team.enabled = true;
+    for (const auto* editor : {"reloadHelperHotkey", "buildHelperHotkey", "teamPikerHotkey"}) {
+        for (const auto& direction : {QStringLiteral("Up"), QStringLiteral("Down"),
+                                     QStringLiteral("Left"), QStringLiteral("Right")}) {
+            GameHelpersDialog dialog(settings);
+            child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+            child<QKeySequenceEdit>(dialog, editor)->setKeySequence(QKeySequence(direction));
+            save(dialog);
+            check(dialog.result() != QDialog::Accepted &&
+                  !child<QLabel>(dialog, "helperValidationError")->isHidden(),
+                  "reload cannot synthesize another enabled helper's plain-arrow shortcut");
+        }
+    }
+    {
+        auto artillery_conflict = settings;
+        artillery_conflict.base_hotkey = L"Up";
+        GameHelpersDialog dialog(artillery_conflict);
+        child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+        save(dialog);
+        check(dialog.result() != QDialog::Accepted, "reload generated input cannot trigger artillery shortcuts");
+    }
+    {
+        GameHelpersDialog dialog(settings);
+        child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+        child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->setKeySequence(QKeySequence(QStringLiteral("Ctrl+Up")));
+        save(dialog);
+        check(dialog.result() == QDialog::Accepted, "modified arrow hotkeys remain independent of generated reload input");
+    }
+    {
+        GameHelpersDialog dialog(settings);
+        child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+        child<QCheckBox>(dialog, "buildHelperEnabled")->setChecked(false);
+        child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->setKeySequence(QKeySequence(QStringLiteral("Up")));
+        save(dialog);
+        check(dialog.result() == QDialog::Accepted, "disabled stored arrow assignment is not registered by the editor");
+    }
+    {
+        GameHelpersDialog dialog(settings);
+        child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->setKeySequence(QKeySequence(QStringLiteral("Up")));
+        save(dialog);
+        check(dialog.result() == QDialog::Accepted, "without reload existing arrow hotkeys remain compatible");
+    }
+    {
+        GameHelpersDialog dialog(settings);
+        child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+        child<QKeySequenceEdit>(dialog, "reloadHelperHotkey")->setKeySequence(QKeySequence(QStringLiteral("F6")));
+        save(dialog);
+        check(dialog.result() != QDialog::Accepted, "reload cannot steal another enabled helper shortcut");
+    }
+    {
+        GameHelpersDialog dialog(settings);
+        child<QCheckBox>(dialog, "reloadAutomaticRegion")->setChecked(false);
+        save(dialog);
+        check(dialog.result() != QDialog::Accepted, "manual reload search requires a selected nonempty region");
+    }
     {
         GameHelpersDialog dialog(settings);
         child<QKeySequenceEdit>(dialog, "teamPikerHotkey")->setKeySequence(QKeySequence(QStringLiteral("F6")));
@@ -120,7 +180,13 @@ void validation() {
         save(dialog);
         check(dialog.result() != QDialog::Accepted, "helper cannot steal artillery shortcut");
     }
-    for (const auto& forbidden : {QStringLiteral("F12"), QStringLiteral("Meta+F6"), QStringLiteral("Esc")}) {
+    for (const auto& allowed : {QStringLiteral("F12"), QStringLiteral("Esc"), QStringLiteral("Ctrl+Alt+F4")}) {
+        GameHelpersDialog dialog(settings);
+        child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->setKeySequence(QKeySequence(allowed));
+        save(dialog);
+        check(dialog.result() == QDialog::Accepted, "helper editor accepts F12, Escape and multi-modifier keyboard chords");
+    }
+    for (const auto& forbidden : {QStringLiteral("Meta+F6")}) {
         GameHelpersDialog dialog(settings);
         child<QKeySequenceEdit>(dialog, "buildHelperHotkey")->setKeySequence(QKeySequence(forbidden));
         save(dialog);
@@ -151,6 +217,131 @@ void validation() {
     }
 }
 
+void reload_timing_and_humanizer() {
+    wardogs::AppSettings settings;
+    GameHelpersDialog dialog(settings);
+    check(child<QSpinBox>(dialog, "reloadHelperHold")->value() == 50 &&
+          child<QSpinBox>(dialog, "reloadHelperKeyGap")->value() == 90 &&
+          child<QSpinBox>(dialog, "reloadHelperStageGap")->value() == 750,
+          "reload timing uses the owner-selected 50/90/750 defaults");
+    check(!child<QCheckBox>(dialog, "reloadKeyRandom")->isChecked() &&
+          !child<QCheckBox>(dialog, "reloadStageRandom")->isChecked() &&
+          child<QSpinBox>(dialog, "reloadKeyRandomMin")->isHidden() &&
+          child<QSpinBox>(dialog, "reloadStageRandomMin")->isHidden(),
+          "both independent humanizer groups start disabled with their ranges hidden");
+    check(child<QSpinBox>(dialog, "reloadHelperHold")->minimum() == 20 &&
+          child<QSpinBox>(dialog, "reloadHelperHold")->maximum() == 1000 &&
+          child<QSpinBox>(dialog, "reloadHelperKeyGap")->maximum() == 2000 &&
+          child<QSpinBox>(dialog, "reloadHelperStageGap")->maximum() == 10000,
+          "reload timing controls expose the validated bounded ranges");
+    child<QSpinBox>(dialog, "reloadHelperHold")->setValue(70);
+    child<QSpinBox>(dialog, "reloadHelperKeyGap")->setValue(140);
+    child<QSpinBox>(dialog, "reloadHelperStageGap")->setValue(1500);
+    child<QCheckBox>(dialog, "reloadKeyRandom")->setChecked(true);
+    child<QSpinBox>(dialog, "reloadKeyRandomMin")->setValue(5);
+    child<QSpinBox>(dialog, "reloadKeyRandomMax")->setValue(25);
+    child<QCheckBox>(dialog, "reloadStageRandom")->setChecked(true);
+    child<QSpinBox>(dialog, "reloadStageRandomMin")->setValue(80);
+    child<QSpinBox>(dialog, "reloadStageRandomMax")->setValue(220);
+    const auto edited = dialog.preferences();
+    check(edited.reload.hold_ms == 70 && edited.reload.key_gap_ms == 140 && edited.reload.stage_gap_ms == 1500 &&
+          edited.reload.key_random_enabled && edited.reload.key_random_min_ms == 5 && edited.reload.key_random_max_ms == 25 &&
+          edited.reload.stage_random_enabled && edited.reload.stage_random_min_ms == 80 && edited.reload.stage_random_max_ms == 220 &&
+          edited.build == settings.game_helpers.build && edited.team == settings.game_helpers.team,
+          "reload timing and both random ranges produce exact preferences without changing other helpers");
+    const auto summary = child<QLabel>(dialog, "reloadTimingSummary")->text();
+    check(summary.contains(QStringLiteral("75–95")) && summary.contains(QStringLiteral("145–165")) &&
+          summary.contains(QStringLiteral("1580–1720")),
+          "reload timing summary adds independent key and sequence ranges to base intervals");
+    child<QCheckBox>(dialog, "reloadKeyRandom")->setChecked(false);
+    check(child<QSpinBox>(dialog, "reloadKeyRandomMin")->isHidden() &&
+          !child<QSpinBox>(dialog, "reloadStageRandomMin")->isHidden() &&
+          dialog.preferences().reload.key_random_min_ms == 5 && dialog.preferences().reload.key_random_max_ms == 25 &&
+          child<QLabel>(dialog, "reloadTimingSummary")->text().contains(QStringLiteral("70–70")),
+          "disabling key humanizer retains its range and leaves sequence randomization independent");
+    save(dialog);
+    check(dialog.result() == QDialog::Accepted, "custom reload timing saves through ordinary validation");
+    for (const auto* minimum : {"reloadKeyRandomMin", "reloadStageRandomMin"}) {
+        GameHelpersDialog invalid(settings);
+        child<QSpinBox>(invalid, minimum)->setValue(500);
+        save(invalid);
+        check(invalid.result() != QDialog::Accepted && !child<QLabel>(invalid, "helperValidationError")->isHidden(),
+              "inverted reload humanizer ranges report an inline error without accepting");
+    }
+    GameHelpersDialog cancelled(settings);
+    child<QSpinBox>(cancelled, "reloadHelperStageGap")->setValue(2500);
+    child<QCheckBox>(cancelled, "reloadStageRandom")->setChecked(true);
+    child<QDialogButtonBox>(cancelled, "helperDialogButtons")->button(QDialogButtonBox::Cancel)->click();
+    check(cancelled.result() == QDialog::Rejected && settings.game_helpers.reload.stage_gap_ms == 750 &&
+          !settings.game_helpers.reload.stage_random_enabled,
+          "cancelling reload timing changes leaves the caller's settings untouched");
+}
+
+void reload_region_selection() {
+    wardogs::AppSettings settings;
+    GameHelpersDialog* opened{};
+    int requests{};
+    GameHelpersDialog dialog(settings, nullptr, [&](const auto& current)
+        -> std::optional<wardogs::ReloadHelperPreferences> {
+        ++requests;
+        check(opened && opened->windowOpacity() == 0.0 && !opened->isEnabled(),
+              "region selector runs while the configuration surface is invisible and disabled");
+        auto result = current;
+        result.left = 4200; result.top = 3200; result.right = 5800; result.bottom = 4100;
+        return result;
+    });
+    opened = &dialog;
+    dialog.show();
+    child<QCheckBox>(dialog, "reloadHelperEnabled")->setChecked(true);
+    child<QKeySequenceEdit>(dialog, "reloadHelperHotkey")->setKeySequence(QKeySequence(QStringLiteral("Ctrl+F8")));
+    child<QSpinBox>(dialog, "reloadHelperHold")->setValue(75);
+    child<QSpinBox>(dialog, "reloadHelperStageGap")->setValue(1600);
+    child<QCheckBox>(dialog, "reloadKeyRandom")->setChecked(true);
+    child<QPushButton>(dialog, "reloadSelectRegionButton")->click();
+    const auto selected = dialog.preferences().reload;
+    check(requests == 1 && dialog.isVisible() && selected.enabled && selected.hotkey == L"Ctrl+F8" &&
+          !selected.automatic_region && selected.left == 4200 && selected.top == 3200 &&
+          selected.right == 5800 && selected.bottom == 4100 && selected.hold_ms == 75 &&
+          selected.stage_gap_ms == 1600 && selected.key_random_enabled,
+          "successful selection preserves shortcut edits and switches to the selected normalized manual region");
+    child<QCheckBox>(dialog, "reloadAutomaticRegion")->setChecked(true);
+    check(dialog.preferences().reload.left == 4200 && dialog.preferences().reload.right == 5800,
+          "automatic search preserves the optional manual fallback rectangle");
+    save(dialog);
+    check(dialog.result() == QDialog::Accepted, "reload settings save through normal dialog validation");
+
+    settings.game_helpers.reload = selected;
+    GameHelpersDialog cancelled(settings, nullptr, [](const auto&)
+        -> std::optional<wardogs::ReloadHelperPreferences> { return std::nullopt; });
+    const auto before = cancelled.preferences();
+    child<QPushButton>(cancelled, "reloadSelectRegionButton")->click();
+    check(cancelled.preferences() == before, "cancelled region selection preserves the existing rectangle and mode");
+
+    GameHelpersDialog invalid(settings, nullptr, [](const auto&)
+        -> std::optional<wardogs::ReloadHelperPreferences> { return wardogs::ReloadHelperPreferences{}; });
+    child<QPushButton>(invalid, "reloadSelectRegionButton")->click();
+    check(invalid.preferences() == settings.game_helpers &&
+          !child<QLabel>(invalid, "helperValidationError")->isHidden(),
+          "invalid selection is reported without replacing the existing region");
+
+    QWidget owner;
+    owner.show();
+    GameHelpersDialog modal(settings, &owner, [&](const auto& current)
+        -> std::optional<wardogs::ReloadHelperPreferences> {
+        owner.hide();
+        QApplication::processEvents(QEventLoop::AllEvents, 10);
+        owner.show();
+        return current;
+    });
+    QTimer::singleShot(0, &modal, [&] {
+        child<QPushButton>(modal, "reloadSelectRegionButton")->click();
+        QTimer::singleShot(0, &modal, [&] { save(modal); });
+    });
+    QTimer::singleShot(1000, &modal, &QDialog::reject);
+    check(modal.exec() == QDialog::Accepted && modal.preferences() == settings.game_helpers,
+          "manual selection and temporary parent hiding keep modal exec alive until Save");
+}
+
 void translation_and_layout(const QString& evidence) {
     wardogs::i18n::set_language(wardogs::UiLanguage::russian);
     wardogs::AppSettings settings;
@@ -166,7 +357,7 @@ void translation_and_layout(const QString& evidence) {
     const auto capture = [&](const QString& language) {
         if (evidence.isEmpty()) return;
         QDir().mkpath(evidence);
-        for (int index = 0; index < 2; ++index) {
+        for (int index = 0; index < tabs->count(); ++index) {
             tabs->setCurrentIndex(index);
             QApplication::processEvents(QEventLoop::AllEvents, 20);
             check(dialog.grab().save(evidence + QStringLiteral("/helpers-%1-%2.png").arg(language).arg(index)),
@@ -177,6 +368,7 @@ void translation_and_layout(const QString& evidence) {
     wardogs::i18n::set_language(wardogs::UiLanguage::english);
     QApplication::processEvents(QEventLoop::AllEvents, 40);
     check(dialog.windowTitle() == QStringLiteral("Helpers · WARDOGS"), "open dialog translates its title live");
+    check(tabs->tabText(2) == QStringLiteral("SPH-2 · reload"), "reload tab title translates in an open dialog");
     for (auto* label : dialog.findChildren<QLabel*>()) {
         if (cyrillic(label->text()))
             std::cerr << "UNTRANSLATED LABEL: " << label->objectName().toStdString()
@@ -193,6 +385,8 @@ void translation_and_layout(const QString& evidence) {
     check(child<QLabel>(dialog, "teamCycleSummary")->text() ==
           QStringLiteral("Left-click every 900–1000 ms\nThe first click follows the start command."),
           "live language change renders the team summary through the application catalog");
+    check(child<QLabel>(dialog, "reloadTimingSummary")->text().startsWith(QStringLiteral("Key: 50–50 ms")),
+          "reload humanizer summary follows the selected language");
     check(dialog.preferences() == settings.game_helpers, "live translation preserves user preferences");
     capture(QStringLiteral("en"));
     child<QSpinBox>(dialog, "buildHelperHold")->setValue(700);
@@ -222,7 +416,9 @@ int main(int argc, char* argv[]) {
     try {
         wardogs::i18n::set_language(wardogs::UiLanguage::russian);
         defaults_and_editing();
+        reload_timing_and_humanizer();
         validation();
+        reload_region_selection();
         translation_and_layout(evidence);
     } catch (const std::exception& error) {
         ++failures;

@@ -434,6 +434,8 @@ PinnedResultWindow::PinnedResultWindow(
     };
     build_helper_status_ = helper_label(QStringLiteral("pinnedBuildHelperStatus"));
     team_helper_status_ = helper_label(QStringLiteral("pinnedTeamPikerStatus"));
+    reload_helper_status_ = helper_label(QStringLiteral("pinnedReloadHelperStatus"));
+    reload_helper_status_->hide();
     layout->addWidget(helpers_status_);
     set_helpers_status(helpers_preferences_, wardogs::GameHelperMode::none);
     outer->addWidget(frame_);
@@ -1075,22 +1077,27 @@ int PinnedResultWindow::workflow_status_extra() const {
     // This always-visible strip owns its own space. Persisted mode_sizes still
     // describe the command canvas, so adding it does not shrink old results or
     // add its height again when the saved card is reconstructed next launch.
-    const int helpers = helpers_status_ ? helpers_status_height + 6 : 0;
+    const int helpers = helpers_status_ ? helpers_status_->height() + 6 : 0;
     return context + workflow + helpers;
 }
 
 void PinnedResultWindow::set_helpers_status(
-    const wardogs::GameHelpersPreferences& preferences, wardogs::GameHelperMode active) {
+    const wardogs::GameHelpersPreferences& preferences, wardogs::GameHelperMode active, bool reload_waiting) {
     const auto effective =
         (active == wardogs::GameHelperMode::build && preferences.build.enabled) ||
-        (active == wardogs::GameHelperMode::team && preferences.team.enabled)
+        (active == wardogs::GameHelperMode::team && preferences.team.enabled) ||
+        (active == wardogs::GameHelperMode::reload && preferences.reload.enabled)
             ? active : wardogs::GameHelperMode::none;
-    if (helpers_initialized_ && helpers_preferences_ == preferences && helpers_active_ == effective)
+    if (helpers_initialized_ && helpers_preferences_ == preferences && helpers_active_ == effective &&
+        reload_waiting_ == reload_waiting)
         return;
+    const int previous_extra = workflow_status_extra();
     helpers_preferences_ = preferences;
     helpers_active_ = effective;
+    reload_waiting_ = reload_waiting;
     helpers_initialized_ = true;
     update_helpers_status();
+    update_workflow_status_layout(previous_extra);
 }
 
 void PinnedResultWindow::update_helpers_status() {
@@ -1099,9 +1106,11 @@ void PinnedResultWindow::update_helpers_status() {
                                 const std::wstring& hotkey, bool enabled,
                                 wardogs::GameHelperMode mode) {
         const bool running = enabled && helpers_active_ == mode;
+        const bool waiting = running && mode == wardogs::GameHelperMode::reload && reload_waiting_;
         const QString state = !enabled ? QStringLiteral("off")
             : running ? QStringLiteral("running") : QStringLiteral("ready");
         const QString caption = wardogs::i18n::text(!enabled ? QStringLiteral("Выкл.")
+            : waiting ? QStringLiteral("Ожидание R")
             : running ? QStringLiteral("Работает") : QStringLiteral("Готов"));
         const QString icon = running ? QStringLiteral("▶")
             : enabled ? QStringLiteral("○") : QStringLiteral("–");
@@ -1118,6 +1127,10 @@ void PinnedResultWindow::update_helpers_status() {
            helpers_preferences_.build.enabled, wardogs::GameHelperMode::build);
     update(team_helper_status_, QStringLiteral("Team Piker"), helpers_preferences_.team.hotkey,
            helpers_preferences_.team.enabled, wardogs::GameHelperMode::team);
+    update(reload_helper_status_, wardogs::i18n::text(QStringLiteral("SPH-2 · перезарядка")),
+           helpers_preferences_.reload.hotkey, helpers_preferences_.reload.enabled, wardogs::GameHelperMode::reload);
+    reload_helper_status_->setVisible(helpers_preferences_.reload.enabled);
+    helpers_status_->setFixedHeight(helpers_status_height + (helpers_preferences_.reload.enabled ? 24 : 0));
     fit_helpers_text();
 }
 
@@ -1131,9 +1144,11 @@ void PinnedResultWindow::fit_helpers_text() {
     font.setPixelSize(pixels);
     font.setWeight(QFont::Medium);
     while (pixels > 9 && (QFontMetrics(font).horizontalAdvance(build_helper_status_->text()) > available ||
-                          QFontMetrics(font).horizontalAdvance(team_helper_status_->text()) > available))
+                          QFontMetrics(font).horizontalAdvance(team_helper_status_->text()) > available ||
+                          (helpers_preferences_.reload.enabled &&
+                           QFontMetrics(font).horizontalAdvance(reload_helper_status_->text()) > available)))
         font.setPixelSize(--pixels);
-    for (auto* label : {build_helper_status_, team_helper_status_}) {
+    for (auto* label : {build_helper_status_, team_helper_status_, reload_helper_status_}) {
         const bool running = label->property("active").toBool();
         const bool enabled = label->property("helperState").toString() != QStringLiteral("off");
         const QString foreground = running ? QStringLiteral("#8af3dc")

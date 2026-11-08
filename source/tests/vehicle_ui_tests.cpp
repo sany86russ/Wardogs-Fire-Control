@@ -629,9 +629,25 @@ void check_pinned_helpers_status() {
         check(!build->property("active").toBool() && !team->property("active").toBool() &&
               team->text().contains(QStringLiteral("Off")),
               "a disabled helper cannot be presented as running even with stale active mode");
+        auto* reload = card.findChild<QLabel*>(QStringLiteral("pinnedReloadHelperStatus"));
+        check(reload && reload->isHidden(), "disabled reload does not expand the existing helper strip");
+        const int old_height = card.height();
+        helpers.reload.enabled = true;
+        helpers.reload.hotkey = L"Ctrl+Alt+Shift+F8";
+        card.set_helpers_status(helpers, wardogs::GameHelperMode::reload);
+        QApplication::processEvents();
+        check(reload->isVisible() && reload->property("active").toBool() &&
+              reload->text().contains(QStringLiteral("SPH-2 · reload")) &&
+              !build->property("active").toBool() && !team->property("active").toBool() &&
+              card.height() >= old_height + 24,
+              "reload has a passive third status row with its own space and exclusive active state");
+        const auto reload_geometry = card.geometry();
+        for (int update = 0; update < 20; ++update)
+            card.set_helpers_status(helpers, wardogs::GameHelperMode::reload);
+        check(card.geometry() == reload_geometry, "reload polling cannot repeatedly grow the mini card");
         card.resize(card.minimumSize());
         QApplication::processEvents();
-        for (auto* label : {build, team}) {
+        for (auto* label : {build, team, reload}) {
             const QRect bounds(label->mapTo(&card, QPoint{}), label->size());
             check(card.rect().contains(bounds) &&
                   QFontMetrics(label->font()).horizontalAdvance(label->text()) <= label->contentsRect().width() &&

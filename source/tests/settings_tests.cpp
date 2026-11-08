@@ -77,7 +77,13 @@ int run_settings_tests() {
     check(saved.ghost_arc_hotkey == L"F4",
           "the ghost trajectory shortcut defaults to the unused F4 key");
     check(fresh.game_helpers == wardogs::GameHelpersPreferences{} &&
-              !fresh.game_helpers.build.enabled && !fresh.game_helpers.team.enabled &&
+              !fresh.game_helpers.build.enabled && !fresh.game_helpers.team.enabled && !fresh.game_helpers.reload.enabled &&
+              fresh.game_helpers.reload.hotkey == L"F8" && fresh.game_helpers.reload.automatic_region &&
+              fresh.game_helpers.reload.hold_ms == 50 && fresh.game_helpers.reload.key_gap_ms == 90 &&
+              fresh.game_helpers.reload.stage_gap_ms == 750 && !fresh.game_helpers.reload.key_random_enabled &&
+              fresh.game_helpers.reload.key_random_min_ms == 0 && fresh.game_helpers.reload.key_random_max_ms == 30 &&
+              !fresh.game_helpers.reload.stage_random_enabled && fresh.game_helpers.reload.stage_random_min_ms == 0 &&
+              fresh.game_helpers.reload.stage_random_max_ms == 200 &&
               fresh.game_helpers.build.hold_ms == 514 && fresh.game_helpers.build.pause_ms == 33 &&
               fresh.game_helpers.team.interval_ms == 800 && fresh.game_helpers.team.random_enabled &&
               fresh.game_helpers.team.random_min_ms == 100 && fresh.game_helpers.team.random_max_ms == 200,
@@ -86,19 +92,116 @@ int run_settings_tests() {
     AppSettings helper_settings;
     helper_settings.game_helpers.build = {true, L"Ctrl+F6", 720, 120, true, 5, 35};
     helper_settings.game_helpers.team = {true, L"Shift+F7", 850, false, 110, 210};
+    helper_settings.game_helpers.reload = {true, L"Ctrl+F8", false, 4500, 4000, 5500, 5000};
+    helper_settings.game_helpers.reload.hold_ms = 80;
+    helper_settings.game_helpers.reload.key_gap_ms = 160;
+    helper_settings.game_helpers.reload.stage_gap_ms = 1800;
+    helper_settings.game_helpers.reload.key_random_enabled = true;
+    helper_settings.game_helpers.reload.key_random_min_ms = 10;
+    helper_settings.game_helpers.reload.key_random_max_ms = 45;
+    helper_settings.game_helpers.reload.stage_random_enabled = true;
+    helper_settings.game_helpers.reload.stage_random_min_ms = 80;
+    helper_settings.game_helpers.reload.stage_random_max_ms = 250;
     wardogs::save_settings_to(helpers_path, helper_settings);
+    for (const wchar_t* key : {L"reload_helper_automatic_region", L"reload_helper_hotkey"}) {
+        WritePrivateProfileStringW(L"settings", key, L"bogus", helpers_path.c_str());
+        const auto original = bytes(helpers_path);
+        const auto recovered = wardogs::load_settings_from(helpers_path).game_helpers;
+        check(!recovered.reload.enabled && recovered.build == helper_settings.game_helpers.build &&
+                  recovered.team == helper_settings.game_helpers.team && bytes(helpers_path) == original,
+              "invalid reload mode or shortcut disables reload without changing other helpers or the profile");
+        wardogs::save_settings_to(helpers_path, helper_settings);
+    }
+    {
+        auto automatic = helper_settings;
+        automatic.game_helpers.reload.automatic_region = true;
+        const auto automatic_path = directory / L"reload-automatic.ini";
+        wardogs::save_settings_to(automatic_path, automatic);
+        check(wardogs::load_settings_from(automatic_path).game_helpers == automatic.game_helpers,
+              "automatic reload search preserves a previously selected manual fallback rectangle");
+        automatic.game_helpers.reload.left = automatic.game_helpers.reload.top = 0;
+        automatic.game_helpers.reload.right = automatic.game_helpers.reload.bottom = 0;
+        wardogs::save_settings_to(automatic_path, automatic);
+        check(wardogs::load_settings_from(automatic_path).game_helpers == automatic.game_helpers,
+              "automatic reload search needs no manually selected rectangle");
+    }
     WritePrivateProfileStringW(L"extension", L"keep_helpers", L"unchanged", helpers_path.c_str());
     WritePrivateProfileStringW(L"settings", L"helpers_future_option", L"keep", helpers_path.c_str());
     const auto restored_helpers = wardogs::load_settings_from(helpers_path);
     check(restored_helpers.game_helpers == helper_settings.game_helpers,
-          "both helper shortcuts, enable choices, timings and independent randomization persist exactly");
+          "all helper shortcuts, enable choices, timings and normalized reload region persist exactly");
     check(ini_value(helpers_path, L"settings", L"build_helper_running").empty() &&
-              ini_value(helpers_path, L"settings", L"team_piker_running").empty(),
+              ini_value(helpers_path, L"settings", L"team_piker_running").empty() &&
+              ini_value(helpers_path, L"settings", L"reload_helper_running").empty(),
           "helper profiles store preferences rather than an active clicking state");
     wardogs::save_settings_to(helpers_path, restored_helpers);
     check(ini_value(helpers_path, L"extension", L"keep_helpers") == L"unchanged" &&
               ini_value(helpers_path, L"settings", L"helpers_future_option") == L"keep",
           "helper persistence retains extension sections and future settings");
+    {
+        const auto keyboard_path = directory / L"helper-wide-keyboard.ini";
+        for (const auto* key : {L"F12", L"Esc", L"Ctrl+Alt+F4"}) {
+            auto wide = helper_settings;
+            wide.game_helpers.reload.hotkey = key;
+            wardogs::save_settings_to(keyboard_path, wide);
+            check(wardogs::load_settings_from(keyboard_path).game_helpers == wide.game_helpers,
+                  "helper keyboard shortcuts preserve F12, Escape and multi-modifier chords");
+        }
+        auto mouse = helper_settings;
+        mouse.game_helpers.build.hotkey = L"Mouse4";
+        mouse.game_helpers.team.hotkey = L"Shift+Mouse5";
+        mouse.game_helpers.reload.hotkey = L"Ctrl+Alt+F4";
+        wardogs::save_settings_to(keyboard_path, mouse);
+        check(wardogs::load_settings_from(keyboard_path).game_helpers == mouse.game_helpers,
+              "all helpers persist side mouse buttons and keyboard combinations together");
+    }
+    {
+        const auto legacy_reload_path = directory / L"reload-old-preferences.ini";
+        wardogs::save_settings_to(legacy_reload_path, helper_settings);
+        for (const auto* key : {L"reload_helper_hold_ms", L"reload_helper_key_gap_ms", L"reload_helper_stage_gap_ms",
+                L"reload_helper_key_random_enabled", L"reload_helper_key_random_min_ms", L"reload_helper_key_random_max_ms",
+                L"reload_helper_stage_random_enabled", L"reload_helper_stage_random_min_ms", L"reload_helper_stage_random_max_ms"})
+            WritePrivateProfileStringW(L"settings", key, nullptr, legacy_reload_path.c_str());
+        const auto previous = bytes(legacy_reload_path);
+        auto expected = helper_settings.game_helpers;
+        const wardogs::ReloadHelperPreferences defaults;
+        expected.reload.hold_ms = defaults.hold_ms;
+        expected.reload.key_gap_ms = defaults.key_gap_ms;
+        expected.reload.stage_gap_ms = defaults.stage_gap_ms;
+        expected.reload.key_random_enabled = defaults.key_random_enabled;
+        expected.reload.key_random_min_ms = defaults.key_random_min_ms;
+        expected.reload.key_random_max_ms = defaults.key_random_max_ms;
+        expected.reload.stage_random_enabled = defaults.stage_random_enabled;
+        expected.reload.stage_random_min_ms = defaults.stage_random_min_ms;
+        expected.reload.stage_random_max_ms = defaults.stage_random_max_ms;
+        check(wardogs::load_settings_from(legacy_reload_path).game_helpers == expected && bytes(legacy_reload_path) == previous,
+              "old reload profiles gain proven timing and disabled humanizer without changing shortcuts, region or disk bytes");
+    }
+    {
+        const auto damaged_reload_path = directory / L"reload-damaged-timing.ini";
+        wardogs::save_settings_to(damaged_reload_path, helper_settings);
+        WritePrivateProfileStringW(L"settings", L"reload_helper_hold_ms", L"garbage", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_key_gap_ms", L"19", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_stage_gap_ms", L"10001", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_key_random_min_ms", L"500", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_key_random_max_ms", L"100", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_stage_random_min_ms", L"200", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_stage_random_max_ms", L"100", damaged_reload_path.c_str());
+        WritePrivateProfileStringW(L"settings", L"reload_helper_key_random_enabled", L"broken", damaged_reload_path.c_str());
+        const auto previous = bytes(damaged_reload_path);
+        const auto recovered = wardogs::load_settings_from(damaged_reload_path).game_helpers;
+        auto expected = helper_settings.game_helpers;
+        expected.reload.hold_ms = 50;
+        expected.reload.key_gap_ms = 90;
+        expected.reload.stage_gap_ms = 750;
+        expected.reload.key_random_enabled = false;
+        expected.reload.key_random_min_ms = 0;
+        expected.reload.key_random_max_ms = 30;
+        expected.reload.stage_random_min_ms = 0;
+        expected.reload.stage_random_max_ms = 200;
+        check(recovered == expected && bytes(damaged_reload_path) == previous,
+              "damaged reload timing and inverted humanizer ranges reset only affected preferences without writes");
+    }
     const auto helpers_before_invalid = bytes(helpers_path);
     const auto reject_helper_change = [&](const auto& mutate) {
         auto invalid = helper_settings;
@@ -119,11 +222,95 @@ int run_settings_tests() {
     reject_helper_change([](auto& value) { value.build.random_max_ms = 2001; });
     reject_helper_change([](auto& value) { value.team.random_min_ms = 220; });
     reject_helper_change([](auto& value) { value.team.random_max_ms = 2001; });
-    reject_helper_change([](auto& value) { value.build.hotkey = L"F12"; });
-    reject_helper_change([](auto& value) { value.build.hotkey = L"Esc"; });
+    reject_helper_change([](auto& value) { value.reload.hold_ms = 19; });
+    reject_helper_change([](auto& value) { value.reload.hold_ms = 1001; });
+    reject_helper_change([](auto& value) { value.reload.key_gap_ms = 19; });
+    reject_helper_change([](auto& value) { value.reload.key_gap_ms = 2001; });
+    reject_helper_change([](auto& value) { value.reload.stage_gap_ms = 99; });
+    reject_helper_change([](auto& value) { value.reload.stage_gap_ms = 10001; });
+    reject_helper_change([](auto& value) { value.reload.key_random_min_ms = -1; });
+    reject_helper_change([](auto& value) { value.reload.key_random_max_ms = 2001; });
+    reject_helper_change([](auto& value) { value.reload.key_random_min_ms = 50; });
+    reject_helper_change([](auto& value) { value.reload.stage_random_min_ms = -1; });
+    reject_helper_change([](auto& value) { value.reload.stage_random_max_ms = 2001; });
+    reject_helper_change([](auto& value) { value.reload.stage_random_min_ms = 300; });
     reject_helper_change([](auto& value) { value.team.hotkey = L"Win+F7"; });
     reject_helper_change([](auto& value) { value.team.hotkey = value.build.hotkey; });
     reject_helper_change([](auto& value) { value.build.hotkey = L"Alt+X"; });
+    reject_helper_change([](auto& value) { value.reload.hotkey = value.build.hotkey; });
+    reject_helper_change([](auto& value) { value.reload.hotkey = value.team.hotkey; });
+    reject_helper_change([](auto& value) { value.reload.hotkey = L"Alt+I"; });
+    for (const auto* direction : {L"Up", L"Down", L"Left", L"Right"}) {
+        reject_helper_change([&](auto& value) { value.reload.hotkey = direction; });
+        reject_helper_change([&](auto& value) { value.build.hotkey = direction; });
+        reject_helper_change([&](auto& value) { value.team.hotkey = direction; });
+    }
+    {
+        auto invalid = helper_settings;
+        invalid.base_hotkey = L"Up";
+        bool rejected{};
+        try { wardogs::save_settings_to(helpers_path, invalid); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected && bytes(helpers_path) == helpers_before_invalid,
+              "generated arrows cannot trigger an artillery action or partially overwrite saved settings");
+    }
+    {
+        const auto allowed_path = directory / L"reload-disabled-arrow.ini";
+        auto allowed = helper_settings;
+        allowed.game_helpers.build.enabled = false;
+        allowed.game_helpers.build.hotkey = L"Up";
+        wardogs::save_settings_to(allowed_path, allowed);
+        check(wardogs::load_settings_from(allowed_path).game_helpers == allowed.game_helpers,
+              "disabled stored arrow assignment does not conflict with active reload input");
+        allowed.game_helpers.build.enabled = true;
+        allowed.game_helpers.reload.enabled = false;
+        wardogs::save_settings_to(allowed_path, allowed);
+        check(wardogs::load_settings_from(allowed_path).game_helpers == allowed.game_helpers,
+              "existing plain-arrow shortcuts remain valid when reload is disabled");
+        allowed.game_helpers.reload.enabled = true;
+        allowed.game_helpers.build.hotkey = L"Ctrl+Up";
+        wardogs::save_settings_to(allowed_path, allowed);
+        check(wardogs::load_settings_from(allowed_path).game_helpers == allowed.game_helpers,
+              "a modified arrow chord cannot be triggered by the helper's unmodified direction");
+    }
+    reject_helper_change([](auto& value) { value.reload.left = -1; });
+    reject_helper_change([](auto& value) { value.reload.right = 10001; });
+    reject_helper_change([](auto& value) { value.reload.right = value.reload.left; });
+    reject_helper_change([](auto& value) { value.reload.bottom = value.reload.top - 1; });
+    reject_helper_change([](auto& value) { value.reload.left = value.reload.top = value.reload.right = value.reload.bottom = 0; });
+    for (const wchar_t* key : {L"reload_helper_hotkey", L"build_helper_hotkey", L"team_piker_hotkey",
+                             L"base_hotkey", L"pinned_card_unlock_hotkey"}) {
+        wardogs::save_settings_to(helpers_path, helper_settings);
+        WritePrivateProfileStringW(L"settings", key, L"Up", helpers_path.c_str());
+        const auto original = bytes(helpers_path);
+        const auto recovered = wardogs::load_settings_from(helpers_path);
+        auto expected = helper_settings;
+        expected.game_helpers.reload.enabled = false;
+        const std::wstring changed{key};
+        if (changed == L"reload_helper_hotkey") expected.game_helpers.reload.hotkey = L"Up";
+        if (changed == L"build_helper_hotkey") expected.game_helpers.build.hotkey = L"Up";
+        if (changed == L"team_piker_hotkey") expected.game_helpers.team.hotkey = L"Up";
+        if (changed == L"base_hotkey") expected.base_hotkey = L"Up";
+        if (changed == L"pinned_card_unlock_hotkey") expected.pinned_card.unlock_hotkey = L"Up";
+        check(!recovered.game_helpers.reload.enabled &&
+                  recovered.game_helpers == expected.game_helpers &&
+                  recovered.base_hotkey == expected.base_hotkey &&
+                  recovered.pinned_card.unlock_hotkey == expected.pinned_card.unlock_hotkey &&
+                  bytes(helpers_path) == original,
+              "loading a generated-arrow conflict disables only reload and preserves shortcuts/profile bytes");
+    }
+    for (const wchar_t* invalid : {L"-1", L"10001", L"4600junk", L"4600.5", L"999999999999999999"}) {
+        wardogs::save_settings_to(helpers_path, helper_settings);
+        WritePrivateProfileStringW(L"settings", L"reload_helper_region_left", invalid, helpers_path.c_str());
+        const auto original = bytes(helpers_path);
+        const auto recovered = wardogs::load_settings_from(helpers_path).game_helpers;
+        check(!recovered.reload.enabled && recovered.reload.automatic_region &&
+                  recovered.reload.left == 0 && recovered.reload.right == 0 &&
+                  recovered.build == helper_settings.game_helpers.build &&
+                  recovered.team == helper_settings.game_helpers.team && bytes(helpers_path) == original,
+              "malformed manual reload area disables only reload without rewriting settings or enabling input");
+    }
+    wardogs::save_settings_to(helpers_path, helper_settings);
     for (const wchar_t* invalid : {L"0", L"5001", L"660junk", L"660.5", L"999999999999999999"}) {
         WritePrivateProfileStringW(L"settings", L"build_helper_hold_ms", invalid, helpers_path.c_str());
         const auto original = bytes(helpers_path);
@@ -150,7 +337,7 @@ int run_settings_tests() {
               invalid_helpers.team.random_enabled && bytes(helpers_path) == invalid_helpers_before_read,
           "invalid helper intervals, booleans and reversed random ranges use bounded defaults without writes");
     wardogs::save_settings_to(helpers_path, helper_settings);
-    WritePrivateProfileStringW(L"settings", L"build_helper_hotkey", L"F12", helpers_path.c_str());
+    WritePrivateProfileStringW(L"settings", L"build_helper_hotkey", L"Win+F6", helpers_path.c_str());
     WritePrivateProfileStringW(L"settings", L"team_piker_hotkey", L"bogus", helpers_path.c_str());
     const auto invalid_keys_before_read = bytes(helpers_path);
     const auto invalid_helper_keys = wardogs::load_settings_from(helpers_path).game_helpers;

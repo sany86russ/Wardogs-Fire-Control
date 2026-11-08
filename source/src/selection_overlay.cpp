@@ -35,19 +35,21 @@ SelectionOverlay::~SelectionOverlay() {
     cancel();
 }
 
-bool SelectionOverlay::begin(Callback callback) {
+bool SelectionOverlay::begin(Callback callback, QString instructions) {
     if (window_) return false;
     selecting_ = false;
     start_ = {};
     end_ = {};
     monitor_ = nullptr;
     callback_ = std::move(callback);
+    instructions_ = std::move(instructions);
     ensure_class();
     const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
     const int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     const int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    const auto title = wardogs::i18n::text(QStringLiteral("Выбор области координат")).toStdWString();
+    const auto title = wardogs::i18n::text(instructions_.isEmpty()
+        ? QStringLiteral("Выбор области координат") : QStringLiteral("Область стрелок")).toStdWString();
     window_ = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED, class_name,
         title.c_str(), WS_POPUP, left, top, width, height, nullptr, nullptr,
@@ -127,8 +129,8 @@ void SelectionOverlay::paint_to(HDC dc, const RECT& paint_rect) const {
         const auto old_font = SelectObject(dc, font);
         SetBkMode(dc, TRANSPARENT);
         SetTextColor(dc, RGB(232, 238, 247));
-        const auto instruction = wardogs::i18n::text(QStringLiteral(
-            "Выделите текст координат X / Y\nEsc или правая кнопка — отмена")).toStdWString();
+        const auto instruction = wardogs::i18n::text(instructions_.isEmpty() ? QStringLiteral(
+            "Выделите текст координат X / Y\nEsc или правая кнопка — отмена") : instructions_).toStdWString();
         DrawTextW(dc, instruction.c_str(),
                   -1, &hint, DT_CENTER | DT_TOP | DT_WORDBREAK);
         SelectObject(dc, old_font);

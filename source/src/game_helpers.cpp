@@ -247,6 +247,10 @@ bool GameHelperRunner::running() const noexcept {
     return impl_->running.load(std::memory_order_acquire);
 }
 
+bool GameHelperRunner::release_pending() const noexcept {
+    return impl_->owns_button.load(std::memory_order_acquire);
+}
+
 GameHelperMode GameHelperRunner::mode() const noexcept {
     return impl_->mode.load(std::memory_order_acquire);
 }

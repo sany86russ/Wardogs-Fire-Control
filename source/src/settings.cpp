@@ -246,8 +246,6 @@ bool read_helper_boolean(const std::filesystem::path& path, const wchar_t* key,
 
 std::wstring normalized_helper_hotkey(std::wstring_view value) {
     const auto key = parse_hotkey(value);
-    if (key.virtual_key == VK_ESCAPE)
-        throw std::invalid_argument("Esc используется для закрытия окон; выберите другую клавишу помощника");
     const std::array keys{key};
     validate_global_hotkeys(keys);
     return key.display;
@@ -258,8 +256,10 @@ void read_game_helpers(const std::filesystem::path& path,
     using namespace game_helpers_limits;
     auto& build = helpers.build;
     auto& team = helpers.team;
+    auto& reload = helpers.reload;
     build.enabled = read_helper_boolean(path, L"build_helper_enabled", build.enabled);
     team.enabled = read_helper_boolean(path, L"team_piker_enabled", team.enabled);
+    reload.enabled = read_helper_boolean(path, L"reload_helper_enabled", reload.enabled);
     const auto read_hotkey = [&](const wchar_t* key, auto& helper) {
         try { helper.hotkey = normalized_helper_hotkey(read_value(path, key, helper.hotkey)); }
         catch (const std::exception&) {
@@ -269,6 +269,37 @@ void read_game_helpers(const std::filesystem::path& path,
     };
     read_hotkey(L"build_helper_hotkey", build);
     read_hotkey(L"team_piker_hotkey", team);
+    read_hotkey(L"reload_helper_hotkey", reload);
+    const auto reload_mode_raw = read_value(path, L"reload_helper_automatic_region", L"");
+    const auto reload_mode = read_integer(path, L"reload_helper_automatic_region");
+    if (!reload_mode_raw.empty() && (!reload_mode || (*reload_mode != 0 && *reload_mode != 1))) {
+        reload.enabled = false;
+        log_warning("settings.invalid_reload_mode; reload helper disabled");
+    } else if (reload_mode) {
+        reload.automatic_region = *reload_mode != 0;
+    }
+    bool region_numbers_valid = true;
+    const auto read_region_value = [&](const wchar_t* key) {
+        const auto raw = read_value(path, key, L"");
+        const auto number = read_integer(path, key);
+        if (raw.empty()) return 0;
+        if (!number || *number < 0 || *number > 10000) {
+            region_numbers_valid = false;
+            return 0;
+        }
+        return static_cast<int>(*number);
+    };
+    reload.left = read_region_value(L"reload_helper_region_left");
+    reload.top = read_region_value(L"reload_helper_region_top");
+    reload.right = read_region_value(L"reload_helper_region_right");
+    reload.bottom = read_region_value(L"reload_helper_region_bottom");
+    const bool empty_region = reload.left == 0 && reload.top == 0 && reload.right == 0 && reload.bottom == 0;
+    if (!region_numbers_valid || (!valid_reload_region(reload) && (!reload.automatic_region || !empty_region))) {
+        reload.enabled = false;
+        reload.automatic_region = true;
+        reload.left = reload.top = reload.right = reload.bottom = 0;
+        log_warning("settings.invalid_reload_region; reload helper disabled; select a new region before enabling");
+    }
     build.hold_ms = read_helper_integer(path, L"build_helper_hold_ms", build.hold_ms,
                                         minimum_hold_ms, maximum_hold_ms);
     build.pause_ms = read_helper_integer(path, L"build_helper_pause_ms", build.pause_ms,
@@ -289,15 +320,35 @@ void read_game_helpers(const std::filesystem::path& path,
     };
     read_random(L"build_helper_random_min_ms", L"build_helper_random_max_ms", build, BuildHelperPreferences{});
     read_random(L"team_piker_random_min_ms", L"team_piker_random_max_ms", team, TeamPikerPreferences{});
+    reload.hold_ms = read_helper_integer(path, L"reload_helper_hold_ms", reload.hold_ms,
+        minimum_reload_hold_ms, maximum_reload_hold_ms);
+    reload.key_gap_ms = read_helper_integer(path, L"reload_helper_key_gap_ms", reload.key_gap_ms,
+        minimum_reload_key_gap_ms, maximum_reload_key_gap_ms);
+    reload.stage_gap_ms = read_helper_integer(path, L"reload_helper_stage_gap_ms", reload.stage_gap_ms,
+        minimum_reload_stage_gap_ms, maximum_reload_stage_gap_ms);
+    reload.key_random_enabled = read_helper_boolean(path, L"reload_helper_key_random_enabled", reload.key_random_enabled);
+    reload.stage_random_enabled = read_helper_boolean(path, L"reload_helper_stage_random_enabled", reload.stage_random_enabled);
+    const auto read_reload_random = [&](const wchar_t* minimum_key, const wchar_t* maximum_key,
+                                        int& minimum, int& maximum, int default_minimum, int default_maximum) {
+        minimum = read_helper_integer(path, minimum_key, minimum, 0, maximum_random_ms);
+        maximum = read_helper_integer(path, maximum_key, maximum, 0, maximum_random_ms);
+        if (minimum > maximum) {
+            minimum = default_minimum;
+            maximum = default_maximum;
+            log_warning("settings.invalid_reload_random_range; using default");
+        }
+    };
+    const ReloadHelperPreferences reload_defaults;
+    read_reload_random(L"reload_helper_key_random_min_ms", L"reload_helper_key_random_max_ms",
+        reload.key_random_min_ms, reload.key_random_max_ms,
+        reload_defaults.key_random_min_ms, reload_defaults.key_random_max_ms);
+    read_reload_random(L"reload_helper_stage_random_min_ms", L"reload_helper_stage_random_max_ms",
+        reload.stage_random_min_ms, reload.stage_random_max_ms,
+        reload_defaults.stage_random_min_ms, reload_defaults.stage_random_max_ms);
 }
 
-void validate_helper_hotkeys(const AppSettings& settings) {
+std::vector<Hotkey> configured_helper_hotkeys(const AppSettings& settings) {
     const auto& helpers = settings.game_helpers;
-    // Validate disabled assignments too so a saved shortcut can be enabled
-    // later, but reserve/check uniqueness only for enabled helper actions.
-    (void)normalized_helper_hotkey(helpers.build.hotkey);
-    (void)normalized_helper_hotkey(helpers.team.hotkey);
-    if (!helpers.build.enabled && !helpers.team.enabled) return;
     std::vector<Hotkey> keys;
     for (const auto* text : {&settings.region_hotkey, &settings.base_hotkey,
              &settings.target_hotkey, &settings.quick_target_hotkey,
@@ -306,13 +357,28 @@ void validate_helper_hotkeys(const AppSettings& settings) {
         keys.push_back(parse_hotkey(*text));
     if (helpers.build.enabled) keys.push_back(parse_hotkey(helpers.build.hotkey));
     if (helpers.team.enabled) keys.push_back(parse_hotkey(helpers.team.hotkey));
+    if (helpers.reload.enabled) keys.push_back(parse_hotkey(helpers.reload.hotkey));
+    return keys;
+}
+
+void validate_helper_hotkeys(const AppSettings& settings) {
+    const auto& helpers = settings.game_helpers;
+    // Validate disabled assignments too so a saved shortcut can be enabled
+    // later, but reserve/check uniqueness only for enabled helper actions.
+    (void)normalized_helper_hotkey(helpers.build.hotkey);
+    (void)normalized_helper_hotkey(helpers.team.hotkey);
+    (void)normalized_helper_hotkey(helpers.reload.hotkey);
+    if (!helpers.build.enabled && !helpers.team.enabled && !helpers.reload.enabled) return;
+    const auto keys = configured_helper_hotkeys(settings);
     validate_unique_hotkeys(keys);
+    validate_reload_input_hotkeys(keys, helpers.reload.enabled);
 }
 
 void write_game_helpers(const std::filesystem::path& path,
                         const GameHelpersPreferences& helpers) {
     const auto& build = helpers.build;
     const auto& team = helpers.team;
+    const auto& reload = helpers.reload;
     write_value(path, L"build_helper_enabled", build.enabled ? L"1" : L"0");
     write_value(path, L"build_helper_hotkey", normalized_helper_hotkey(build.hotkey));
     write_value(path, L"build_helper_hold_ms", std::to_wstring(build.hold_ms));
@@ -326,6 +392,22 @@ void write_game_helpers(const std::filesystem::path& path,
     write_value(path, L"team_piker_random_enabled", team.random_enabled ? L"1" : L"0");
     write_value(path, L"team_piker_random_min_ms", std::to_wstring(team.random_min_ms));
     write_value(path, L"team_piker_random_max_ms", std::to_wstring(team.random_max_ms));
+    write_value(path, L"reload_helper_enabled", reload.enabled ? L"1" : L"0");
+    write_value(path, L"reload_helper_hotkey", normalized_helper_hotkey(reload.hotkey));
+    write_value(path, L"reload_helper_automatic_region", reload.automatic_region ? L"1" : L"0");
+    write_value(path, L"reload_helper_region_left", std::to_wstring(reload.left));
+    write_value(path, L"reload_helper_region_top", std::to_wstring(reload.top));
+    write_value(path, L"reload_helper_region_right", std::to_wstring(reload.right));
+    write_value(path, L"reload_helper_region_bottom", std::to_wstring(reload.bottom));
+    write_value(path, L"reload_helper_hold_ms", std::to_wstring(reload.hold_ms));
+    write_value(path, L"reload_helper_key_gap_ms", std::to_wstring(reload.key_gap_ms));
+    write_value(path, L"reload_helper_stage_gap_ms", std::to_wstring(reload.stage_gap_ms));
+    write_value(path, L"reload_helper_key_random_enabled", reload.key_random_enabled ? L"1" : L"0");
+    write_value(path, L"reload_helper_key_random_min_ms", std::to_wstring(reload.key_random_min_ms));
+    write_value(path, L"reload_helper_key_random_max_ms", std::to_wstring(reload.key_random_max_ms));
+    write_value(path, L"reload_helper_stage_random_enabled", reload.stage_random_enabled ? L"1" : L"0");
+    write_value(path, L"reload_helper_stage_random_min_ms", std::to_wstring(reload.stage_random_min_ms));
+    write_value(path, L"reload_helper_stage_random_max_ms", std::to_wstring(reload.stage_random_max_ms));
 }
 
 std::optional<double> read_double(const std::filesystem::path& path,
@@ -607,6 +689,16 @@ AppSettings load_settings_from(const std::filesystem::path& requested_path,
             log_info("settings.quick_workflow_migrated version=1");
     }
     read_game_helpers(path, settings.game_helpers);
+    if (settings.game_helpers.reload.enabled) {
+        try {
+            validate_reload_input_hotkeys(configured_helper_hotkeys(settings), true);
+        } catch (const std::invalid_argument&) {
+            // Preserve an existing user's shortcuts and profile bytes. The
+            // new automation stays disabled until its input conflict is fixed.
+            settings.game_helpers.reload.enabled = false;
+            log_warning("settings.reload_input_hotkey_conflict; reload helper disabled");
+        }
+    }
     return settings;
 }
 

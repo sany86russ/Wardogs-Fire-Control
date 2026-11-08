@@ -22,6 +22,15 @@ std::size_t checked_capture_pixel_count(std::int64_t width, std::int64_t height)
     return static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
 }
 
+std::size_t checked_reload_capture_pixel_count(std::int64_t width, std::int64_t height) {
+    constexpr std::int64_t maximum_pixels = 40'000'000;
+    if (width <= 0 || height <= 0)
+        throw std::invalid_argument("Область захвата пуста");
+    if (width > 16384 || height > 8192 || width > maximum_pixels / height)
+        throw std::invalid_argument("Область поиска стрелок слишком велика: до 40 млн пикселей, 16384 по ширине и 8192 по высоте.");
+    return static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+}
+
 }  // namespace detail
 namespace {
 
@@ -220,10 +229,12 @@ RECT resolve_capture_region(const CaptureRegion& region) {
 }
 
 namespace {
-Image capture_dc(HWND source_window, RECT rect, DWORD operation) {
+Image capture_dc(HWND source_window, RECT rect, DWORD operation, bool reload = false) {
     const auto wide_width = static_cast<std::int64_t>(rect.right) - rect.left;
     const auto wide_height = static_cast<std::int64_t>(rect.bottom) - rect.top;
-    const auto pixel_count = detail::checked_capture_pixel_count(wide_width, wide_height);
+    const auto pixel_count = reload
+        ? detail::checked_reload_capture_pixel_count(wide_width, wide_height)
+        : detail::checked_capture_pixel_count(wide_width, wide_height);
     const auto width = static_cast<int>(wide_width);
     const auto height = static_cast<int>(wide_height);
     Image image{width, height, std::vector<std::uint8_t>(pixel_count * 3)};
@@ -271,6 +282,10 @@ Image capture_dc(HWND source_window, RECT rect, DWORD operation) {
 
 Image capture_screen(const CaptureRegion& region) {
     return capture_dc(nullptr, resolve_capture_region(region), SRCCOPY | CAPTUREBLT);
+}
+
+Image capture_reload_screen(const CaptureRegion& region) {
+    return capture_dc(nullptr, resolve_capture_region(region), SRCCOPY | CAPTUREBLT, true);
 }
 
 }  // namespace wardogs

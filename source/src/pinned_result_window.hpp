@@ -53,7 +53,7 @@ public:
     void set_context_caption(const QString& caption, const QString& detail = {});
     void set_workflow_status(const QString& caption, const QString& detail = {});
     void set_helpers_status(const wardogs::GameHelpersPreferences& preferences,
-                            wardogs::GameHelperMode active);
+                            wardogs::GameHelperMode active, bool reload_waiting = false);
     // Restore once on entering pinned mode. Later entries retain the live placement.
     void prepare_for_show(const QRect& anchor);
     // Flush the pending user gesture before the owner snapshots settings or exits.
@@ -147,9 +147,11 @@ private:
     QWidget* helpers_status_{};
     QLabel* build_helper_status_{};
     QLabel* team_helper_status_{};
+    QLabel* reload_helper_status_{};
     wardogs::GameHelpersPreferences helpers_preferences_;
     wardogs::GameHelperMode helpers_active_{wardogs::GameHelperMode::none};
     bool helpers_initialized_{};
+    bool reload_waiting_{};
     VehicleSolutionWidget *low_{}, *high_{};
     bool vehicle_mode_{};
     bool dragging_{};

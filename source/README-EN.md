@@ -8,7 +8,9 @@ Russian is the default. The **RU / EN** header selector changes the interface im
 
 ## Using the application
 
-**Version 2.14.0:** **Helpers** opens a separate **Build helper / Team Piker** window. Build helper: **514 ms hold / 33 ms pause**, randomization off; Team Piker: **800 + 100–200 ms** between click starts. Defaults are **F6/F7**, both disabled. Preferences persist; loops remain stopped on launch. L81/SPH-2 mini cards display both helper states and actual shortcuts without start controls. [Setup and limits](docs/GAME-HELPERS-EN.md).
+**Version 2.16.0:** **Helpers** contains **Build helper / Team Piker / SPH-2 · reload**. F8 arms R detection: each reload reads four sequences from one snapshot each and sends 16 arrow keys, then waits for R again. Initial timing is **50 ms hold / 90 ms between keys / 750 ms between sequences**. Independent key/sequence Humanizer switches default to off with **0–30 / 0–200 ms** addition ranges. All helpers accept keyboard keys, Ctrl/Alt/Shift chords and **Mouse4 / Mouse5**. Preferences persist; modes start stopped after launching the application. [Setup and limits](docs/GAME-HELPERS-EN.md).
+
+The release also includes automatic local storage of accepted impact marks and provisional MIL transfer to compatible new targets. The archive does not restore a previous gun position between sessions. [SPH-2 automatic learning](docs/AUTOMATIC-LEARNING-EN.md). Updating preserves existing helper timings; new defaults apply to a fresh profile or missing settings.
 
 The application checks stable GitHub releases and updates the entire portable package when you click Update. It includes asynchronous SHA-256 verified downloads, manifest validation, an external helper and rollback on installation failure. See the [update guide](../docs/UPDATES-EN.md).
 
@@ -24,12 +26,13 @@ If shortcuts conflict, the UI shows the combinations actually registered. Weak o
 
 ## Documentation
 
-Helpers generate left-button input through standard Windows `SendInput`. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Publisher approval is unconfirmed, and randomization does not provide anti-cheat protection.
+Helpers generate left-button or arrow-key input through standard Windows `SendInput`. WARDOGS rules prohibit input-automation macros and exploiting bugs for advantage; account bans are possible. Publisher approval is unconfirmed, and randomization does not provide anti-cheat protection.
 
 | Guide | Contents |
 | --- | --- |
-| [Helpers](docs/GAME-HELPERS-EN.md) | Build helper, Team Piker, shortcuts, persistence and limits |
+| [Helpers](docs/GAME-HELPERS-EN.md) | Build helper, Team Piker, SPH-2 reload, Humanizer, shortcuts and persistence |
 | [Quick start](docs/QUICKSTART-EN.md) | Launching, coordinates, shortcuts, settings and troubleshooting |
+| [SPH-2 learning](docs/AUTOMATIC-LEARNING-EN.md) | Accepted-impact archive and provisional MIL transfer |
 | [Calculations and limits](docs/CALCULATIONS-EN.md) | Coordinates, L81/SPH-2 tables, interpolation, elevation and local corrections |
 | [Architecture](docs/ARCHITECTURE-EN.md) | Modules, threads, storage, OCR and checks |
 | [Archived SPH-2 HUD experiment](docs/HUD-OBSERVATION-EN.md) | Removed sight-reading experiment and diagnostic checks; not a 2.13.2 gameplay mode |

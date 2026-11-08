@@ -1,0 +1,146 @@
+[
+  {
+    "ru": "Область поиска стрелок слишком велика: до 40 млн пикселей, 16384 по ширине и 8192 по высоте.",
+    "en": "Arrow search area is too large: up to 40 million pixels, 16384 wide and 8192 high."
+  },
+  {
+    "ru": "Выделите полосу стрелок перезарядки с небольшим отступом\nEsc или правая кнопка — отмена",
+    "en": "Select the reload arrow strip with a small margin\nEsc or right-click to cancel"
+  },
+  {
+    "ru": "При включённой автоперезарядке стрелки без модификаторов нельзя назначать горячими клавишами. Добавьте Ctrl, Alt или Shift",
+    "en": "When auto reload is enabled, plain arrow keys cannot be assigned as shortcuts. Add Ctrl, Alt or Shift"
+  },
+  {
+    "ru": "Подтверждённая комбинация изменилась. Перезарядка остановлена",
+    "en": "Confirmed sequence changed. Reload helper stopped"
+  },
+  {
+    "ru": "SPH-2 · перезарядка работает",
+    "en": "SPH-2 · reload running"
+  },
+  {
+    "ru": "Перезарядка SPH-2: нажатия · отправлено %1 из 16",
+    "en": "SPH-2 reload: sending keys · %1 of 16 sent"
+  },
+  {
+    "ru": "Перезарядка SPH-2: следующий кадр · отправлено %1 из 16",
+    "en": "SPH-2 reload: next snapshot · %1 of 16 sent"
+  },
+  {
+    "ru": "SPH-2: отправлены 4 комбинации · 16 нажатий",
+    "en": "SPH-2: 4 sequences sent · 16 key presses"
+  },
+  {
+    "ru": "Размер окна для поиска стрелок не поддерживается",
+    "en": "Window size is not supported for arrow search"
+  },
+  {
+    "ru": "Выберите область стрелок внутри окна WARDOGS",
+    "en": "Select the arrow area inside the WARDOGS window"
+  },
+  {
+    "ru": "Окно игры изменилось. Запустите помощник заново.",
+    "en": "Game window changed. Start the helper again."
+  },
+  {
+    "ru": "Окно игры изменилось. Выберите область заново.",
+    "en": "Game window changed. Select the area again."
+  },
+  {
+    "ru": "Область стрелок должна находиться внутри одного монитора",
+    "en": "The arrow area must be inside one monitor"
+  },
+  {
+    "ru": "Для выбора области откройте одно окно WARDOGS",
+    "en": "Open one WARDOGS window to select the area"
+  },
+  {
+    "ru": "Некорректные интервалы помощника перезарядки",
+    "en": "Invalid reload helper intervals"
+  },
+  {
+    "ru": "Окно игры потеряло фокус. Перезарядка остановлена",
+    "en": "Game window lost focus. Reload helper stopped"
+  },
+  {
+    "ru": "Ошибка обработчика отпускания клавиши перезарядки",
+    "en": "Reload key release callback failed"
+  },
+  {
+    "ru": "Windows не приняла отпускание клавиши перезарядки. Запуск заблокирован до её освобождения",
+    "en": "Windows rejected the reload key release. Restart is blocked until it is released"
+  },
+  {
+    "ru": "Отпустите горячую клавишу и модификаторы. Перезарядка остановлена",
+    "en": "Release the shortcut and modifiers. Reload helper stopped"
+  },
+  {
+    "ru": "Windows не приняла нажатие клавиши перезарядки",
+    "en": "Windows rejected the reload key press"
+  },
+  {
+    "ru": "Отпустите горячую клавишу и запустите перезарядку заново",
+    "en": "Release the shortcut and start the reload helper again"
+  },
+  {
+    "ru": "Ошибка захвата, распознавания или ввода. Перезарядка остановлена",
+    "en": "Capture, recognition or input failed. Reload helper stopped"
+  },
+  {
+    "ru": "Достигнут предел времени помощника перезарядки",
+    "en": "Reload helper time limit reached"
+  },
+  {
+    "ru": "Принятие нажатия не подтверждено. Повторный ввод не отправлен",
+    "en": "Key acceptance was not confirmed. No retry was sent"
+  },
+  {
+    "ru": "Не найдены четыре стрелки. Перезарядка остановлена",
+    "en": "Four arrows were not found. Reload helper stopped"
+  },
+  {
+    "ru": "Некорректная или неоднозначная полоса стрелок. Перезарядка остановлена",
+    "en": "Arrow strip is invalid or ambiguous. Reload helper stopped"
+  },
+  {
+    "ru": "Комбинация изменилась до подтверждения нажатия. Перезарядка остановлена",
+    "en": "Sequence changed before key acceptance. Reload helper stopped"
+  },
+  {
+    "ru": "Область стрелок изменилась. Перезарядка остановлена",
+    "en": "Arrow area changed. Reload helper stopped"
+  },
+  {
+    "ru": "Нужны четыре белые стрелки. Запустите помощник с новой перезарядки",
+    "en": "Four white arrows are required. Start the helper with a fresh reload"
+  },
+  {
+    "ru": "Не удалось отпустить клавишу предыдущей перезарядки",
+    "en": "Could not release the previous reload key"
+  },
+  {
+    "ru": "Не настроен захват, проверка окна или ввод перезарядки",
+    "en": "Reload capture, window check or input is not configured"
+  },
+  {
+    "ru": "Ожидание R",
+    "en": "Waiting for R"
+  },
+  {
+    "ru": "Перезарядка SPH-2 включена · ожидание R",
+    "en": "SPH-2 reload enabled · waiting for R"
+  },
+  {
+    "ru": "Цикл SPH-2 остановлен: %1 · ожидание R",
+    "en": "SPH-2 cycle stopped: %1 · waiting for R"
+  },
+  {
+    "ru": "Это системное сочетание Windows. Выберите другое",
+    "en": "This is a Windows system shortcut. Choose another"
+  },
+  {
+    "ru": "При включённой автоперезарядке R запускает перезарядку. Добавьте Ctrl, Alt или Shift к горячей клавише",
+    "en": "When auto reload is enabled, R starts reloading. Add Ctrl, Alt or Shift to the shortcut"
+  }
+]

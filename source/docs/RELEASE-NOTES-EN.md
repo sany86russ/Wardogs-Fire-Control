@@ -1,5 +1,85 @@
 # WARDOGS Fire Control — release notes
 
+## 2.16.0 — SPH-2 active reload, Humanizer and new shortcuts · November 9, 2026
+
+[Full release EN/RU and files](../../docs/releases/v2.16.0.md).
+
+**2.16.0 adds an SPH-2 active-reload assistant to Helpers.** Arm it once with the assigned shortcut: each R starts recognition and input for four sequences, then the assistant waits for the next reload. Timing, random delays and the START / STOP shortcut are configurable.
+
+### Main changes
+
+- **Three helpers in one window:** Build helper, Team Piker and **SPH-2 · reload**. The new helper defaults to **F8**; its hotkey is disabled in a fresh profile until explicitly enabled.
+- **Persistent Waiting for R:** F8 arms the mode; pressing F8 again stops it. After firing, press and release plain **R** in the game. The cycle starts **500 ms** later and returns to waiting after four sequences. F8 no longer needs enabling before every reload.
+- **Arrow-shape detection:** directions are recognized from four arrow shapes in a row. A black background, shell circle, upper ring or rectangular outline is not required. Automatic search needs no predefined HUD coordinates or display resolution; the next three snapshots use a small region around the initial detection.
+- **A simple 4 × 4 cycle:** one fresh snapshot → four recognized arrows → four key presses. This repeats for **four sequences and 16 DOWN/UP pairs**. There are no captures between individual keys, animation tracking or waits for green acknowledgements.
+- **Manual region selection remains available:** select all four arrows with a small margin. The region is stored relative to the game client and scales on a later cycle at another resolution. Window geometry must remain unchanged during the current input cycle.
+- Mini cards show the third helper, its actual shortcut and a separate **Waiting for R** state. Progress counts sent inputs; it does not claim that the game accepted each key.
+
+### Reload timing and Humanizer
+
+| Setting | Default in 2.16.0 |
+|---|---|
+| Key hold | **50 ms** |
+| Gap between keys in a sequence | **90 ms** |
+| Gap between sequences | **750 ms** |
+| Humanizer for holds and key gaps | **Off**, random addition **0–30 ms** |
+| Humanizer for sequence transitions | **Off**, random addition **0–200 ms** |
+
+All three base intervals are separately editable. Humanizer switches are independent, with an editable minimum and maximum addition for each. A new delay is sampled for every hold, key gap or transition; additions are nonnegative. With both initial ranges enabled, holds are **50–80 ms**, key gaps **90–120 ms** and sequence gaps **750–950 ms**. The overall cycle budget accounts for the chosen maximum delays plus a margin.
+
+**50 / 90 / 750 ms is the new 2.16.0 preset selected by the project owner.** The preceding local candidate used 50 / 100 / 1200 ms. Valid saved user timings are retained; the new preset applies to missing settings and new profiles. The helper's armed/running state is never automatically restored after restarting the application.
+
+### Observation archive and provisional MIL refinement
+
+This release also includes changes prepared under **2.15.0**, which was not published as a separate stable release after 2.14.0:
+
+- Each normal accepted **Alt+I** or manual impact automatically saves gun/target/impact coordinates, arc, heights and the displayed command. No new shortcut, separate measurement mode or mandatory test shot is required.
+- The local `accuracy-observations.json` archive is bounded to **4096 observations and 8 MiB**. Duplicate identities cannot add another impact; recording errors appear in status and logs. Corrupt history is never replaced with an empty file. The archive contains no screenshots, chat or account data and is not uploaded.
+- Observations from at least three independent targets at the same emplacement and arc allow a provisional shared MIL correction for a new target to be evaluated. Each entire target is excluded from training in turn; validation scores the integer commands shown to the player. Transfer requires improved held-out errors and stays within jointly supported range, bearing and height.
+- The current target's own ranging takes priority; provisional refinement is already included in final MIL and labelled in the main window and mini card. It is never automatically restored from an archived session and does not modify global tables.
+- Pause, weapon/arc changes and context resets withdraw or clear active transfer. Capture pause keeps Build helper and Team Piker running while suspending game capture, OCR and the reticle.
+
+This checks consistency between marked landings and displayed commands, not actual sight settings, physical shots or a hit percentage. [Automatic collection and refinement](AUTOMATIC-LEARNING-EN.md).
+
+### Keyboard and side mouse buttons for every helper
+
+- START / STOP fields accept **Mouse4 / Mouse5**, ordinary keys, numpad keys, punctuation, Esc, Tab, F12 and media keys exposed by Windows.
+- **Ctrl / Alt / Shift** combinations are supported, including **Shift+Alt+F4**, **Ctrl+Mouse4** and multiple modifiers. The field displays the actual assignment and retains it after key release and focus changes.
+- Win combinations, protected Windows commands, modifier-only bindings and duplicate enabled assignments are rejected. While reload is enabled, plain R and arrows are reserved for its input; add a modifier to assign those keys to another action.
+- An occupied keyboard shortcut is never silently replaced for a helper. Mouse4/Mouse5 and F12 do not suppress their original action in the game or another application; account for that when choosing a binding.
+
+### Operation, stopping and fixes
+
+- Only one helper runs at a time. Switching to a different helper requires a valid foreground game window. Fixed SPH-2 being disarmed by another helper's shortcut outside the game, including a side-button click in a browser.
+- Focus loss or changed window geometry interrupts current input and releases the owned key. Armed SPH-2 waits for a new R after returning to the game; R outside the game, with modifiers or during a busy cycle is not queued.
+- An unreadable row ends only that cycle. The mode remains available for another reload; a direction is never guessed from neighboring arrows.
+- Fixed persistent mode stopping during a normal owned-key hold. A failed mandatory release still blocks further input until the owed key is released.
+- **Stop helpers**, opening settings and closing the application disarm the mode. Capture pause interrupts the current SPH-2 cycle; after resuming, the armed helper waits for a new R. Build helper and Team Piker include the capture-pause behavior prepared for 2.15.0.
+- Timings, Humanizer, regions and shortcuts are saved in the Windows profile. Fixed side-button names being lost when recording finished and duplicate Shift during Backtab normalization.
+- L81/SPH-2 calculations, both arcs and Alt+I ranging are retained. Periodic sight reading, left-button shot observation and the flashing alignment frame are not reintroduced.
+
+### Getting started
+
+1. Open **Helpers → SPH-2 · reload**, enable its shortcut and keep automatic arrow search selected.
+2. Check **50 / 90 / 750 ms**, configure Humanizer if desired and save. The game's Active Reload actions must be bound to **↑ ↓ ← →**.
+3. In the game, press **F8** or your assigned shortcut once. Look for **Waiting for R**.
+4. After each shot, press **R** to reload. The helper sends four sequences and returns to waiting.
+5. Press the same shortcut again or use **Stop helpers** to stop.
+
+[Detailed instructions](GAME-HELPERS-EN.md) · [Quick start](QUICKSTART-EN.md) · [System interaction](ANTICHEAT-EN.md).
+
+### Validation and limits
+
+Before release preparation, the Release build, **45 CTest suites with no failures** and four repeat RU/EN application workflows passed. One planning test runs only on the GitHub Windows runner. Dedicated tests cover recognition, four snapshots/16 key pairs, cancellation, random ranges, persistence and shortcuts; Shift+Alt+F4 was checked in the actual application window. The owner confirmed repeated in-game reloads after one F8 with the preceding local timing preset. This does not separately qualify every custom timing, Humanizer, physical side-button hardware or HUD variant. The full suite was not repeated locally merely for the preset change; the final build and package are checked separately.
+
+Images are processed locally. Very small, obscured or merged arrows may be rejected. Helpers use ordinary Windows `SendInput` without modifying game memory, injecting code, installing a driver or bypassing Windows input failures. Publisher approval is unconfirmed; Humanizer changes timing and does not establish permission for automation or protection from sanctions. [Rules and limitations](ANTICHEAT-EN.md).
+
+### Updating and retaining data
+
+From **2.8.0 or newer**: **Check for updates → What's new / Update**. The updater validates the complete ZIP, SHA-256 and manifest, replaces the package and restarts the application. Settings, saved points, imported elevations, the local observation archive, `planning.ini`, profiles and logs remain in `%LOCALAPPDATA%\WardogsFireControl`. After restarting, confirm the map and set the current calculation again; all helpers remain stopped.
+
+For first installation, an older version or manual recovery, extract the **entire** `WardogsFireControl-v2.16.0-win-x64.zip` into a separate folder. One EXE cannot replace DLLs, models, TLS and the updater helper. For rollback, retain the preceding complete package and a profile backup made with the application closed; do not mix files from different versions. [Updating and rollback](../../docs/UPDATES-EN.md).
+
 ## 2.15.0 — automatic archive and provisional MIL refinement · preparation
 
 Accepted Alt+I landings are saved locally without new mandatory actions. MIL transfer is validated on independent targets and integer commands, restricted to joint range/bearing/height support and never restored from archived sessions. Background HUD capture and flashing frames stay disabled. [Release preparation EN/RU](../../docs/releases/v2.15.0.md) · [Learning details](AUTOMATIC-LEARNING-EN.md).

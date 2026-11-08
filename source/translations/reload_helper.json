@@ -1,0 +1,130 @@
+[
+  {
+    "ru": "Строительство, клики и перезарядка SPH-2. Настройки помощников не влияют на артиллерийские расчёты.",
+    "en": "Building, clicks and SPH-2 reloading. Helper settings do not affect artillery calculations."
+  },
+  {
+    "ru": "SPH-2 · перезарядка",
+    "en": "SPH-2 · reload"
+  },
+  {
+    "ru": "Распознаёт направления стрелок активной перезарядки и нажимает клавиши ↑ ↓ ← →. В игре должны быть назначены эти клавиши для Active Reload.",
+    "en": "Recognizes active-reload arrows and presses ↑ ↓ ← →. These keys must be assigned to Active Reload in the game."
+  },
+  {
+    "ru": "Включить горячую клавишу перезарядки SPH-2",
+    "en": "Enable the SPH-2 reload shortcut"
+  },
+  {
+    "ru": "Область стрелок",
+    "en": "Arrow region"
+  },
+  {
+    "ru": "Находить стрелки автоматически (рекомендуется)",
+    "en": "Find arrows automatically (recommended)"
+  },
+  {
+    "ru": "Выбрать область вручную…",
+    "en": "Select a region manually…"
+  },
+  {
+    "ru": "Один кадр — четыре стрелки — четыре нажатия. Каждое нажатие R запускает четыре комбинации, пока помощник включён.",
+    "en": "One snapshot, four arrows, four key presses. Each R press starts four sequences while the helper is enabled."
+  },
+  {
+    "ru": "Клавиша СТАРТ / СТОП включает ожидание R. После перезарядки помощник ждёт следующего R. Повторное нажатие выключает режим.",
+    "en": "START / STOP arms the R trigger. After reloading, the helper waits for the next R. Press the shortcut again to disarm."
+  },
+  {
+    "ru": "Одновременно работает один помощник. После запуска программы все помощники остановлены. Правила WARDOGS ограничивают макросы и эксплуатацию ошибок; возможны санкции. Разрешение издателя не получено. Рандомизация меняет только ритм.",
+    "en": "Only one helper runs at a time. All helpers are stopped when the application starts. WARDOGS rules restrict macros and exploits; sanctions are possible. Publisher permission has not been obtained. Randomization changes timing only."
+  },
+  {
+    "ru": "Автоматический поиск четырёх стрелок в окне WARDOGS. Разрешение экрана задавать не нужно.",
+    "en": "Automatically searches for four arrows in the WARDOGS window. No screen resolution setup is needed."
+  },
+  {
+    "ru": "Ручная область: слева %1 %, сверху %2 %, ширина %3 %, высота %4 %. Размер подстраивается под окно игры.",
+    "en": "Manual region: left %1 %, top %2 %, width %3 %, height %4 %. The region scales with the game window."
+  },
+  {
+    "ru": "Ручная область ещё не выбрана. Выделите полосу со всеми четырьмя стрелками или включите автоматический поиск.",
+    "en": "No manual region selected. Select the strip containing all four arrows or enable automatic search."
+  },
+  {
+    "ru": "Выберите область стрелок внутри окна WARDOGS или включите автоматический поиск",
+    "en": "Select an arrow region inside the WARDOGS window or enable automatic search"
+  },
+  {
+    "ru": "Ритм перезарядки",
+    "en": "Reload timing"
+  },
+  {
+    "ru": "Удержание клавиши",
+    "en": "Key hold"
+  },
+  {
+    "ru": "Пауза между клавишами",
+    "en": "Gap between keys"
+  },
+  {
+    "ru": "Пауза между комбинациями",
+    "en": "Gap between sequences"
+  },
+  {
+    "ru": "Humanizer",
+    "en": "Humanizer"
+  },
+  {
+    "ru": "Рандомизация нажатий и пауз между клавишами",
+    "en": "Randomize key holds and key gaps"
+  },
+  {
+    "ru": "Добавка к клавишам от",
+    "en": "Key addition from"
+  },
+  {
+    "ru": "Добавка к клавишам до",
+    "en": "Key addition to"
+  },
+  {
+    "ru": "Рандомизация переходов между комбинациями",
+    "en": "Randomize gaps between sequences"
+  },
+  {
+    "ru": "Добавка к переходам от",
+    "en": "Sequence addition from"
+  },
+  {
+    "ru": "Добавка к переходам до",
+    "en": "Sequence addition to"
+  },
+  {
+    "ru": "Клавиша: %1–%2 мс · пауза: %3–%4 мс\nМежду комбинациями: %5–%6 мс",
+    "en": "Key: %1–%2 ms · gap: %3–%4 ms\nBetween sequences: %5–%6 ms"
+  },
+  {
+    "ru": "Humanizer независимо добавляет случайную задержку к каждому нажатию, паузе между клавишами и переходу между комбинациями. По умолчанию выключен: добавка к клавишам 0–30 мс, к переходам 0–200 мс.",
+    "en": "Humanizer adds independent random delays to each key hold, key gap and sequence gap. Disabled by default: key additions 0–30 ms, sequence additions 0–200 ms."
+  },
+  {
+    "ru": "Нажмите клавишу, сочетание или боковую кнопку мыши в этом поле. Повторное нажатие в игре останавливает помощника.",
+    "en": "Press a key, shortcut or side mouse button in this field. Press it again in the game to stop the helper."
+  },
+  {
+    "ru": "1. Включите нужную клавишу и сохраните настройки.\n2. Вернитесь в WARDOGS и нажмите её для старта.\n3. Нажмите повторно для остановки. Смена окна останавливает ввод; SPH-2 сохраняет ожидание следующего R.",
+    "en": "1. Enable a shortcut and save settings.\n2. Return to WARDOGS and press it to start.\n3. Press it again to stop. Switching windows stops input; SPH-2 remains armed for the next R."
+  },
+  {
+    "ru": "Удержание клавиши перезарядки должно быть от 20 до 1000 мс",
+    "en": "Reload key hold must be between 20 and 1000 ms"
+  },
+  {
+    "ru": "Пауза между клавишами перезарядки должна быть от 20 до 2000 мс",
+    "en": "Reload key gap must be between 20 and 2000 ms"
+  },
+  {
+    "ru": "Пауза между комбинациями должна быть от 100 до 10000 мс",
+    "en": "Sequence gap must be between 100 and 10000 ms"
+  }
+]
