@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QEventLoop>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -85,6 +86,7 @@ struct Response {
     QNetworkReply::NetworkError error{QNetworkReply::NoError};
     qsizetype chunk_size{4096};
     bool finish{true};
+    QByteArray retry_after;
 };
 
 class MockReply final : public QNetworkReply {
@@ -99,6 +101,7 @@ public:
         if (!response_.redirect.isEmpty())
             setAttribute(QNetworkRequest::RedirectionTargetAttribute, response_.redirect);
         setHeader(QNetworkRequest::ContentLengthHeader, response_.body.size());
+        if (!response_.retry_after.isEmpty()) setRawHeader("Retry-After", response_.retry_after);
         open(QIODevice::ReadOnly | QIODevice::Unbuffered);
         QTimer::singleShot(0, this, [this] { deliver(); });
     }
@@ -296,10 +299,13 @@ void check_tests() {
     check(network.requests.size() == 1 && network.requests.front().url().toString() ==
           "https://api.github.com/repos/sany86russ/Wardogs-Fire-Control/releases/latest",
           "release API endpoint is fixed to the author's public repository");
-    check(network.requests.front().transferTimeout() == 15000 &&
+    check(network.requests.front().transferTimeout() == 30000 &&
           network.requests.front().attribute(QNetworkRequest::RedirectPolicyAttribute) ==
               QNetworkRequest::ManualRedirectPolicy,
           "metadata has a bounded timeout and manual redirect policy");
+    check(network.requests.front().attribute(QNetworkRequest::CacheLoadControlAttribute) ==
+              QNetworkRequest::AlwaysNetwork,
+          "release checks do not silently reuse stale cached metadata");
     check(!network.requests.front().rawHeader("User-Agent").isEmpty() &&
           network.requests.front().rawHeader("Accept") == "application/vnd.github+json",
           "GitHub API request supplies its required headers");
@@ -463,6 +469,125 @@ void download_tests() {
           "service never overwrites or removes a pre-existing partial file");
 }
 
+void retry_tests() {
+    MockNetwork network;
+    wardogs::updates::Service service(nullptr, &network);
+    network.responses.push_back({503, "temporary service failure", {}, QNetworkReply::ServiceUnavailableError});
+    network.responses.push_back({200, encode(release_object())});
+    bool done = false;
+    int callbacks = 0;
+    service.check("2.7.0", [&](auto value, QString error) {
+        ++callbacks;
+        check(value.has_value() && error.isEmpty(), "a transient metadata failure is retried transparently");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == 2 && callbacks == 1,
+          "metadata retry requests once more but completes only once");
+
+    const auto before = network.requests.size();
+    for (int index = 0; index < 3; ++index)
+        network.responses.push_back({502, {}, {}, QNetworkReply::InternalServerError});
+    done = false;
+    service.check("2.7.0", [&](auto value, QString error) {
+        check(!value && error.contains("attempts 3") && error.contains("host api.github.com"),
+              "exhausted metadata retries report the safe host, failure code and attempt count");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == before + 3, "transient failures are bounded to three total attempts");
+
+    auto terminal_before = network.requests.size();
+    network.responses.push_back({0, {}, {}, QNetworkReply::SslHandshakeFailedError});
+    done = false;
+    service.check("2.7.0", [&](auto value, QString error) {
+        check(!value && !error.isEmpty(), "TLS validation failures remain terminal");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == terminal_before + 1, "TLS failures never retry through a weaker transport");
+
+    terminal_before = network.requests.size();
+    network.responses.push_back({429, {}, {}, QNetworkReply::UnknownContentError, 4096, true, "31"});
+    done = false;
+    service.check("2.7.0", [&](auto value, QString error) {
+        check(!value && !error.isEmpty(), "a long server backoff remains a visible rate-limit failure");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == terminal_before + 1, "a long Retry-After is never bypassed with an early request");
+
+    network.responses.push_back({429, {}, {}, QNetworkReply::UnknownContentError, 4096, true, "1"});
+    network.responses.push_back({200, encode(release_object())});
+    QElapsedTimer backoff;
+    backoff.start();
+    done = false;
+    service.check("2.7.0", [&](auto value, QString error) {
+        check(value.has_value() && error.isEmpty() && backoff.elapsed() >= 900,
+              "a short numeric Retry-After is observed before retrying metadata");
+        done = true;
+    });
+    wait_for(done, service);
+
+    QTemporaryDir directory;
+    const QByteArray payload("archive after an interrupted connection");
+    const auto release = *wardogs::updates::parse_release(encode(release_object(payload)), "2.7.0");
+    const auto target = directory.filePath("retried.zip");
+    network.responses.push_back({200, payload.left(7), {}, QNetworkReply::RemoteHostClosedError});
+    network.responses.push_back({200, payload});
+    done = false;
+    service.download(release, target, {}, [&](QString path, QString error) {
+        check(path == target && error.isEmpty(), "an interrupted archive is restarted and verified");
+        done = true;
+    });
+    wait_for(done, service);
+    QFile result(target);
+    check(result.open(QIODevice::ReadOnly) && result.readAll() == payload,
+          "retries discard partial bytes instead of concatenating corrupt attempts");
+    result.close();
+
+    const auto cdn_before = network.requests.size();
+    network.responses.push_back({302, {}, QUrl("https://release-assets.githubusercontent.com/old?signature=must-not-leak")});
+    network.responses.push_back({403, "expired URL", {}, QNetworkReply::ContentAccessDenied});
+    network.responses.push_back({302, {}, QUrl("https://release-assets.githubusercontent.com/new?signature=must-not-leak")});
+    network.responses.push_back({200, payload});
+    done = false;
+    service.download(release, directory.filePath("fresh-cdn.zip"), {}, [&](QString path, QString error) {
+        check(!path.isEmpty() && error.isEmpty(), "an expired CDN address is refreshed through the release URL");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == cdn_before + 4 &&
+          network.requests[cdn_before].url() == release.download_url &&
+          network.requests[cdn_before + 2].url() == release.download_url,
+          "CDN retry returns to the original approved URL rather than replaying its signed address");
+
+    const auto integrity_before = network.requests.size();
+    network.responses.push_back({200, QByteArray(payload.size(), 'x')});
+    done = false;
+    service.download(release, directory.filePath("bad-digest.zip"), {}, [&](QString path, QString error) {
+        check(path.isEmpty() && error.contains("SHA-256"), "wrong digest is a terminal verification failure");
+        done = true;
+    });
+    wait_for(done, service);
+    check(network.requests.size() == integrity_before + 1, "hash failures do not trigger repeated untrusted downloads");
+
+    const auto cancel_before = network.requests.size();
+    network.responses.push_back({503, {}, {}, QNetworkReply::ServiceUnavailableError});
+    done = false;
+    service.download(release, directory.filePath("cancel-backoff.zip"), {}, [&](QString path, QString error) {
+        check(path.isEmpty() && !error.isEmpty(), "cancellation also interrupts pending retry backoff");
+        done = true;
+    });
+    QTimer::singleShot(50, &service, [&] { service.cancel(); });
+    wait_for(done, service);
+    QEventLoop settle;
+    QTimer::singleShot(650, &settle, &QEventLoop::quit);
+    settle.exec();
+    check(network.requests.size() == cancel_before + 1 && !service.busy(),
+          "a cancelled backoff cannot issue a late download request");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -470,6 +595,7 @@ int main(int argc, char* argv[]) {
     parser_tests();
     check_tests();
     download_tests();
+    retry_tests();
     std::cout << assertions << " updater assertions, " << failures << " failures\n";
     return failures == 0 ? 0 : 1;
 }

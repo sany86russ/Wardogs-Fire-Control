@@ -1,5 +1,6 @@
 #include "update_ui.hpp"
 #include "localization.hpp"
+#include "wardogs/logger.hpp"
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -34,6 +35,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -81,7 +83,30 @@ QByteArray release_json() {
         .toJson(QJsonDocument::Compact);
 }
 
-struct Response { QByteArray body; bool finish{true}; };
+void write_portable_helper(const QString& directory, const QByteArray& script = QByteArray("installed trusted helper")) {
+    const auto digest = QCryptographicHash::hash(script, QCryptographicHash::Sha256).toHex();
+    const auto manifest = QJsonDocument(QJsonObject{
+        {QStringLiteral("product"), QStringLiteral("WARDOGS Fire Control")},
+        {QStringLiteral("version"), QStringLiteral("2.7.0")},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{
+            {QStringLiteral("path"), QStringLiteral("Update.ps1")},
+            {QStringLiteral("length"), script.size()},
+            {QStringLiteral("sha256"), QString::fromLatin1(digest)}}}}})
+        .toJson(QJsonDocument::Compact);
+    for (const auto& entry : {std::pair{QStringLiteral("Update.ps1"), script},
+                              std::pair{QStringLiteral("package-manifest.json"), manifest}}) {
+        QFile file(QDir(directory).filePath(entry.first));
+        if (!file.open(QIODevice::WriteOnly) || file.write(entry.second) != entry.second.size())
+            throw std::runtime_error("Cannot create a portable updater fixture");
+    }
+}
+
+struct Response {
+    QByteArray body;
+    bool finish{true};
+    int status{200};
+    QNetworkReply::NetworkError error{QNetworkReply::NoError};
+};
 
 class MockReply final : public QNetworkReply {
 public:
@@ -91,7 +116,7 @@ public:
         setRequest(request);
         setUrl(request.url());
         setOperation(operation);
-        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
+        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, response_.status);
         setHeader(QNetworkRequest::ContentLengthHeader, response_.body.size());
         open(QIODevice::ReadOnly | QIODevice::Unbuffered);
         QTimer::singleShot(0, this, [this] {
@@ -100,7 +125,11 @@ public:
             emit metaDataChanged();
             emit readyRead();
             emit downloadProgress(available_, available_);
-            if (response_.finish && !isFinished()) { setFinished(true); emit finished(); }
+            if (response_.finish && !isFinished()) {
+                if (response_.error != NoError)
+                    setError(response_.error, QStringLiteral("Error transferring CDN?signature=must-not-escape"));
+                setFinished(true); emit finished();
+            }
         });
     }
     void abort() override {
@@ -216,11 +245,7 @@ void download_cancellation_and_lifetime_tests() {
     QWidget window;
     QTemporaryDir install;
     check(install.isValid(), "the fake portable installation is created");
-    for (const auto* name : {"package-manifest.json", "Update.ps1"}) {
-        QFile file(QDir(install.path()).filePath(QString::fromLatin1(name)));
-        check(file.open(QIODevice::WriteOnly) && file.write("offline fixture") > 0,
-              "portable marker fixtures are written without running an installer");
-    }
+    write_portable_helper(install.path());
     MockNetwork network;
     network.responses.push_back({release_json()});
     network.responses.push_back({QByteArray("held download"), false});
@@ -257,6 +282,105 @@ void download_cancellation_and_lifetime_tests() {
     check(network.requests.size() == 3, "destroying a controller cancels pending callbacks without another request");
 }
 
+void installed_helper_tests() {
+    QTemporaryDir install;
+    write_portable_helper(install.path());
+    check(wardogs::updates::installed_installer_script(install.path(), "2.7.0") == "installed trusted helper",
+          "only hash-checked installed helper bytes are selected for execution");
+    const auto staged = QDir(install.path()).filePath(".wardogs-update-ABC123/staged");
+    check(QDir().mkpath(staged), "a deliberately different downloaded helper fixture can be staged");
+    QFile untrusted(QDir(staged).filePath("Update.ps1"));
+    check(untrusted.open(QIODevice::WriteOnly) && untrusted.write("downloaded script is not the trust anchor") > 0,
+          "the new package may contain different installer code");
+    untrusted.close();
+    check(wardogs::updates::installed_installer_script(install.path(), "2.7.0") == "installed trusted helper",
+          "downloaded installer code cannot replace the installed bootstrap trust anchor");
+    const auto rejects = [&](const QString& version, const char* message) {
+        bool rejected = false;
+        try { (void)wardogs::updates::installed_installer_script(install.path(), version); }
+        catch (const std::runtime_error&) { rejected = true; }
+        check(rejected, message);
+    };
+    rejects("2.8.0", "a mixed installation version cannot launch an unrelated helper");
+    QFile helper(QDir(install.path()).filePath("Update.ps1"));
+    check(helper.open(QIODevice::WriteOnly) && helper.write("tampered trusted helper") > 0,
+          "a damaged installed helper fixture can be written");
+    helper.close();
+    rejects("2.7.0", "a changed installed helper is rejected before PowerShell can execute it");
+    write_portable_helper(install.path());
+    check(helper.remove(), "installed helper fixture can be removed");
+    rejects("2.7.0", "missing installed helper produces a recoverable preflight failure");
+    write_portable_helper(install.path());
+    QFile manifest(QDir(install.path()).filePath("package-manifest.json"));
+    check(manifest.open(QIODevice::WriteOnly) && manifest.write("not JSON") > 0,
+          "a damaged installed manifest fixture can be written");
+    manifest.close();
+    rejects("2.7.0", "malformed installed metadata cannot authorize helper execution");
+}
+
+void zero_byte_failure_tests() {
+    for (const bool english : {false, true}) {
+        wardogs::i18n::set_language(english ? wardogs::UiLanguage::english : wardogs::UiLanguage::russian);
+        QWidget window;
+        QTemporaryDir install;
+        write_portable_helper(install.path());
+        const auto log_path = QDir(install.path()).filePath("update-test.log");
+        check(wardogs::initialize_session_log(std::filesystem::path(log_path.toStdWString()), "2.7.0"),
+              "zero-byte updater failures have an isolated diagnostic log fixture");
+        MockNetwork network;
+        network.responses.push_back({release_json()});
+        network.responses.push_back({QByteArray("access denied"), true, 403, QNetworkReply::ContentAccessDenied});
+        wardogs::updates::Controller controller(&window, QStringLiteral("2.7.0"), install.path(), &network);
+        controller.check(false);
+        wait_for([&] { return !controller.banner_widget()->isHidden(); });
+        bool observed = false;
+        QString text, details;
+        QTimer dismiss;
+        dismiss.setInterval(1);
+        QObject::connect(&dismiss, &QTimer::timeout, &window, [&] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                auto* message = qobject_cast<QMessageBox*>(widget);
+                if (!message || !message->isVisible() || message->objectName() != "updateFailureDialog") continue;
+                text = message->text(); details = message->detailedText();
+                const auto retry = message->findChild<QPushButton*>("retryUpdateButton");
+                const auto release = message->findChild<QPushButton*>("openFailedUpdateReleaseButton");
+                check(retry && release && retry->isVisible() && release->isVisible(),
+                      "zero-byte failure exposes Retry and the manual release action");
+                check(retry && retry->text() == (english ? QStringLiteral("Retry") : QString::fromUtf8("Повторить")),
+                      "the recovery action follows the selected language");
+                QDir().mkpath("Testing");
+                check(message->grab().save(QDir::current().filePath(english ?
+                    "Testing/update-error-en.png" : "Testing/update-error-ru.png")),
+                    "the production recovery dialog is captured on the isolated CI runner");
+                observed = true;
+                message->reject();
+            }
+        });
+        dismiss.start();
+        window.findChild<QPushButton*>("installUpdateButton")->click();
+        wait_for([&] { return observed; });
+        dismiss.stop();
+        check(text.contains(english ? QStringLiteral("Stage:") : QString::fromUtf8("Этап:")) &&
+              text.contains(english ? QStringLiteral("Downloading") : QString::fromUtf8("Скачивание")),
+              "the failure dialog identifies downloading as the failing phase before progress");
+        check(details.contains("host github.com") && details.contains("HTTP 403") &&
+              details.contains("network error 201") && !details.contains("must-not-escape") &&
+              !details.contains("signature="),
+              "technical details keep safe error codes while omitting signed CDN queries");
+        check(network.requests.size() == 2 && QDir(install.path()).entryList(
+                  {QStringLiteral(".wardogs-update-*")}, QDir::Dirs | QDir::Hidden).isEmpty(),
+              "a zero-byte access failure does not start the installer or retain a partial archive");
+        wardogs::shutdown_session_log();
+        QFile log(log_path);
+        check(log.open(QIODevice::ReadOnly), "the failed update diagnostic can be read after cleanup");
+        const auto diagnostic = log.readAll();
+        check(diagnostic.contains("updates.request stage=archive host=github.com") &&
+              diagnostic.contains("updates.failed") && diagnostic.contains("HTTP 403") &&
+              !diagnostic.contains("must-not-escape") && !diagnostic.contains("signature="),
+              "the durable session log retains safe initial-connection evidence after deleting staging");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -285,6 +409,8 @@ int main(int argc, char** argv) {
     banner_and_language_tests();
     current_version_message_test();
     download_cancellation_and_lifetime_tests();
+    installed_helper_tests();
+    zero_byte_failure_tests();
     std::cout << assertions << " offline update UI assertions, " << failures << " failure(s)\n";
     return failures ? 1 : 0;
 }

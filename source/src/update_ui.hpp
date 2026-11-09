@@ -23,6 +23,12 @@ class QWidget;
 
 namespace wardogs::updates {
 
+// The installed helper remains the trust anchor for this update. Do not execute
+// code from a new staged package before the trusted helper validates it.
+// Detect damaged/mixed portable files before launching Windows PowerShell.
+QByteArray installed_installer_script(const QString& install_directory,
+                                     const QString& current_version);
+
 // Created only for an ordinary application window. Diagnostic previews never
 // construct this controller or its network service.
 class Controller final : public QObject {

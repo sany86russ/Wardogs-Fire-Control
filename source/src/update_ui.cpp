@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
@@ -14,6 +15,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
@@ -21,10 +23,13 @@
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <utility>
 
 namespace wardogs::updates {
@@ -43,6 +48,59 @@ void hide_process_window(QProcess* process) {
 }
 
 }  // namespace
+
+QByteArray installed_installer_script(const QString& install_directory,
+                                     const QString& current_version) {
+    const auto read_bounded = [](const QString& path, qint64 maximum) {
+        const QFileInfo info(path);
+        QFile file(path);
+        if (!info.isFile() || info.isSymLink() || info.size() <= 0 || info.size() > maximum ||
+            !file.open(QIODevice::ReadOnly))
+            throw std::runtime_error("A verified installer file is missing or unreadable.");
+        const auto bytes = file.read(maximum + 1);
+        if (bytes.size() != info.size() || bytes.size() > maximum)
+            throw std::runtime_error("A verified installer file changed while being read.");
+        return bytes;
+    };
+    const auto json_object = [&](const QString& path, qint64 maximum) {
+        QJsonParseError error{};
+        const auto document = QJsonDocument::fromJson(read_bounded(path, maximum), &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject())
+            throw std::runtime_error("The installed package manifest is invalid.");
+        return document.object();
+    };
+    const QString install = QDir::cleanPath(install_directory);
+    if (!QDir::isAbsolutePath(install) || !QFileInfo(install).isDir() || QFileInfo(install).isSymLink())
+        throw std::runtime_error("The application installation directory is unavailable.");
+    const auto manifest = json_object(QDir(install).filePath(QStringLiteral("package-manifest.json")), 5 * 1024 * 1024);
+    const auto files = manifest.value(QStringLiteral("files"));
+    if (manifest.value(QStringLiteral("product")).toString() != QStringLiteral("WARDOGS Fire Control") ||
+        manifest.value(QStringLiteral("version")).toString() != current_version || !files.isArray() ||
+        files.toArray().isEmpty() || files.toArray().size() > 10000)
+        throw std::runtime_error("The installed package manifest does not match the running version.");
+    QByteArray expected_hash;
+    qint64 expected_length{};
+    bool found = false;
+    static const QRegularExpression digest(QStringLiteral("^[0-9a-fA-F]{64}\\z"));
+    for (const auto& value : files.toArray()) {
+        const auto entry = value.toObject();
+        const auto path = entry.value(QStringLiteral("path")).toString();
+        if (path.compare(QStringLiteral("Update.ps1"), Qt::CaseInsensitive) != 0) continue;
+        const double length = entry.value(QStringLiteral("length")).toDouble(-1);
+        const auto hash = entry.value(QStringLiteral("sha256")).toString();
+        if (path != QStringLiteral("Update.ps1") || found || !std::isfinite(length) || std::floor(length) != length || length <= 0 ||
+            length > 5 * 1024 * 1024 || !digest.match(hash).hasMatch())
+            throw std::runtime_error("The installed package does not declare one valid installer script.");
+        found = true;
+        expected_length = static_cast<qint64>(length);
+        expected_hash = QByteArray::fromHex(hash.toLatin1());
+    }
+    if (!found) throw std::runtime_error("The installed package has no verified installer script.");
+    const auto script = read_bounded(QDir(install).filePath(QStringLiteral("Update.ps1")), 5 * 1024 * 1024);
+    if (script.size() != expected_length || QCryptographicHash::hash(script, QCryptographicHash::Sha256) != expected_hash)
+        throw std::runtime_error("The installed updater failed its size or SHA-256 verification. Extract a complete Windows ZIP to a writable folder.");
+    return script;
+}
 
 Controller::Controller(QWidget* window, QString current_version, QString install_directory,
                        QNetworkAccessManager* network)
@@ -159,9 +217,7 @@ QString Controller::powershell_path() const {
 }
 
 QStringList Controller::helper_arguments(const QString& mode) const {
-    const QString helper = mode == QStringLiteral("Prepare")
-        ? QDir(install_directory_).filePath(QStringLiteral("Update.ps1"))
-        : QDir(work_->path()).filePath(QStringLiteral("Update.ps1"));
+    const QString helper = QDir(work_->path()).filePath(QStringLiteral("Update.ps1"));
     QStringList result{QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
         QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
         QStringLiteral("-File"), helper, QStringLiteral("-Mode"), mode,
@@ -177,6 +233,7 @@ QStringList Controller::helper_arguments(const QString& mode) const {
 
 void Controller::begin_update() {
     if (!pending_ || operation_active_ || service_->busy()) return;
+    phase_source_ = QString::fromUtf8("Подготовка обновления и проверка файлов…");
     const QDir install(install_directory_);
     if (!QFileInfo(install.filePath(QStringLiteral("package-manifest.json"))).isFile() ||
         !QFileInfo(install.filePath(QStringLiteral("Update.ps1"))).isFile()) {
@@ -191,16 +248,20 @@ void Controller::begin_update() {
         return;
     }
     if (powershell_path().isEmpty()) {
-        QMessageBox::warning(window_, translated("Обновления"),
-            translated("Windows PowerShell 5.1 не найден. Скачайте обновление вручную со страницы релиза."));
+        fail_operation(translated("Windows PowerShell 5.1 не найден. Скачайте обновление вручную со страницы релиза."));
+        return;
+    }
+    try {
+        (void)installed_installer_script(install_directory_, current_version_);
+    } catch (const std::exception& error) {
+        fail_operation(QString::fromUtf8(error.what()));
         return;
     }
     if (before_install_ && !before_install_()) return;
     work_ = std::make_unique<QTemporaryDir>(install.filePath(QStringLiteral(".wardogs-update-XXXXXX")));
     if (!work_->isValid()) {
         work_.reset();
-        QMessageBox::warning(window_, translated("Обновления"),
-            translated("Не удалось создать папку обновления рядом с приложением. Проверьте права записи или скачайте релиз вручную."));
+        fail_operation(translated("Не удалось создать папку обновления рядом с приложением. Проверьте права записи или скачайте релиз вручную."));
         return;
     }
     cancelled_ = false;
@@ -250,17 +311,36 @@ void Controller::prepare_update() {
     received_ = total_ = 0;
     progress_->setRange(0, 0);
     refresh_text();
+    QByteArray script;
+    try {
+        script = installed_installer_script(install_directory_, current_version_);
+    } catch (const std::exception& error) {
+        fail_operation(QString::fromUtf8(error.what()));
+        return;
+    }
+    QSaveFile helper(QDir(work_->path()).filePath(QStringLiteral("Update.ps1")));
+    if (!helper.open(QIODevice::WriteOnly) || helper.write(script) != script.size() || !helper.commit()) {
+        fail_operation(QStringLiteral("Could not stage the verified installed update helper."));
+        return;
+    }
     prepare_ = new QProcess(this);
     prepare_->setProgram(powershell_path());
     prepare_->setArguments(helper_arguments(QStringLiteral("Prepare")));
     prepare_->setWorkingDirectory(work_->path());
     hide_process_window(prepare_);
+    auto* deadline = new QTimer(prepare_);
+    deadline->setSingleShot(true);
+    connect(deadline, &QTimer::timeout, this, [this] {
+        if (operation_active_ && !cancelled_)
+            fail_operation(QStringLiteral("Update preparation did not finish within ten minutes."));
+    });
     connect(prepare_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (!cancelled_ && operation_active_ && error == QProcess::FailedToStart)
             fail_operation(prepare_ ? prepare_->errorString() : QStringLiteral("Could not start the update helper."));
     });
     connect(prepare_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-        [this](int code, QProcess::ExitStatus status) {
+        [this, deadline](int code, QProcess::ExitStatus status) {
+            deadline->stop();
             if (cancelled_ || !operation_active_) return;
             if (status != QProcess::NormalExit || code != 0) {
                 QFile log(QDir(work_->path()).filePath(QStringLiteral("error.log")));
@@ -273,14 +353,25 @@ void Controller::prepare_update() {
             launch_installer();
         });
     prepare_->start();
+    deadline->start(10 * 60 * 1000);
 }
 
 void Controller::launch_installer() {
     const QString helper = QDir(work_->path()).filePath(QStringLiteral("Update.ps1"));
-    if (!QFile::copy(QDir(install_directory_).filePath(QStringLiteral("Update.ps1")), helper)) {
-        fail_operation(QStringLiteral("Could not stage the update helper."));
+    QByteArray script;
+    try {
+        script = installed_installer_script(install_directory_, current_version_);
+    } catch (const std::exception& error) {
+        fail_operation(QString::fromUtf8(error.what()));
         return;
     }
+    QFile staged_helper(helper);
+    if (!staged_helper.open(QIODevice::ReadOnly) || staged_helper.size() != script.size() ||
+        staged_helper.read(script.size() + 1) != script) {
+        fail_operation(QStringLiteral("The private installed update helper changed after preparation."));
+        return;
+    }
+    staged_helper.close();
     QProcess process;
     process.setProgram(powershell_path());
     process.setArguments(helper_arguments(QStringLiteral("Install")));
@@ -292,11 +383,17 @@ void Controller::launch_installer() {
         return;
     }
     installer_started_ = true;
-    installer_handle_ = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE,
+    installer_handle_ = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
         static_cast<DWORD>(installer_pid));
+    const DWORD monitor_error = installer_handle_ ? ERROR_SUCCESS : GetLastError();
     // A detached helper may still be reading this directory after a timeout or
     // cancellation. Keep it until that helper has safely observed the marker.
     work_->setAutoRemove(false);
+    if (!installer_handle_) {
+        fail_operation(QStringLiteral("The installation helper could not be monitored (Windows error %1).")
+            .arg(monitor_error));
+        return;
+    }
     ready_wait_.start();
     phase_source_ = QString::fromUtf8("Проверка готовности установщика…");
     refresh_text();
@@ -308,6 +405,20 @@ void Controller::poll_installer() {
     QFile error(QDir(work_->path()).filePath(QStringLiteral("error.log")));
     if (error.exists() && error.open(QIODevice::ReadOnly)) {
         fail_operation(QString::fromUtf8(error.read(8192)));
+        return;
+    }
+    const DWORD helper_state = installer_handle_
+        ? WaitForSingleObject(installer_handle_, 0) : WAIT_FAILED;
+    if (helper_state == WAIT_FAILED) {
+        fail_operation(QStringLiteral("The installation helper could not be monitored (Windows error %1).")
+            .arg(GetLastError()));
+        return;
+    }
+    if (helper_state == WAIT_OBJECT_0) {
+        DWORD code{};
+        if (!GetExitCodeProcess(installer_handle_, &code)) code = GetLastError();
+        fail_operation(QStringLiteral("The installation helper exited before confirming readiness (exit %1).")
+            .arg(code));
         return;
     }
     QFile ready(QDir(work_->path()).filePath(QStringLiteral("install-ready.json")));
@@ -333,8 +444,8 @@ void Controller::poll_installer() {
             return;
         }
     }
-    if (ready_wait_.elapsed() >= 60000) {
-        fail_operation(QStringLiteral("The installation helper did not confirm readiness within 60 seconds."));
+    if (ready_wait_.elapsed() >= 180000) {
+        fail_operation(QStringLiteral("The installation helper did not confirm readiness within three minutes."));
     }
 }
 
@@ -395,9 +506,34 @@ void Controller::finish_operation() {
 }
 
 void Controller::fail_operation(const QString& detail) {
+    const QString phase = i18n::text(phase_source_);
+    log_warning("updates.failed phase=" + phase_source_.toStdString() + " detail=" + detail.toStdString());
+    const bool diagnostic_saved = flush_session_log();
+    const auto diagnostic_path = diagnostic_saved ? active_log_path() : std::filesystem::path{};
     cancel_operation();
-    if (!shutting_down_) QMessageBox::warning(window_, translated("Обновления"),
-        translated("Не удалось установить обновление. Текущая версия продолжает работать.\n%1").arg(detail));
+    if (shutting_down_) return;
+    QMessageBox message(QMessageBox::Warning, translated("Обновления"),
+        translated("Не удалось установить обновление. Текущая версия продолжает работать.\n%1")
+            .arg(translated("Этап: %1").arg(phase)) + QStringLiteral("\n\n") +
+            translated("Проверьте подключение, настройки VPN/прокси и права записи. Можно повторить попытку или скачать Windows ZIP со страницы релиза."),
+        QMessageBox::NoButton, window_);
+    message.setObjectName(QStringLiteral("updateFailureDialog"));
+    auto* retry = message.addButton(translated("Повторить"), QMessageBox::AcceptRole);
+    retry->setObjectName(QStringLiteral("retryUpdateButton"));
+    auto* release = message.addButton(translated("Открыть релиз"), QMessageBox::ActionRole);
+    release->setObjectName(QStringLiteral("openFailedUpdateReleaseButton"));
+    message.addButton(translated("Закрыть"), QMessageBox::RejectRole);
+    message.setDetailedText(detail + (diagnostic_path.empty() ? QString{} :
+        QStringLiteral("\n\n") + translated("Диагностика: %1")
+            .arg(QString::fromStdWString(diagnostic_path.wstring()))));
+    i18n::watch(&message);
+    const QPointer<Controller> guard(this);
+    message.exec();
+    if (!guard || guard->shutting_down_) return;
+    if (message.clickedButton() == release) guard->open_release();
+    else if (message.clickedButton() == retry) QTimer::singleShot(0, guard, [guard] {
+        if (guard && !guard->shutting_down_) guard->begin_update();
+    });
 }
 
 }  // namespace wardogs::updates

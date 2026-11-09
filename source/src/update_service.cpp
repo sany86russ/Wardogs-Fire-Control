@@ -1,4 +1,5 @@
 #include "update_service.hpp"
+#include "wardogs/logger.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -14,9 +15,11 @@
 #include <QRegularExpression>
 #include <QTimer>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <stdexcept>
 #include <utility>
 
@@ -25,6 +28,9 @@ namespace {
 
 constexpr qint64 maximum_archive_size = 512LL * 1024 * 1024;
 constexpr qsizetype maximum_metadata_size = 1024 * 1024;
+constexpr int maximum_attempts = 3;
+constexpr int metadata_deadline_ms = 2 * 60 * 1000;
+constexpr int download_deadline_ms = 60 * 60 * 1000;
 const QString repository =
     QStringLiteral("https://github.com/sany86russ/Wardogs-Fire-Control");
 const QUrl latest_endpoint(QStringLiteral(
@@ -89,7 +95,12 @@ QNetworkRequest request_for(const QUrl& url, bool metadata) {
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
-    request.setTransferTimeout(metadata ? 15000 : 30000);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
+                         QNetworkRequest::AlwaysNetwork);
+    request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+    // This is an inactivity timeout, not the maximum duration of a download.
+    // A slow connection that is still delivering bytes must be allowed to finish.
+    request.setTransferTimeout(metadata ? 30000 : 90000);
     return request;
 }
 
@@ -160,6 +171,7 @@ struct Service::Impl {
     QPointer<QNetworkAccessManager> network;
     QPointer<QNetworkReply> reply;
     QTimer deadline;
+    QTimer retry_timer;
     Operation operation{Operation::none};
     CheckCallback check_callback;
     DownloadCallback download_callback;
@@ -173,11 +185,17 @@ struct Service::Impl {
     std::unique_ptr<QCryptographicHash> hash;
     qint64 received{};
     int redirects{};
+    int attempts{};
 
     explicit Impl(Service* service, QNetworkAccessManager* manager)
         : owner(service), network(manager ? manager :
                                  new QNetworkAccessManager(service)) {
         deadline.setSingleShot(true);
+        retry_timer.setSingleShot(true);
+        QObject::connect(&retry_timer, &QTimer::timeout, owner, [this] {
+            if (operation != Operation::none)
+                get(operation == Operation::check ? latest_endpoint : release.download_url);
+        });
         QObject::connect(&deadline, &QTimer::timeout, owner, [this] {
             fail(QStringLiteral("The update request timed out."));
         });
@@ -187,6 +205,7 @@ struct Service::Impl {
 
     void reset(bool remove_partial) {
         deadline.stop();
+        retry_timer.stop();
         operation = Operation::none;
         if (reply) {
             QObject::disconnect(reply, nullptr, owner, nullptr);
@@ -221,11 +240,70 @@ struct Service::Impl {
         else if (operation == Operation::download) finish_download({}, error);
     }
 
+    bool retry(QNetworkReply* failed_reply, bool truncated = false) {
+        if (attempts >= maximum_attempts) return false;
+        const int status = failed_reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto error = failed_reply->error();
+        if (error == QNetworkReply::SslHandshakeFailedError ||
+            error == QNetworkReply::AuthenticationRequiredError ||
+            error == QNetworkReply::ProxyAuthenticationRequiredError ||
+            error == QNetworkReply::OperationCanceledError ||
+            error == QNetworkReply::InsecureRedirectError || error == QNetworkReply::TooManyRedirectsError)
+            return false;
+        const bool expired_asset = operation == Operation::download && status == 403 &&
+            failed_reply->url().host() != QStringLiteral("github.com");
+        const bool transient_http = status == 408 || status == 429 || status == 500 ||
+            status == 502 || status == 503 || status == 504;
+        const bool transient_network = error == QNetworkReply::ConnectionRefusedError ||
+            error == QNetworkReply::RemoteHostClosedError || error == QNetworkReply::HostNotFoundError ||
+            error == QNetworkReply::TimeoutError || error == QNetworkReply::TemporaryNetworkFailureError ||
+            error == QNetworkReply::NetworkSessionFailedError || error == QNetworkReply::UnknownNetworkError ||
+            error == QNetworkReply::ProxyConnectionRefusedError || error == QNetworkReply::ProxyConnectionClosedError ||
+            error == QNetworkReply::ProxyNotFoundError || error == QNetworkReply::ProxyTimeoutError;
+        // TLS, authentication, foreign redirects, oversized streams and bad
+        // digests remain terminal. Never retry through a weaker connection.
+        if (!truncated && !expired_asset && !transient_http && !transient_network) return false;
+        int delay = 500 * attempts;
+        bool valid_retry_after = false;
+        const auto retry_after = failed_reply->rawHeader("Retry-After").toLongLong(&valid_retry_after);
+        if (valid_retry_after && retry_after > 0) {
+            // Respect a server's longer backoff by stopping rather than sending
+            // early requests or holding the update UI for an unbounded period.
+            if (retry_after > 30) return false;
+            delay = std::max(delay, static_cast<int>(retry_after * 1000));
+        }
+        QObject::disconnect(failed_reply, nullptr, owner, nullptr);
+        reply = nullptr;
+        failed_reply->deleteLater();
+        metadata.clear();
+        redirects = 0;
+        if (operation == Operation::download) {
+            if (!file || !file->resize(0) || !file->seek(0)) {
+                fail(QStringLiteral("The interrupted update archive could not be reset on disk."));
+                return true;
+            }
+            hash->reset();
+            received = 0;
+        }
+        ++attempts;
+        log_warning("updates.retry stage=" + std::string(operation == Operation::check ? "metadata" : "archive") +
+            " host=" + failed_reply->url().host().toStdString() + " http=" + std::to_string(status) +
+            " network=" + std::to_string(static_cast<int>(error)) + " attempt=" + std::to_string(attempts));
+        retry_timer.start(delay);
+        // Every attempt starts at the exact release URL to refresh an expired
+        // signed CDN address; no partial bytes are trusted across attempts.
+        auto progress = progress_callback;
+        if (operation == Operation::download && progress) progress(0, release.size);
+        return true;
+    }
+
     void get(const QUrl& url) {
         if (!network) {
             fail(QStringLiteral("The update network service is unavailable."));
             return;
         }
+        log_info("updates.request stage=" + std::string(operation == Operation::check ? "metadata" : "archive") +
+            " host=" + url.host().toStdString() + " attempt=" + std::to_string(attempts));
         reply = network->get(request_for(url, operation == Operation::check));
         reply->setReadBufferSize(128 * 1024);
         auto* current_reply = reply.data();
@@ -299,10 +377,13 @@ struct Service::Impl {
             return;
         }
         if (completed_reply->error() != QNetworkReply::NoError || status != 200) {
+            if (retry(completed_reply)) return;
             // Qt error strings can contain a signed CDN URL. Keep temporary
             // query credentials out of dialogs, logs, and diagnostic output.
-            fail(QStringLiteral("The GitHub update request failed (HTTP %1, network error %2).")
-                     .arg(status).arg(static_cast<int>(completed_reply->error())));
+            fail(QStringLiteral("The GitHub update request failed (stage %1, host %2, HTTP %3, network error %4, attempts %5).")
+                     .arg(operation == Operation::check ? QStringLiteral("metadata") : QStringLiteral("archive"),
+                          completed_reply->url().host())
+                     .arg(status).arg(static_cast<int>(completed_reply->error())).arg(attempts));
             return;
         }
         const QPointer<Service> owner_guard(owner);
@@ -318,6 +399,7 @@ struct Service::Impl {
             }
             return;
         }
+        if (received != release.size && retry(completed_reply, true)) return;
         if (received != release.size || hash->result() != release.sha256) {
             fail(QStringLiteral("The update archive failed its size or SHA-256 verification."));
             return;
@@ -358,7 +440,8 @@ void Service::check(const QString& current_version, CheckCallback callback) {
     impl_->current_version = current_version;
     impl_->check_callback = std::move(callback);
     impl_->metadata.clear();
-    impl_->deadline.start(15000);
+    impl_->attempts = 1;
+    impl_->deadline.start(metadata_deadline_ms);
     impl_->get(latest_endpoint);
 }
 
@@ -393,9 +476,10 @@ void Service::download(const ReleaseInfo& release, const QString& destination,
     impl_->hash = std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
     impl_->received = 0;
     impl_->redirects = 0;
+    impl_->attempts = 1;
     impl_->progress_callback = std::move(progress);
     impl_->download_callback = std::move(callback);
-    impl_->deadline.start(10 * 60 * 1000);
+    impl_->deadline.start(download_deadline_ms);
     impl_->get(release.download_url);
 }
 
