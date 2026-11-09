@@ -4,7 +4,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ArchivePath,
     [Parameter(Mandatory = $true)][string]$PreviousArchivePath,
-    [Parameter(Mandatory = $true)][string]$EvidenceDirectory
+    [Parameter(Mandatory = $true)][string]$EvidenceDirectory,
+    [ValidateSet('Installed', 'CurrentCandidate')][string]$HelperMode = 'CurrentCandidate'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -371,6 +372,7 @@ $receipt = [ordered]@{
     state = 'starting'; boundary = 'Actual full portable replacement and GUI restart on an isolated runner; two-second liveness does not prove long-term health.'
     new_archive_sha256 = Get-WardogsFileHash $ArchivePath
     previous_archive_sha256 = Get-WardogsFileHash $PreviousArchivePath
+    install_helper_mode = $HelperMode
     cleanup_process_ids = @()
     close_attempts = @()
 }
@@ -407,7 +409,10 @@ try {
     if (-not $fixtureRoot.StartsWith($runnerRoot + '\', [StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $fixtureRoot)) {
         throw 'The runner fixture path is not a fresh direct child of RUNNER_TEMP.'
     }
-    $installRoot = Join-Path $fixtureRoot 'Portable application'
+    # Keep the script ASCII for Windows PowerShell 5.1 while exercising a real
+    # Cyrillic installation path and spaces in both process argument modes.
+    $cyrillic = [string][char]0x0410 + [char]0x0440 + [char]0x0442 + [char]0x0430
+    $installRoot = Join-Path $fixtureRoot ('Portable ' + $cyrillic + ' application')
     $workRoot = Join-Path $installRoot ('.wardogs-update-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $installRoot, $workRoot -Force | Out-Null
     $receipt.fixture_directory = $fixtureRoot
@@ -415,7 +420,12 @@ try {
     $executable = Join-Path $installRoot 'WarDogsDistanceCalculator.exe'
     $archiveDigest = $receipt.new_archive_sha256
     Copy-Item -LiteralPath $ArchivePath -Destination (Join-Path $workRoot 'download.zip')
-    Copy-Item -LiteralPath $helperSource -Destination (Join-Path $workRoot 'Update.ps1')
+    $installedHelper = Join-Path $installRoot 'Update.ps1'
+    if (-not (Test-Path -LiteralPath $installedHelper -PathType Leaf)) {
+        throw 'The previous published package has no update helper for a real forward upgrade.'
+    }
+    $receipt.prepare_helper_source = 'verified previously published installation'
+    $receipt.prepare_helper_sha256 = Get-WardogsFileHash $installedHelper
     $sentinel = [Guid]::NewGuid().ToString('N')
     $preserved = @{
         'settings.ini' = 'portable-user-settings-' + $sentinel
@@ -468,13 +478,33 @@ try {
     $receipt.old_main_window_extended_style = [WardogsRestartSmokeWindows]::ExtendedStyle($oldWindow)
     $receipt.old_window_candidates = @([WardogsRestartSmokeWindows]::WindowCandidates([uint32]$oldProcess.Id))
 
-    $prepareProcess = Start-SmokeHelper $helperSource 'Prepare' $oldProcess.Id
+    # Exercise the helper users already have, rather than silently substituting
+    # current source into the first 2.16 -> 2.17 preparation step.
+    $prepareProcess = Start-SmokeHelper $installedHelper 'Prepare' $oldProcess.Id
     if (-not $prepareProcess.WaitForExit(90000) -or $prepareProcess.ExitCode -ne 0) { throw 'Real package preparation failed or timed out.' }
+    $installHelperSource = $installedHelper
+    if ($HelperMode -ceq 'CurrentCandidate') {
+        # CI-only selection exercises the new installer algorithm against the
+        # old package. Production clients keep using their installed helper.
+        $installHelperSource = Join-Path $workRoot 'staged\Update.ps1'
+        $helperRecords = @($newManifest.files | Where-Object { $_.path -ceq 'Update.ps1' })
+        if ($helperRecords.Count -ne 1 -or
+                (Get-Item -LiteralPath $installHelperSource).Length -ne $helperRecords[0].length -or
+                (Get-WardogsFileHash $installHelperSource) -ine $helperRecords[0].sha256) {
+            throw 'The candidate installer helper is not the verified release payload.'
+        }
+    }
+    $privateHelper = Join-Path $workRoot 'Update.ps1'
+    Copy-Item -LiteralPath $installHelperSource -Destination $privateHelper
+    $receipt.install_helper_sha256 = Get-WardogsFileHash $privateHelper
+    if ($receipt.install_helper_sha256 -ine (Get-WardogsFileHash $installHelperSource)) {
+        throw 'The copied installation helper changed during staging.'
+    }
     $installStarted = [DateTime]::UtcNow
-    $installProcess = Start-SmokeHelper (Join-Path $workRoot 'Update.ps1') 'Install' $oldProcess.Id
+    $installProcess = Start-SmokeHelper $privateHelper 'Install' $oldProcess.Id
     $receipt.install_helper_id = $installProcess.Id
     $readyPath = Join-Path $workRoot 'install-ready.json'
-    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
     $ready = $null
     while (-not $ready) {
         if (Test-Path -LiteralPath (Join-Path $workRoot 'error.log')) { throw ([IO.File]::ReadAllText((Join-Path $workRoot 'error.log'))) }
@@ -559,7 +589,7 @@ try {
     $receipt.profile_height_data_preserved = $true
     $receipt.profile_planning_data_preserved = @($planningProfileFiles | ForEach-Object { $_.name })
     $receipt.state = 'passed'
-    Write-Output "PASS real portable update/restart: $($oldManifest.version) -> $($newManifest.version); $($receipt.verified_package_files) package files verified."
+    Write-Output "PASS real portable update/restart ($HelperMode helper): $($oldManifest.version) -> $($newManifest.version); $($receipt.verified_package_files) package files verified."
 } catch {
     $receipt.state = 'failed'
     $receipt.error = $_.Exception.Message

@@ -141,6 +141,68 @@ function Start-TestHelper {
     return $process
 }
 
+Invoke-Test 'transient file locks retry within a finite budget and permanent errors do not retry' {
+    $oldAttempts = $script:FileRetryAttempts
+    $oldDelay = $script:FileRetryDelayMilliseconds
+    try {
+        $script:FileRetryAttempts = 3
+        $script:FileRetryDelayMilliseconds = 0
+        $script:RetryTestAttempts = 0
+        $value = Invoke-WardogsFileOperation {
+            ++$script:RetryTestAttempts
+            if ($script:RetryTestAttempts -lt 3) { throw [IO.IOException]::new('temporary sharing lock', -2147024864) }
+            return 'recovered'
+        }
+        Assert-True ($value -ceq 'recovered' -and $script:RetryTestAttempts -eq 3) 'A transient lock did not recover within its budget.'
+        $script:RetryTestAttempts = 0
+        Assert-Fails { Invoke-WardogsFileOperation {
+            ++$script:RetryTestAttempts
+            throw [IO.IOException]::new('persistent sharing lock', -2147024864)
+        } } 'persistent sharing lock'
+        Assert-True ($script:RetryTestAttempts -eq 3) 'A persistent lock exceeded its finite retry budget.'
+        $script:RetryTestAttempts = 0
+        Assert-Fails { Invoke-WardogsFileOperation {
+            ++$script:RetryTestAttempts
+            throw [UnauthorizedAccessException]::new('permission denied')
+        } } 'permission denied'
+        Assert-True ($script:RetryTestAttempts -eq 1) 'A permanent permission failure was retried.'
+    } finally {
+        $script:FileRetryAttempts = $oldAttempts
+        $script:FileRetryDelayMilliseconds = $oldDelay
+    }
+}
+
+Invoke-Test 'JSON receipts replace complete documents without leftover temporary files' {
+    $fixture = New-TestFixture 'atomic-receipt'
+    $path = Join-Path $fixture.Work 'receipt.json'
+    Write-WardogsJson $path ([ordered]@{ state = 'old'; values = @(1, 2) })
+    Write-WardogsJson $path ([ordered]@{ state = 'new'; values = @(3, 4, 5) })
+    $receipt = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    Assert-True ($receipt.state -ceq 'new' -and $receipt.values.Count -eq 3) 'The replaced receipt is not a complete new document.'
+    Assert-True (@(Get-ChildItem -LiteralPath $fixture.Work -File -Filter '*.write-*').Count -eq 0) 'Temporary receipt files remain after a successful replacement.'
+}
+
+Invoke-Test 'locked receipt replacement retains its complete old document' {
+    $fixture = New-TestFixture 'atomic-receipt-locked'
+    $path = Join-Path $fixture.Work 'receipt.json'
+    Write-WardogsJson $path ([ordered]@{ state = 'original' })
+    $hash = Get-WardogsFileHash $path
+    $locked = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $oldAttempts = $script:FileRetryAttempts
+    $oldDelay = $script:FileRetryDelayMilliseconds
+    try {
+        $script:FileRetryAttempts = 2
+        $script:FileRetryDelayMilliseconds = 0
+        Assert-Fails { Write-WardogsJson $path ([ordered]@{ state = 'must-not-appear' }) } ''
+        Assert-True ((Get-WardogsFileHash $path) -ceq $hash) 'A failed receipt replacement damaged its old document.'
+        Assert-True (@(Get-ChildItem -LiteralPath $fixture.Work -File -Filter '*.write-*').Count -eq 0) 'A failed replacement left a temporary receipt.'
+    } finally {
+        $locked.Dispose()
+        $script:FileRetryAttempts = $oldAttempts
+        $script:FileRetryDelayMilliseconds = $oldDelay
+    }
+}
+
 Invoke-Test 'prepare and full install preserve preferences, terrain, custom files and replacements' {
     $fixture = New-TestFixture 'success'
     Complete-TestArchive $fixture
@@ -157,6 +219,63 @@ Invoke-Test 'prepare and full install preserve preferences, terrain, custom file
     Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Work 'backup/obsolete.dll') -PathType Leaf) 'Old files were not retained for recovery.'
     $journal = [IO.File]::ReadAllText((Join-Path $fixture.Work 'transaction.json')) | ConvertFrom-Json
     Assert-True ($journal.state -eq 'installed') 'Successful transaction receipt is missing.'
+    Assert-True ($journal.cleanup_state -ceq 'complete') 'Successful cleanup was not recorded.'
+    Assert-True (-not (Test-Path -LiteralPath $fixture.Context.Stage)) 'Successful update retained the expanded candidate.'
+    Assert-True (-not (Test-Path -LiteralPath $fixture.Context.Archive)) 'Successful update retained its downloaded archive.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Work 'backup/obsolete.dll')) 'Successful cleanup removed recovery backups.'
+}
+
+Invoke-Test 'cleanup lock leaves installed files intact and records a warning without rolling back' {
+    $fixture = New-TestFixture 'cleanup-warning'
+    Complete-TestArchive $fixture
+    Invoke-WardogsPrepare $fixture.Context
+    $locked = [IO.File]::Open($fixture.Context.Archive, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $oldAttempts = $script:FileRetryAttempts
+    $oldDelay = $script:FileRetryDelayMilliseconds
+    try {
+        $script:FileRetryAttempts = 2
+        $script:FileRetryDelayMilliseconds = 0
+        Invoke-WardogsInstall $fixture.Context 0 -SkipRestart
+    } finally {
+        $locked.Dispose()
+        $script:FileRetryAttempts = $oldAttempts
+        $script:FileRetryDelayMilliseconds = $oldDelay
+    }
+    Assert-True ([IO.File]::ReadAllText((Join-Path $fixture.Install 'a-first.dll')) -ceq 'new: a-first.dll') 'Cleanup failure rolled back a successful installation.'
+    $journal = [IO.File]::ReadAllText((Join-Path $fixture.Work 'transaction.json')) | ConvertFrom-Json
+    Assert-True ($journal.state -ceq 'installed' -and $journal.cleanup_state -ceq 'warning') 'Cleanup warning incorrectly changed the successful transaction state.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Work 'cleanup-warning.log') -PathType Leaf) 'Cleanup warning diagnostics were not retained.'
+    Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Work 'backup/a-first.dll') -PathType Leaf) 'Cleanup warning removed recovery backups.'
+}
+
+Invoke-Test 'successful cleanup cannot recurse outside the exact staged directory' {
+    $fixture = New-TestFixture 'cleanup-path-guard'
+    Complete-TestArchive $fixture
+    Invoke-WardogsPrepare $fixture.Context
+    $outside = Join-Path $fixture.Root 'unrelated-user-directory'
+    Write-TestFile $outside 'preserve.txt' 'unrelated user data'
+    $fixture.Context.Stage = $outside
+    $journal = [ordered]@{ state = 'installed'; operations = @() }
+    Invoke-WardogsSuccessfulCleanup $fixture.Context $journal
+    Assert-True ([IO.File]::ReadAllText((Join-Path $outside 'preserve.txt')) -ceq 'unrelated user data') 'Cleanup escaped the exact prepared staging child.'
+    Assert-True ($journal.cleanup_state -ceq 'warning') 'A rejected cleanup path was not reported.'
+}
+
+Invoke-Test 'byte-identical locked payload files stay in place and need no backup copy' {
+    $fixture = New-TestFixture 'unchanged-locked'
+    $relative = 'a-first.dll'
+    $path = Join-Path $fixture.Install $relative
+    Copy-Item -LiteralPath $path -Destination (Join-Path $fixture.Candidate $relative) -Force
+    New-TestManifest $fixture.Candidate
+    Complete-TestArchive $fixture
+    Invoke-WardogsPrepare $fixture.Context
+    $beforeTime = (Get-Item -LiteralPath $path).LastWriteTimeUtc.Ticks
+    $beforeHash = Get-WardogsFileHash $path
+    $locked = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try { Invoke-WardogsInstall $fixture.Context 0 -SkipRestart }
+    finally { $locked.Dispose() }
+    Assert-True ((Get-WardogsFileHash $path) -ceq $beforeHash -and (Get-Item -LiteralPath $path).LastWriteTimeUtc.Ticks -eq $beforeTime) 'An identical payload file was unnecessarily rewritten.'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $fixture.Context.Backup $relative))) 'An unchanged payload file was unnecessarily copied into backup.'
 }
 
 Invoke-Test 'locked destination restores previously changed files and original manifest' {
@@ -173,6 +292,8 @@ Invoke-Test 'locked destination restores previously changed files and original m
     Assert-True (Test-Path -LiteralPath (Join-Path $fixture.Install 'obsolete.dll')) 'Obsolete file was not restored.'
     $journal = [IO.File]::ReadAllText((Join-Path $fixture.Work 'transaction.json')) | ConvertFrom-Json
     Assert-True ($journal.state -eq 'rolled-back') 'Rollback was not recorded.'
+    Assert-True (Test-Path -LiteralPath $fixture.Context.Stage -PathType Container) 'Failed update lost its staged recovery data.'
+    Assert-True (Test-Path -LiteralPath $fixture.Context.Archive -PathType Leaf) 'Failed update lost its downloaded archive.'
 }
 
 Invoke-Test 'archive digest mismatch fails before extraction' {
@@ -181,6 +302,38 @@ Invoke-Test 'archive digest mismatch fails before extraction' {
     $fixture.Context.Sha256 = '0' * 64
     Assert-Fails { Invoke-WardogsPrepare $fixture.Context } 'SHA-256'
     Assert-True (-not (Test-Path -LiteralPath $fixture.Context.Stage)) 'Untrusted archive was extracted.'
+}
+
+Invoke-Test 'external damage to an unchanged payload cannot be reported as a complete rollback' {
+    $fixture = New-TestFixture 'unchanged-damaged-during-rollback'
+    $path = Join-Path $fixture.Install 'a-first.dll'
+    Copy-Item -LiteralPath $path -Destination (Join-Path $fixture.Candidate 'a-first.dll') -Force
+    New-TestManifest $fixture.Candidate
+    Complete-TestArchive $fixture
+    Invoke-WardogsPrepare $fixture.Context
+    $script:OriginalWardogsHash = (Get-Item -LiteralPath Function:\Get-WardogsFileHash).ScriptBlock
+    $script:TamperFile = $path
+    $script:TamperBackupRoot = $fixture.Context.Backup
+    $script:TamperTriggered = $false
+    $locked = [IO.File]::Open((Join-Path $fixture.Install 'z-locked.dll'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        Set-Item -LiteralPath Function:\Get-WardogsFileHash -Value {
+            param([string]$Path)
+            if ($Path -ieq $script:TamperFile -and -not $script:TamperTriggered -and
+                    (Test-Path -LiteralPath $script:TamperBackupRoot)) {
+                $script:TamperTriggered = $true
+                [IO.File]::WriteAllText($Path, 'external damage')
+            }
+            & $script:OriginalWardogsHash $Path
+        }
+        Assert-Fails { Invoke-WardogsInstall $fixture.Context 0 -SkipRestart } 'Rollback errors:'
+    } finally {
+        Set-Item -LiteralPath Function:\Get-WardogsFileHash -Value $script:OriginalWardogsHash
+        $locked.Dispose()
+    }
+    $journal = [IO.File]::ReadAllText((Join-Path $fixture.Work 'transaction.json')) | ConvertFrom-Json
+    Assert-True ($script:TamperTriggered -and $journal.state -ceq 'rollback-incomplete') 'External damage was ignored in rollback status.'
+    Assert-True (($journal.rollback_errors -join ' ').Contains('a-first.dll')) 'The damaged unchanged file is absent from recovery diagnostics.'
 }
 
 Invoke-Test 'missing manifest fails before extraction' {
@@ -302,8 +455,10 @@ Invoke-Test 'actual helper command records prepare errors without launching the 
     } finally { $process.Dispose() }
 }
 
-Invoke-Test 'PowerShell 5 helper prepares and installs with an empty inherited PSModulePath' {
-    $fixture = New-TestFixture 'empty-module-path'
+Invoke-Test 'PowerShell 5 helper handles Cyrillic paths, spaces and an empty inherited PSModulePath' {
+    # Construct the Cyrillic word without a script-encoding dependency in Windows PowerShell 5.1.
+    $cyrillic = [string][char]0x0410 + [char]0x0440 + [char]0x0442 + [char]0x0430
+    $fixture = New-TestFixture ('empty module path ' + $cyrillic)
     Complete-TestArchive $fixture
     foreach ($helperMode in @('Prepare', 'Install')) {
         $process = Start-TestHelper $fixture $helperMode 0 -EmptyModulePath
