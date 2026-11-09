@@ -126,6 +126,41 @@ class ShotAccuracyTests(unittest.TestCase):
         self.assertEqual(result["summary"]["count"], 5)
         self.assertEqual(len(result["groups"]), 5)
 
+    def test_separate_height_policy_profiles_within_the_same_firing_context(self):
+        content = context() + event(index=1, arc="low", table_profile="sph2_retained_v1")
+        content += event(index=2, arc="low", table_profile="sph2_empirical_low_v1")
+        result = accuracy.analyze_logs([self.log("latest.log", content)])
+        self.assertEqual(result["summary"]["count"], 2)
+        self.assertEqual(len(result["groups"]), 2)
+        self.assertEqual({group["table_profile"] for group in result["groups"]},
+                         {"sph2_retained_v1", "sph2_empirical_low_v1"})
+        self.assertTrue(all(group["count"] == 1 for group in result["groups"]))
+        self.assertFalse(result["acceptance"]["field_99_percent_claim_accepted"])
+        markdown = accuracy.render_markdown(result)
+        self.assertIn("Профиль расчёта", markdown)
+        self.assertIn("sph2_empirical_low_v1", markdown)
+        self.assertIn("сводка выше объединяет все наблюдения", markdown)
+
+    def test_legacy_records_default_to_the_retained_height_profile(self):
+        content = context() + event(index=1, arc="low")
+        content += event(index=2, arc="low", table_profile="sph2_retained_v1")
+        result = accuracy.analyze_logs([self.log("latest.log", content)])
+        self.assertEqual(len(result["groups"]), 1)
+        self.assertEqual(result["groups"][0]["table_profile"], "sph2_retained_v1")
+        self.assertEqual(result["groups"][0]["count"], 2)
+
+    def test_changing_profile_does_not_duplicate_one_observation_identity(self):
+        content = context() + event(table_profile="sph2_retained_v1")
+        content += event(table_profile="sph2_empirical_low_v1")
+        result = accuracy.analyze_logs([self.log("latest.log", content)])
+        self.assertEqual(result["summary"]["count"], 0)
+        self.assertEqual(result["conflicting_identities_excluded"], 1)
+
+    def test_explicit_empty_profile_is_invalid_instead_of_legacy_data(self):
+        result = accuracy.analyze_logs([self.log("latest.log", context() + event(table_profile='""'))])
+        self.assertEqual(result["summary"]["count"], 0)
+        self.assertEqual(result["invalid_records"], 1)
+
     def test_missing_invalid_and_nonfinite_records_are_reported(self):
         content = context() + event(index=1, base=None) + event(index=2, impact="nan,10")
         content += event(index=3, impact="0,inf") + event(index=4, impact="1,2,3")

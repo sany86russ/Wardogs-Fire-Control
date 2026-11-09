@@ -281,6 +281,15 @@ def verify_snapshot(path, language, scale, mode):
         for widget in named(control_name, visible=True):
             widget_surface(control_name, widget, minimum_foreground=10,
                            label=control_name == 'quickWorkflowSteps', meaningful_text=control_name == 'quickWorkflowSteps')
+        if mode == 'settings':
+            for widget in named('sph2LowHeightModel', visible=True):
+                check(widget.get('checked') is False,
+                      'The provisional empirical low-arc baseline must be the actual default')
+                widget_surface('sph2LowHeightModel', widget, minimum_foreground=10,
+                               meaningful_text=True)
+            for widget in named('sph2LowHeightModelHelp', visible=True):
+                widget_surface('sph2LowHeightModelHelp', widget, minimum_foreground=10,
+                               label=True, meaningful_text=True)
         if mode == 'recognition':
             named('coordinatePattern', visible=False)
             for widget in named('coordinatePatternDetails', visible=True):

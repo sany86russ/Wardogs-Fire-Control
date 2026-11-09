@@ -54,7 +54,7 @@ A native screenshot of the actual app. Demonstration coordinates and statuses ar
 | **Mini card and auxiliary reticle** | Aim over other windows; size, opacity and locking; remembered card monitor and placement |
 | **SPH-2 ranging** | Optional **Alt+I** correction, miss distance and the bearing/MIL change already applied |
 | **SPH-2 automatic learning** | A local archive of accepted impacts and provisional MIL transfer to compatible new targets |
-| **SPH-2 terrain** | Elevation correction and an approximate ground-intersection assessment with a compatible local pack |
+| **SPH-2 terrain** | Heights and an approximate ground-intersection assessment; low-trajectory height correction is optional |
 | **Positions and flight** | Target shifts, saved points, ground profiles and personal flight-time observations |
 | **History** | Up to 12 session targets, 64 recent accepted points and 500 named records |
 | **Capture pause** | **Ctrl+Alt+P** releases capture shortcuts, F4 and middle-click while retaining the solution |
@@ -133,7 +133,9 @@ L81 displays approximately **340 m / 110.7° / 649 MIL**. Calculations use exact
 | **SPH-2, low** | 59 | 1181–2629 m | 20–600 MIL |
 | **SPH-2, high** | 80 | 735–2629 m | 610–1400 MIL |
 
-These are retained **community tables**, not verified data for the current WARDOGS patch. SPH-2 ranges describe level ground; arc availability with an elevation difference depends on the model and the permitted final sight setting. Unsupported solutions do not produce invented MIL values. **L81 has no elevation correction.**
+These are retained **community tables**, not verified data for the current WARDOGS patch. SPH-2 ranges describe level ground. When the elevation model is applied, arc availability also depends on the height difference and permitted final sight setting. Unsupported solutions do not produce invented MIL values. **L81 has no elevation correction.**
+
+In the current working branch, initial **SPH-2 low-trajectory aiming uses the table without a height correction by default**. Enable “Approximate height correction for SPH-2 low trajectory” under **Settings → General** to use that model; changing this mode resets ranging corrections. Heights remain visible and are used in the separate model-arc assessment; high trajectory and Alt+I retain their previous behavior. This selects a baseline model, rather than establishing better first-shot accuracy or adding a fixed 50 MIL offset. It does not describe the released v2.16.0.
 
 **MIL is the game's aiming scale, not miles or metres.** Set the selected command's bearing and final MIL to fire. **To target** is horizontal map distance. **Table ≈** is the inverse range estimate of the current MIL; it may differ after elevation correction or ranging and is not a promise of agreement with the in-game RNG display.
 

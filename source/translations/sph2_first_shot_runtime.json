@@ -1,0 +1,26 @@
+[
+  {
+    "ru": "Неизвестная политика учёта высот SPH-2",
+    "en": "Unknown SPH-2 height policy"
+  },
+  {
+    "ru": "Эмпирическая настильная модель требует локальных поправок и единичной исходной калибровки",
+    "en": "The empirical low-arc model requires local corrections and an identity baseline calibration"
+  },
+  {
+    "ru": " · табличная настильная база",
+    "en": " · table-based low arc"
+  },
+  {
+    "ru": "Настильная: табличная база без высотной модели · наклон орудия не измерен",
+    "en": "Low arc: table baseline without a height model · gun tilt is unmeasured"
+  },
+  {
+    "ru": "Настильная: приближённая высотная модель · наклон орудия не измерен",
+    "en": "Low arc: approximate height model · gun tilt is unmeasured"
+  },
+  {
+    "ru": "Настильная команда — по таблице. Профиль рельефа — отдельная приближённая модель, не проверка попадания.",
+    "en": "The low-arc command follows the table. The terrain profile is a separate approximate model, not hit verification."
+  }
+]

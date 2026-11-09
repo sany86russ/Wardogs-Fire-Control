@@ -579,6 +579,10 @@ AppSettings load_settings_from(const std::filesystem::path& requested_path,
         if (*enabled == 0 || *enabled == 1)
             settings.check_updates_on_start = *enabled == 1;
     }
+    if (const auto enabled = read_integer(path, L"sph2_low_height_model")) {
+        if (*enabled == 0 || *enabled == 1)
+            settings.sph2_low_height_model = *enabled == 1;
+    }
     const auto map_key = read_value(path, L"last_game_map", L"");
     settings.last_game_map = game_map_from_key(map_key);
     if (!map_key.empty() && settings.last_game_map == GameMap::unselected)
@@ -731,6 +735,7 @@ void save_settings_to(const std::filesystem::path& requested_path,
     ensure_unicode_ini(path);
     write_value(path, L"ui_language", settings.language == UiLanguage::english ? L"en" : L"ru");
     write_value(path, L"check_updates_on_start", settings.check_updates_on_start ? L"1" : L"0");
+    write_value(path, L"sph2_low_height_model", settings.sph2_low_height_model ? L"1" : L"0");
     write_value(path, L"quick_workflow_version", std::to_wstring(
         std::max(settings.quick_workflow_version, AppSettings::current_quick_workflow_version)));
     write_value(path, L"last_game_map", std::wstring{game_map_key(settings.last_game_map)});

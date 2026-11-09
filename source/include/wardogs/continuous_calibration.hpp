@@ -76,7 +76,8 @@ public:
         Point base, PlatformCalibration baseline,
         ContinuousCorrectionMode mode = ContinuousCorrectionMode::platform_refinement,
         bool enable_bearing_prediction = false,
-        bool enable_range_prediction = false);
+        bool enable_range_prediction = false,
+        Sph2HeightPolicy height_policy = Sph2HeightPolicy::retained_approximation);
 
     [[nodiscard]] CorrectedSolution solution(
         Point target, Arc arc, double height_delta_m = 0.0) const;
@@ -94,6 +95,7 @@ public:
     [[nodiscard]] std::size_t sample_count() const noexcept;
     [[nodiscard]] const PlatformCalibration& global_calibration() const noexcept;
     [[nodiscard]] double global_rotation_adjustment_deg() const noexcept;
+    [[nodiscard]] Sph2HeightPolicy height_policy() const noexcept { return height_policy_; }
 
 private:
     struct WeightedNeighbor {
@@ -147,6 +149,7 @@ private:
         double bearing_start_deg{}, bearing_span_deg{};
         double minimum_range_m{}, maximum_range_m{};
         double minimum_elevation{}, maximum_elevation{};
+        double minimum_height_m{}, maximum_height_m{};
     };
 
     struct RangePrior {
@@ -166,6 +169,8 @@ private:
     PlatformCalibration baseline_;
     PlatformCalibration active_;
     ContinuousCorrectionMode mode_;
+    // Selected by construction; copied history always carries its policy.
+    Sph2HeightPolicy height_policy_;
     std::vector<Sample> samples_;
     std::vector<double> confidence_scores_;
     std::vector<std::pair<double, double>> local_confidence_scores_;

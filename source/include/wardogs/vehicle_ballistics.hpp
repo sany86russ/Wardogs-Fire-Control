@@ -6,11 +6,19 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <utility>
 
 namespace wardogs {
 
 enum class Arc { low, high };
+
+enum class Sph2HeightPolicy { retained_approximation, empirical_flat_low };
+
+// Profile identifies the command baseline, independently of the measured
+// terrain heights retained in observation and station metadata.
+[[nodiscard]] std::string_view sph2_table_profile(Arc arc,
+    Sph2HeightPolicy policy = Sph2HeightPolicy::retained_approximation);
 
 using Vector3 = std::array<double, 3>;
 using Matrix3 = std::array<Vector3, 3>;
@@ -65,7 +73,8 @@ void validate_platform_calibration(const PlatformCalibration& calibration);
 [[nodiscard]] Vector3 firing_direction(double bearing_deg, double mil,
                                        Arc arc);
 [[nodiscard]] Vector3 impact_direction(Point base, Point impact, Arc arc,
-                                       double height_delta_m = 0.0);
+    double height_delta_m = 0.0,
+    Sph2HeightPolicy policy = Sph2HeightPolicy::retained_approximation);
 [[nodiscard]] double sph2_mil_for_distance(double distance_m, Arc arc);
 [[nodiscard]] double sph2_world_mil_for_distance(double distance_m, Arc arc);
 [[nodiscard]] std::pair<double, double> sph2_mil_bounds(Arc arc);
@@ -88,9 +97,11 @@ void validate_platform_calibration(const PlatformCalibration& calibration);
     double prior_weight = 1.5);
 [[nodiscard]] FiringAngles required_firing_angles(
     Point base, Point point, const PlatformCalibration& calibration, Arc arc,
-    double height_delta_m = 0.0);
+    double height_delta_m = 0.0,
+    Sph2HeightPolicy policy = Sph2HeightPolicy::retained_approximation);
 [[nodiscard]] CorrectedSolution corrected_solution(
     Point base, Point target, const PlatformCalibration& calibration, Arc arc,
-    double height_delta_m = 0.0);
+    double height_delta_m = 0.0,
+    Sph2HeightPolicy policy = Sph2HeightPolicy::retained_approximation);
 
 }  // namespace wardogs

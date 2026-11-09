@@ -219,8 +219,9 @@ ContinuousCalibration::ContinuousCalibration(Point base,
                                              PlatformCalibration baseline,
                                              ContinuousCorrectionMode mode,
                                              bool enable_bearing_prediction,
-                                             bool enable_range_prediction)
-    : base_(base), baseline_(baseline), active_(baseline), mode_(mode),
+                                             bool enable_range_prediction,
+                                             Sph2HeightPolicy height_policy)
+    : base_(base), baseline_(baseline), active_(baseline), mode_(mode), height_policy_(height_policy),
       enable_bearing_prediction_(enable_bearing_prediction),
       enable_range_prediction_(enable_range_prediction) {
     require_finite(base.x, "Координаты орудия должны быть конечными числами");
@@ -229,6 +230,10 @@ ContinuousCalibration::ContinuousCalibration(Point base,
     if (mode_ != ContinuousCorrectionMode::platform_refinement &&
         mode_ != ContinuousCorrectionMode::local_only)
         throw std::invalid_argument("Выберите поддерживаемый режим поправок");
+    (void)sph2_table_profile(Arc::low, height_policy_);
+    if (height_policy_ == Sph2HeightPolicy::empirical_flat_low &&
+        (mode_ != ContinuousCorrectionMode::local_only || baseline.rotation != identity_rotation()))
+        throw std::invalid_argument("Эмпирическая настильная модель требует локальных поправок и единичной исходной калибровки");
 }
 
 std::size_t ContinuousCalibration::sample_count() const noexcept {
@@ -381,7 +386,7 @@ ObservationAssessment ContinuousCalibration::add_landing(
     // offset rather than adding the previous correction a second time.
     (void)sph2_distance_for_mil(firing.mil, firing.arc);
     (void)corrected_solution(base_, firing.target, active_, firing.arc,
-                             firing.target_height_delta_m);
+                             firing.target_height_delta_m, height_policy_);
     const auto [bearing, range] = bearing_and_range(base_, firing.target);
     if (mode_ == ContinuousCorrectionMode::local_only) {
         constexpr double acceptance_roundoff_m = 1e-7;
@@ -412,7 +417,7 @@ ObservationAssessment ContinuousCalibration::add_landing(
         }
     }
     const auto impact_solution = required_firing_angles(
-        base_, impact, active_, firing.arc, impact_height_delta_m);
+        base_, impact, active_, firing.arc, impact_height_delta_m, height_policy_);
     const Sample sample{firing.target, firing.arc, bearing, range,
                         firing.target_height_delta_m,
                         wrapped_difference(firing.bearing_deg,
@@ -423,7 +428,7 @@ ObservationAssessment ContinuousCalibration::add_landing(
                         firing_direction(firing.bearing_deg, firing.mil,
                                          firing.arc),
                         impact_direction(base_, impact, firing.arc,
-                                         impact_height_delta_m)};
+                                         impact_height_delta_m, height_policy_)};
     // Updating the rotation may invalidate an older boundary observation.
     // Commit the observation, offsets and confidence together, after every
     // refit succeeds; a rejected landing cannot change the live model.
@@ -520,7 +525,7 @@ void ContinuousCalibration::rebuild_bearing_prediction() {
         return strength * (offsets[(offsets.size() - 1) / 2] + offsets[offsets.size() / 2]) * 0.5;
     };
     for (auto arc : {Arc::low, Arc::high}) {
-        struct Group { Point target; double range, bearing, elevation; std::vector<double> offsets; };
+        struct Group { Point target; double range, bearing, elevation, height; std::vector<double> offsets; };
         std::vector<Group> groups;
         std::vector<std::pair<Point, std::size_t>> membership;
         for (std::size_t index = bearing_prediction_start_; index < samples_.size(); ++index) {
@@ -531,9 +536,9 @@ void ContinuousCalibration::rebuild_bearing_prediction() {
             });
             std::size_t group_index = static_cast<std::size_t>(std::distance(groups.begin(), found));
             if (found == groups.end()) {
-                const auto direction = impact_direction(base_, sample.target, arc, sample.target_height_delta_m);
+                const auto direction = impact_direction(base_, sample.target, arc, sample.target_height_delta_m, height_policy_);
                 groups.push_back({sample.target, sample.target_range_m, sample.target_bearing_deg,
-                    std::asin(std::clamp(direction[2], -1.0, 1.0)), {}});
+                    std::asin(std::clamp(direction[2], -1.0, 1.0)), sample.target_height_delta_m, {}});
             }
             groups[group_index].offsets.push_back(sample.bearing_offset_deg);
             membership.emplace_back(sample.target, group_index);
@@ -586,12 +591,15 @@ void ContinuousCalibration::rebuild_bearing_prediction() {
         prior.validation_residual_m = std::sqrt(validation_squared / groups.size());
         prior.minimum_range_m = prior.maximum_range_m = groups.front().range;
         prior.minimum_elevation = prior.maximum_elevation = groups.front().elevation;
+        prior.minimum_height_m = prior.maximum_height_m = groups.front().height;
         std::vector<double> bearings;
         for (const auto& group : groups) {
             prior.minimum_range_m = std::min(prior.minimum_range_m, group.range);
             prior.maximum_range_m = std::max(prior.maximum_range_m, group.range);
             prior.minimum_elevation = std::min(prior.minimum_elevation, group.elevation);
             prior.maximum_elevation = std::max(prior.maximum_elevation, group.elevation);
+            prior.minimum_height_m = std::min(prior.minimum_height_m, group.height);
+            prior.maximum_height_m = std::max(prior.maximum_height_m, group.height);
             bearings.push_back(group.bearing);
         }
         std::sort(bearings.begin(), bearings.end());
@@ -614,8 +622,15 @@ double ContinuousCalibration::predicted_bearing(Point target, Arc arc,
         double height_delta_m, ObservationAssessment& assessment) const {
     const auto& prior = bearing_priors_[arc == Arc::low ? 0U : 1U];
     if (!prior.valid) return 0.0;
+    // Empirical low commands deliberately omit ballistic height adjustment,
+    // so their model elevation no longer restricts real height by itself.
+    // Preserve that station/evidence boundary explicitly, without changing
+    // the established retained-model prediction contract.
+    if (height_policy_ == Sph2HeightPolicy::empirical_flat_low && arc == Arc::low &&
+        (height_delta_m < prior.minimum_height_m - 1e-7 || height_delta_m > prior.maximum_height_m + 1e-7))
+        return 0.0;
     const auto [bearing, range] = bearing_and_range(base_, target);
-    const auto direction = impact_direction(base_, target, arc, height_delta_m);
+    const auto direction = impact_direction(base_, target, arc, height_delta_m, height_policy_);
     const double elevation = std::asin(std::clamp(direction[2], -1.0, 1.0));
     const double relative = std::fmod(bearing - prior.bearing_start_deg + 360.0, 360.0);
     constexpr double display_resolution_deg = 0.1;
@@ -654,9 +669,9 @@ void ContinuousCalibration::rebuild_range_prediction() {
             });
             const auto group_index = static_cast<std::size_t>(std::distance(groups.begin(), found));
             if (found == groups.end()) {
-                const auto direction = impact_direction(base_, sample.target, arc, sample.target_height_delta_m);
+                const auto direction = impact_direction(base_, sample.target, arc, sample.target_height_delta_m, height_policy_);
                 const auto direct = corrected_solution(base_, sample.target, baseline_, arc,
-                                                       sample.target_height_delta_m);
+                                                       sample.target_height_delta_m, height_policy_);
                 groups.push_back({sample.target, sample.target_range_m, sample.target_bearing_deg,
                     std::asin(std::clamp(direction[2], -1.0, 1.0)), sample.target_height_delta_m,
                     direct.mil, {}});
@@ -760,7 +775,7 @@ double ContinuousCalibration::predicted_range(Point target, Arc arc,
     const auto& prior = range_priors_[arc == Arc::low ? 0U : 1U];
     if (!prior.valid) return 0.0;
     const auto [bearing, range] = bearing_and_range(base_, target);
-    const auto direction = impact_direction(base_, target, arc, height_delta_m);
+    const auto direction = impact_direction(base_, target, arc, height_delta_m, height_policy_);
     const double elevation = std::asin(std::clamp(direction[2], -1.0, 1.0));
     const double relative = std::fmod(bearing - prior.bearing_start_deg + 360.0, 360.0);
     constexpr double display_resolution_deg = 0.1;
@@ -773,7 +788,7 @@ double ContinuousCalibration::predicted_range(Point target, Arc arc,
             {range / sph2_maximum_range_m,
              std::remainder(bearing - prior.bearing_start_deg, 360.0) / 180.0,
              height_delta_m / sph2_maximum_range_m})) return 0.0;
-    const auto direct = corrected_solution(base_, target, baseline_, arc, height_delta_m);
+    const auto direct = corrected_solution(base_, target, baseline_, arc, height_delta_m, height_policy_);
     const auto [minimum_mil, maximum_mil] = sph2_mil_bounds(arc);
     if (direct.mil + prior.offset_mil < minimum_mil || direct.mil + prior.offset_mil > maximum_mil)
         return 0.0;
@@ -792,7 +807,7 @@ double ContinuousCalibration::predicted_range(Point target, Arc arc,
 ObservationAssessment ContinuousCalibration::assess(
     Point target, Arc arc, double height_delta_m) const {
     // Match the solution's direct geometry validation even for empty history.
-    (void)corrected_solution(base_, target, active_, arc, height_delta_m);
+    (void)corrected_solution(base_, target, active_, arc, height_delta_m, height_policy_);
     if (mode_ == ContinuousCorrectionMode::local_only)
         return local_estimate(target, arc, height_delta_m).assessment;
     return {confidence_scores_.empty() ? 0.0 : confidence_scores_.back(),
@@ -917,7 +932,7 @@ ContinuousCalibration::LocalEstimate ContinuousCalibration::local_estimate(
 
     const double retained_bearing = retained_bearing_sum / retained_weight_sum;
     const double retained_mil = retained_mil_sum / retained_weight_sum;
-    const auto direct = corrected_solution(base_, target, active_, arc, height_delta_m);
+    const auto direct = corrected_solution(base_, target, active_, arc, height_delta_m, height_policy_);
     const double metres_per_mil = local_metres_per_mil(direct);
     double squared_spread_sum = 0.0;
     for (std::size_t index = 0; index < local.size(); ++index) {
@@ -937,7 +952,7 @@ void ContinuousCalibration::refresh_offsets() {
     for (auto& sample : samples_) {
         const auto impact_solution = required_firing_angles(
             base_, sample.impact, active_, sample.arc,
-            sample.impact_height_delta_m);
+            sample.impact_height_delta_m, height_policy_);
         sample.bearing_offset_deg = wrapped_difference(
             sample.firing_bearing_deg, impact_solution.bearing_deg);
         sample.mil_offset = sample.firing_mil - impact_solution.mil;
@@ -1060,7 +1075,7 @@ std::pair<double, double> ContinuousCalibration::correction(
 CorrectedSolution ContinuousCalibration::solution(
     Point target, Arc arc, double height_delta_m) const {
     auto result = corrected_solution(base_, target, active_, arc,
-                                     height_delta_m);
+                                     height_delta_m, height_policy_);
     const auto [bearing, mil] = correction(target, arc, height_delta_m);
     if (bearing == 0.0 && mil == 0.0) return result;
     const auto direct = result;

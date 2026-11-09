@@ -24,6 +24,7 @@ struct PlanningContext {
     std::optional<wardogs::CorrectedSolution> active_solution;
     std::optional<wardogs::Arc> active_arc;
     wardogs::HeightLookup terrain;
+    wardogs::Sph2HeightPolicy sph2_height_policy{wardogs::Sph2HeightPolicy::retained_approximation};
 };
 
 // The provider is read again before every user action. The owner applies an

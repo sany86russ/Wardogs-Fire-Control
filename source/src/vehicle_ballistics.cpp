@@ -64,6 +64,20 @@ std::span<const TableEntry> table_for(Arc arc) {
     throw std::invalid_argument("Выберите поддерживаемую траекторию SPH-2");
 }
 
+double command_height_delta(double measured_height_delta_m, Arc arc, Sph2HeightPolicy policy) {
+    (void)table_for(arc);
+    // Validate the actual input even when the empirical command intentionally
+    // uses a level-table baseline. Never turn invalid height metadata into zero.
+    if (!std::isfinite(measured_height_delta_m))
+        throw std::invalid_argument("Высоты орудия и цели должны быть конечными числами");
+    switch (policy) {
+    case Sph2HeightPolicy::retained_approximation: return measured_height_delta_m;
+    case Sph2HeightPolicy::empirical_flat_low:
+        return arc == Arc::low ? 0.0 : measured_height_delta_m;
+    }
+    throw std::invalid_argument("Неизвестная политика учёта высот SPH-2");
+}
+
 double interpolate(double value, std::span<const TableEntry> pairs,
                    bool input_is_distance, const char* label) {
     const auto input = [input_is_distance](const TableEntry& pair) {
@@ -382,11 +396,18 @@ Vector3 firing_direction(double bearing_deg, double mil, Arc arc) {
 }
 
 Vector3 impact_direction(Point base, Point impact, Arc arc,
-                         double height_delta_m) {
+                         double height_delta_m, Sph2HeightPolicy policy) {
+    const double model_height = command_height_delta(height_delta_m, arc, policy);
     const auto geometry = shot_geometry(base, impact, "Попадание должно отличаться от позиции орудия");
     return direction_from_bearing_and_elevation(
         geometry.second,
-        trajectory_elevation(geometry.first, height_delta_m, arc));
+        trajectory_elevation(geometry.first, model_height, arc));
+}
+
+std::string_view sph2_table_profile(Arc arc, Sph2HeightPolicy policy) {
+    (void)command_height_delta(0.0, arc, policy);
+    return arc == Arc::low && policy == Sph2HeightPolicy::empirical_flat_low
+        ? "sph2_empirical_low_v1" : "sph2_retained_v1";
 }
 
 double sph2_mil_for_distance(double distance_m, Arc arc) {
@@ -625,10 +646,11 @@ PlatformCalibration refine_platform_calibration(
 
 FiringAngles required_firing_angles(Point base, Point point,
                                     const PlatformCalibration& calibration,
-                                    Arc arc, double height_delta_m) {
+                                    Arc arc, double height_delta_m, Sph2HeightPolicy policy) {
+    const double model_height = command_height_delta(height_delta_m, arc, policy);
     const auto geometry = shot_geometry(base, point, "Цель должна отличаться от позиции орудия");
     const double desired_elevation = trajectory_elevation(
-        geometry.first, height_delta_m, arc);
+        geometry.first, model_height, arc);
     const auto desired_world = direction_from_bearing_and_elevation(
         geometry.second, desired_elevation);
     const auto corrected = calibration.world_to_local(desired_world);
@@ -645,9 +667,9 @@ FiringAngles required_firing_angles(Point base, Point point,
 
 CorrectedSolution corrected_solution(Point base, Point target,
                                      const PlatformCalibration& calibration,
-                                     Arc arc, double height_delta_m) {
+                                     Arc arc, double height_delta_m, Sph2HeightPolicy policy) {
     const auto firing = required_firing_angles(
-        base, target, calibration, arc, height_delta_m);
+        base, target, calibration, arc, height_delta_m, policy);
     return {arc, firing.bearing_deg,
             sph2_distance_for_mil(firing.mil, arc), firing.mil};
 }

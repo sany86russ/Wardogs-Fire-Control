@@ -37,6 +37,8 @@ The gun is read from the active chat draft; you do not need to send the message.
 
 Without impact records, SPH-2 provides a direct solution immediately. Alt+I is optional; two required trial shots or firing in another direction are not needed. L81 uses its retained table without an elevation model or SPH-2 ranging.
 
+In the current working branch, initial low-trajectory aiming uses the retained table without a height correction by default. **Settings → General → SPH-2 first shot** contains “Approximate height correction for SPH-2 low trajectory”, initially unchecked. In-game measurements have not validated this model; the table baseline does not guarantee a first-shot hit either. Saving a different mode resets current ranging corrections. Heights remain visible; high trajectory and Alt+I impact recording work as before. The released v2.16.0 does not contain this switch.
+
 The app does not observe the shot or actual in-game sight settings. Alt+I captures the displayed selected command when capture begins. An accepted impact refines that command for the original target. If you set different values in the game, the record does not describe the same calculation.
 
 ## Which values to set in the game
@@ -90,7 +92,7 @@ After accepting an SPH-2 target, the app assesses ground along the selected arc'
 
 The other arc may be suggested based on ground assessment, but the app does not change the arc automatically. The player decides whether to switch.
 
-The check concerns the **baseline model arc**, not measured flight after Alt+I. Aiming corrections do not determine the actual trajectory. Buildings, trees, bridges, roofs and barrel height are excluded; no detected crossing does not mean a safe shot. See [model boundaries](CALCULATIONS-EN.md).
+The check concerns the **baseline model arc**, not measured flight after Alt+I. It uses actual map heights regardless of the low-trajectory aiming setting and does not reconstruct flight for the table command. If the approximate arc cannot be constructed, its assessment is unavailable; an available table aiming solution remains available. Aiming corrections do not determine the actual trajectory. Buildings, trees, bridges, roofs and barrel height are excluded; no detected crossing does not mean a safe shot. See [model boundaries](CALCULATIONS-EN.md).
 
 ## Positions and flight
 

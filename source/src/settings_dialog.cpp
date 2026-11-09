@@ -153,6 +153,22 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
         "Координаты появятся в поле чата; отправлять сообщение не нужно.")));
     workflow_layout->addWidget(workflow_text);
     quick_page->addWidget(workflow);
+    auto* first_shot = new QGroupBox(wardogs::i18n::text(QStringLiteral("Первичный выстрел SPH-2")));
+    first_shot->setObjectName(QStringLiteral("sph2FirstShotSettings"));
+    auto* first_shot_layout = new QVBoxLayout(first_shot);
+    sph2_low_height_model_ = new QCheckBox(wardogs::i18n::text(QStringLiteral(
+        "Приближённая высотная поправка\nдля настильной SPH-2")));
+    sph2_low_height_model_->setObjectName(QStringLiteral("sph2LowHeightModel"));
+    sph2_low_height_model_->setChecked(settings.sph2_low_height_model);
+    first_shot_layout->addWidget(sph2_low_height_model_);
+    auto* first_shot_help = explanation(wardogs::i18n::text(QStringLiteral(
+        "По умолчанию выключено: первичная настильная наводка использует таблицу без высотной поправки. "
+        "Приближённая модель не подтверждена игровыми измерениями. Высоты по-прежнему показываются; "
+        "навесная траектория и запись поправок по попаданиям работают как прежде. "
+        "При смене режима пристрелка сбрасывается.")));
+    first_shot_help->setObjectName(QStringLiteral("sph2LowHeightModelHelp"));
+    first_shot_layout->addWidget(first_shot_help);
+    quick_page->addWidget(first_shot);
     auto* updates = new QGroupBox(wardogs::i18n::text(QStringLiteral("Обновления")));
     auto* update_layout = new QVBoxLayout(updates);
     check_updates_on_start_ = new QCheckBox(wardogs::i18n::text(QStringLiteral("Проверять обновления GitHub при запуске")));
@@ -414,6 +430,7 @@ wardogs::AppSettings SettingsDialog::settings() const {
     value.region_hotkey = hotkey_text(region_key_);
     value.automatic_chat_region = automatic_chat_region_->isChecked();
     value.check_updates_on_start = check_updates_on_start_->isChecked();
+    value.sph2_low_height_model = sph2_low_height_model_->isChecked();
     value.base_hotkey = hotkey_text(base_key_);
     value.target_hotkey = hotkey_text(target_key_);
     value.quick_target_hotkey = hotkey_text(quick_target_key_);

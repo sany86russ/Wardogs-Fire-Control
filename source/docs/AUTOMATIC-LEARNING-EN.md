@@ -6,6 +6,8 @@ The normal workflow stays **Alt+X after moving the gun → middle mouse for the 
 
 Each accepted Alt+I or manual impact automatically saves exact gun/target/impact coordinates, arc, height deltas, the displayed azimuth/MIL command and session/emplacement/observation identities. Height source and the verified terrain package SHA-256 are saved automatically when available. Application and table versions are separate; an unknown game version remains explicitly `unknown`.
 
+In the current working branch, `table_profile=sph2_empirical_low_v1` identifies low-trajectory table aiming without height correction, selected by default. `sph2_retained_v1` identifies the legacy model, including high trajectory and low trajectory with approximate height correction enabled. The log analyzer separates groups by this field; older records without it use the legacy profile. Actual heights are retained in both modes. The identifier describes the calculation method, rather than verified hit accuracy.
+
 `%LOCALAPPDATA%/WardogsFireControl/accuracy-observations.json` lives beside saved points, outside the portable updater payload. It retains the latest 4096 observations, bounded by 8 MiB, replacing the oldest entries as history grows. Duplicate identities do not create extra impacts. Rejected points remain outside this accepted-observation archive; normal logs retain rejection diagnostics.
 
 These are user-marked landings and displayed commands, **not verified actual sight settings or physical shots**. Normal records retain `command_source=displayed_unverified`, `sight_verified=false`, `discharge_observed=false` and `physical_shot_verified=false`. No screenshots, chat or account data are saved or uploaded.
@@ -20,7 +22,7 @@ Each target group contributes one median absolute correction. Each entire target
 
 Transfer is restricted to the jointly supported range/bearing/height region, model-elevation limits and supported sight settings. Outside that region the baseline remains available. Target-local correction takes priority. Main and mini-card labels identify the provisional prediction; it is already included in the displayed command.
 
-Pause, weapon or arc changes withdraw transfer until fresh independent observations exist. Map/gun/reset changes clear the active calibration. The archive never restores an old vehicle pose or automatically transfers corrections between sessions. If the body attitude changes without an observable position change, set the gun again or reset corrections as before.
+Pause, weapon or arc changes withdraw transfer until fresh independent observations exist. Map/gun/reset changes clear the active calibration. Changing the approximate low-trajectory height-correction setting also resets ranging so observations from different baseline models cannot mix. Alt+I works in both modes; no fixed 50 MIL correction is added. The archive never restores an old vehicle pose or automatically transfers corrections between sessions. If the body attitude changes without an observable position change, set the gun again or reset corrections as before.
 
 ## HUD stays disabled
 

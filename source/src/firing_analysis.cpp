@@ -273,6 +273,8 @@ void validate_flight_time_profile(const FlightTimeProfile& profile) {
 
 FiringAnalysis analyze_firing(const FiringAnalysisRequest& request) {
     validate_request(request);
+    if (request.weapon == AnalysisWeapon::sph2)
+        (void)sph2_table_profile(request.arc, request.sph2_height_policy);
     const auto shot = calculate_shot(request.base, request.target);
     FiringAnalysis result;
     result.distance_m = shot.distance * 100.0;
@@ -316,9 +318,10 @@ FiringAnalysis analyze_firing(const FiringAnalysisRequest& request) {
             // Keep the raw distance/table API strict for external inputs.
             : corrected_solution(request.base, request.target,
                 PlatformCalibration{identity_rotation(), 0.0}, request.arc,
-                *result.height_delta_m).mil;
+                *result.height_delta_m, request.sph2_height_policy).mil;
     } catch (const std::invalid_argument&) {
-        result.status = request.weapon == AnalysisWeapon::l81 || *result.height_delta_m == 0.0
+        result.status = request.weapon == AnalysisWeapon::l81 || *result.height_delta_m == 0.0 ||
+            (request.arc == Arc::low && request.sph2_height_policy == Sph2HeightPolicy::empirical_flat_low)
             ? FiringAnalysisStatus::unsupported_range : FiringAnalysisStatus::unreachable;
         result.trajectory_status = result.status == FiringAnalysisStatus::unreachable
             ? TrajectoryStatus::unreachable : TrajectoryStatus::unavailable;
@@ -326,23 +329,32 @@ FiringAnalysis analyze_firing(const FiringAnalysisRequest& request) {
         return result;
     }
     if (request.weapon == AnalysisWeapon::sph2) {
-        // Reuse the retained geometry rather than treating game MIL as radians.
-        const auto direction = impact_direction(request.base, request.target, request.arc,
-                                                *result.height_delta_m);
-        const double elevation = std::atan2(direction[2], std::hypot(direction[0], direction[1]));
-        std::optional<double> speed;
-        EstimateSource source{EstimateBasis::retained_geometric_model,
-            "Сохранённая геометрическая модель SPH-2: R = 2629 м", request.game_version};
-        if (request.gravity_mps2) {
-            // R=v²/g fixes the spatial parabola, but not its time scale.
-            // x=U0*t and z=V0*t-g*t²/2: NASA Glenn ballistic flight equations.
-            // https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ballistic-flight-equations/
-            speed = std::sqrt(sph2_maximum_range_m) * std::sqrt(*request.gravity_mps2);
-            require_positive(*speed, "Параметры модели не дают конечную скорость");
-            source.basis = EstimateBasis::assumed_vacuum_model;
-            source.source = "Предположение пользователя: SPH-2, v²/g = 2629 м";
+        // This is a separate approximate physical profile, not the empirical
+        // low-arc command. Preserve actual height and never reinterpret MIL.
+        std::optional<Vector3> model_direction;
+        try {
+            model_direction = impact_direction(request.base, request.target, request.arc,
+                                               *result.height_delta_m);
+        } catch (const std::invalid_argument&) {
+            result.trajectory_status = TrajectoryStatus::unreachable;
         }
-        make_trajectory(request, result, elevation, std::move(source), speed, request.gravity_mps2);
+        if (model_direction) {
+            const auto& direction = *model_direction;
+            const double elevation = std::atan2(direction[2], std::hypot(direction[0], direction[1]));
+            std::optional<double> speed;
+            EstimateSource source{EstimateBasis::retained_geometric_model,
+                "Сохранённая геометрическая модель SPH-2: R = 2629 м", request.game_version};
+            if (request.gravity_mps2) {
+                // R=v²/g fixes the spatial parabola, but not its time scale.
+                // x=U0*t and z=V0*t-g*t²/2: NASA Glenn ballistic flight equations.
+                // https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/ballistic-flight-equations/
+                speed = std::sqrt(sph2_maximum_range_m) * std::sqrt(*request.gravity_mps2);
+                require_positive(*speed, "Параметры модели не дают конечную скорость");
+                source.basis = EstimateBasis::assumed_vacuum_model;
+                source.source = "Предположение пользователя: SPH-2, v²/g = 2629 м";
+            }
+            make_trajectory(request, result, elevation, std::move(source), speed, request.gravity_mps2);
+        }
     } else if (request.vacuum_profile) {
         if (!result.height_delta_m) {
             result.trajectory_status = TrajectoryStatus::height_unavailable;
