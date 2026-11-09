@@ -14,7 +14,7 @@ Open **Helpers** from the main window or the application's tray menu. All three 
 
 Only one helper runs at a time. Switching windows interrupts current input and releases the owned key/button. Build helper and Team Piker require a new start; armed SPH-2 keeps waiting for a fresh R in the game. Opening settings, Stop helpers and closing the application turn helpers off. Capture pause keeps the mouse helpers running and interrupts the current SPH-2 cycle; after resuming, armed SPH-2 waits for a new R. Game captures and middle-button reading remain disabled during capture pause, pending OCR is cancelled and the reticle is hidden. The last calculation is preserved.
 
-## SPH-2 reload · v2.16.0
+## SPH-2 reload · v2.17.0
 
 1. Enable the shortcut on **SPH-2 · reload** (default **F8**). Keep **Find arrows automatically** selected; no resolution or coordinates need configuring.
 2. Press F8 once in the game: **Waiting for R** appears. After firing, press and release **R**. The cycle starts 500 ms later. Once finished, it waits for R again; F8 does not need enabling before every shot. The game's Active Reload actions must be bound to **↑ ↓ ← →**.
@@ -30,7 +30,7 @@ Humanizer has independent switches for additions to key holds/gaps and additions
 
 The cycle deadline accounts for the maximum chosen delays plus a margin, with a 15-second minimum. Progress counts sent keys; game acceptance is not checked. No screenshots are taken while waiting for R.
 
-Recognition is checked on supplied images, different backgrounds and scales. A very small arrow or one fused with surrounding pixels may be rejected; directions are never guessed from neighboring arrows. Support for every HUD variant remains unqualified. Images are processed locally.
+Version 2.17.0 adds contour and joined-shape recovery, including dim grey fills and small HUD variants. Mask construction and component extraction are accelerated, and the detected region is retained between R presses while the window and geometry remain compatible. Recognition is checked on supplied images, different backgrounds and scales. A very small arrow or one fused with surrounding pixels may be rejected; directions are never guessed from neighboring arrows. Support for every HUD variant remains unqualified. Images are processed locally.
 
 ![SPH-2 2.16.0: region search and 50 / 90 / 750 ms timing](../../docs/screenshots/en-helpers-reload-2.16.0.png)
 ![Humanizer 2.16.0: independent key and sequence ranges](../../docs/screenshots/en-helpers-humanizer-2.16.0.png)
@@ -72,7 +72,7 @@ Both **L81 and SPH-2** mini cards have a separate strip showing helpers, their a
 
 The strip is read-only: clicking it does not start or switch a helper. Use the assigned shortcut for control and the **Helpers** window to edit preferences. A displayed state does not confirm an in-game hammer hit or anti-cheat acceptance.
 
-![SPH-2 2.16.0: armed and Waiting for R](../../docs/screenshots/en-vehicle-pinned-helpers-2.16.0.png)
+![SPH-2 2.17.0: armed and Waiting for R](../../docs/screenshots/en-vehicle-pinned-helpers-2.17.0.png)
 
 Screenshots show the actual native application with synthetic calculations and states. Capture does not use the game or send real game input.
 

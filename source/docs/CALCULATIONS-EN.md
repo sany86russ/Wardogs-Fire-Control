@@ -44,7 +44,7 @@ For SPH-2, the source configuration declares **780–2629 m / 20–1390 MIL**, a
 
 ## Elevation and platform tilt
 
-In the current working branch, initial SPH-2 low-trajectory aiming uses horizontal range and the retained table without a height correction by default (`sph2_low_height_model=false`). **General → SPH-2 first shot** can enable the approximate height model for the low trajectory. High trajectory retains its previous calculation. No fixed 50 MIL offset or new table is introduced. Selecting this baseline does not establish better first-shot accuracy; the setting is absent from the released v2.16.0.
+Since 2.17.0, initial SPH-2 low-trajectory aiming uses horizontal range and the retained table without a height correction by default (`sph2_low_height_model=false`). **General → SPH-2 first shot** can enable the approximate height model for the low trajectory. High trajectory retains its previous calculation. No fixed 50 MIL offset or new table is introduced. Selecting this baseline does not establish better first-shot accuracy.
 
 The retained elevation correction model uses an assumed SPH-2 maximum range of **2629 m** and the two solutions of one approximate trajectory. Elevation is in meters: a positive difference means the target is above the gun. After correction and platform rotation, the result is converted back to the sight table. When the model is enabled, an unreachable target, unsupported angle or final value outside the sight table produces an error. The public mathematical API retains this legacy model by default for compatibility; the main interface explicitly selects the user's setting.
 

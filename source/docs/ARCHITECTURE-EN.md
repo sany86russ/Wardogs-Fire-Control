@@ -1,6 +1,6 @@
 # WARDOGS Fire Control — architecture and development
 
-Current change in 2.13.2: sight HUD reading is removed; calculation and coordinate OCR are preserved. The base 2.11 architecture below retains its history with updated capture mechanisms.
+Current **2.17.0** behavior: SPH-2 low commands use the table baseline by default, with the previous height model separately selectable; actual heights remain available to observations and a separate model arc. Reload recognition reads arrow contours and retains a compatible region between R presses. Background sight-HUD reading remains removed. The base 2.11 architecture below retains its history with updated capture mechanisms.
 Version **2.11.0** unifies map confirmation, accepted gun/target coordinates, the selected final command and ranging. Automatic ground assessment and a separate accepted-point history are added; OCR and diagnostic-archive changes developed in 2.10 are included in 2.11. This document describes that version's architecture; results for a particular build are available in GitHub Actions.
 
 **firing_analysis** separates table aiming from geometric arcs, assumed physics and measured time. **fire_missions** stores up to 500 named points and separately up to 64 recently accepted points using locking, a strict versioned JSON schema and atomic writes while preserving exact double coordinates. **planning_dialog** provides additional tools: manual target shifting, ground plots, explicit point restoration and timing observations; the main state owner checks map/weapon again and applies points through the shared manual path with OCR epoch advancement. Parameters and observations live in the user profile outside the portable application's manifest.
@@ -48,6 +48,7 @@ Based on [Rico217 / Ricoz217's MIT project](https://github.com/Ricoz217/WarDogs_
 | SPH-2 | Original author's tables, low and high arcs, corrected aiming calculation |
 | SPH-2 ranging | Direct calculation, optional Alt+I for the same target/arc, compact miss and applied changes, shared final result and reset |
 | Terrain | Required map selection; SHA-256/mapId, local atomic import, persistent user directory; heights for both SPH-2 arcs and impact; explicit training-ground mode without heights |
+| SPH-2 low baseline | `Sph2HeightPolicy` is immutable in active ranging; the application selects `empirical_flat_low` by default, while the mathematical API retains its old default for compatibility. Changing the setting resets corrections and cached analysis; groups are separated by `table_profile` |
 | Sight | L81/SPH-2 scales, arc selection, bearing correction, size, opacity, DPI and 4:3 |
 | Diagnostics | Main-window snapshots and the full path through an own test window; diagnostic modes do not write settings |
 | Convenience | RU/EN, direction plot, 12 session targets, up to 64 recent accepted points separate from 500 named records, explicit restoration, clipboard and tray |
