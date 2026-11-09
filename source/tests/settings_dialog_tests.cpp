@@ -45,26 +45,39 @@ void first_shot_policy() {
     check(!checkbox->isChecked() && !dialog.settings().sph2_low_height_model,
           "fresh settings show the empirical low table as the default");
     check(checkbox->text() == QStringLiteral("Приближённая высотная поправка\nдля настильной SPH-2") &&
-              help->text().contains(QStringLiteral("не подтверждена игровыми измерениями")) &&
-              help->text().contains(QStringLiteral("Высоты по-прежнему показываются")) &&
-              help->text().contains(QStringLiteral("При смене режима пристрелка сбрасывается")),
-          "the option explains the unverified model and continued height display");
+              help->text().contains(QStringLiteral("Модель не проверена")) &&
+              help->text().contains(QStringLiteral("Смена режима сбрасывает пристрелку")) &&
+              help->toolTip().contains(QStringLiteral("не подтверждена игровыми измерениями")) &&
+              help->toolTip().contains(QStringLiteral("Высоты по-прежнему показываются")) &&
+              help->toolTip().contains(QStringLiteral("навесная траектория")) &&
+              checkbox->toolTip() == help->toolTip(),
+          "compact help retains the warning and reset rule with full model details in tooltips");
     checkbox->setChecked(true);
     check(dialog.settings().sph2_low_height_model && !original.sph2_low_height_model &&
               dialog.settings().game_helpers == original.game_helpers &&
               dialog.settings().impact_hotkey == original.impact_hotkey,
           "editing the policy changes only the staged setting, not caller preferences or helpers");
 
+    dialog.resize(650, 437);
     dialog.show();
     events();
+    auto* viewport = tabs->widget(0)->findChild<QWidget*>(QStringLiteral("settingsPageViewport"));
+    check(viewport && viewport->rect().contains(QRect(help->mapTo(viewport, QPoint(0, 0)), help->size())),
+          "Russian first-shot help fits the initial viewport at the compact settings height");
     wardogs::i18n::set_language(wardogs::UiLanguage::english);
     events();
     check(group->title() == QStringLiteral("SPH-2 first shot") &&
               checkbox->text() == QStringLiteral("Approximate height correction\nfor SPH-2 low trajectory") &&
-              help->text().contains(QStringLiteral("has not been validated by in-game measurements")) &&
-              help->text().contains(QStringLiteral("Changing this mode resets ranging corrections")) &&
+              help->text().contains(QStringLiteral("Unvalidated model")) &&
+              help->text().contains(QStringLiteral("Changing this mode resets ranging")) &&
+              help->toolTip().contains(QStringLiteral("has not been validated by in-game measurements")) &&
+              help->toolTip().contains(QStringLiteral("Heights remain visible")) &&
+              help->toolTip().contains(QStringLiteral("high trajectory")) &&
+              checkbox->toolTip() == help->toolTip() &&
               checkbox->isChecked() && dialog.settings().sph2_low_height_model,
           "live English translation preserves the staged policy and explains its limits");
+    check(viewport && viewport->rect().contains(QRect(help->mapTo(viewport, QPoint(0, 0)), help->size())),
+          "English first-shot help fits the initial viewport at the compact settings height");
     wardogs::i18n::set_language(wardogs::UiLanguage::russian);
     events();
     check(checkbox->isChecked() && checkbox->text().startsWith(QStringLiteral("Приближённая")),

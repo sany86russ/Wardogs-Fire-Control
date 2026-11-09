@@ -156,17 +156,23 @@ SettingsDialog::SettingsDialog(const wardogs::AppSettings& settings, QWidget* pa
     auto* first_shot = new QGroupBox(wardogs::i18n::text(QStringLiteral("Первичный выстрел SPH-2")));
     first_shot->setObjectName(QStringLiteral("sph2FirstShotSettings"));
     auto* first_shot_layout = new QVBoxLayout(first_shot);
+    first_shot_layout->setSpacing(2);
     sph2_low_height_model_ = new QCheckBox(wardogs::i18n::text(QStringLiteral(
         "Приближённая высотная поправка\nдля настильной SPH-2")));
     sph2_low_height_model_->setObjectName(QStringLiteral("sph2LowHeightModel"));
     sph2_low_height_model_->setChecked(settings.sph2_low_height_model);
     first_shot_layout->addWidget(sph2_low_height_model_);
-    auto* first_shot_help = explanation(wardogs::i18n::text(QStringLiteral(
+    const auto first_shot_details = wardogs::i18n::text(QStringLiteral(
         "По умолчанию выключено: первичная настильная наводка использует таблицу без высотной поправки. "
         "Приближённая модель не подтверждена игровыми измерениями. Высоты по-прежнему показываются; "
         "навесная траектория и запись поправок по попаданиям работают как прежде. "
-        "При смене режима пристрелка сбрасывается.")));
+        "При смене режима пристрелка сбрасывается."));
+    sph2_low_height_model_->setToolTip(first_shot_details);
+    auto* first_shot_help = explanation(wardogs::i18n::text(QStringLiteral(
+        "По умолчанию — таблица. Модель не проверена.\n"
+        "Смена режима сбрасывает пристрелку.")));
     first_shot_help->setObjectName(QStringLiteral("sph2LowHeightModelHelp"));
+    first_shot_help->setToolTip(first_shot_details);
     first_shot_layout->addWidget(first_shot_help);
     quick_page->addWidget(first_shot);
     auto* updates = new QGroupBox(wardogs::i18n::text(QStringLiteral("Обновления")));

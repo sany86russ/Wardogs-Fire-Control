@@ -1720,7 +1720,10 @@ public:
         check("SPH2_flat_solution_is_ready_without_calibration_or_impact_history",
               !continuous_calibration_ && low_result_ && high_result_ && copy_button_->isEnabled() &&
               vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("Табличный расчёт"))) &&
-              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("рельеф не учтён"))));
+              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("рельеф не учтён"))) &&
+              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral(" · настильная: таблица"))) &&
+              vehicle_note_->toolTip().contains(wardogs::i18n::text(QStringLiteral(
+                  "Настильная: табличная база без высотной модели · наклон орудия не измерен"))));
         check("SPH2_optional_editor_has_no_first_second_shot_sequence",
               calibration_toggle_->text() == wardogs::i18n::text(QStringLiteral("Поправки по попаданию")) &&
               continuous_aim_->isReadOnly() && continuous_impact_->isEnabled() &&
@@ -6270,7 +6273,11 @@ private:
         if (!range_predicted_arcs.isEmpty())
             vehicle_note_->setText(wardogs::i18n::text(QStringLiteral("Прогноз MIL: %1 · предварительно\n"))
                 .arg(range_predicted_arcs.join(QStringLiteral(", "))) + vehicle_note_->text());
-        vehicle_note_->setText(vehicle_note_->text() + QStringLiteral("\n") + wardogs::i18n::text(
+        vehicle_note_->setText(vehicle_note_->text() + wardogs::i18n::text(
+            sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low
+                ? QStringLiteral(" · настильная: таблица")
+                : QStringLiteral(" · настильная: высотная модель")));
+        vehicle_note_->setToolTip(wardogs::i18n::text(
             sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low
                 ? QStringLiteral("Настильная: табличная база без высотной модели · наклон орудия не измерен")
                 : QStringLiteral("Настильная: приближённая высотная модель · наклон орудия не измерен")));

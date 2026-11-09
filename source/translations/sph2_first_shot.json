@@ -1,5 +1,9 @@
 [
   {
+    "ru": "По умолчанию — таблица. Модель не проверена.\nСмена режима сбрасывает пристрелку.",
+    "en": "Table aiming by default. Unvalidated model.\nChanging this mode resets ranging."
+  },
+  {
     "ru": "Первичный выстрел SPH-2",
     "en": "SPH-2 first shot"
   },

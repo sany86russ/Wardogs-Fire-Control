@@ -22,5 +22,13 @@
   {
     "ru": "Настильная команда — по таблице. Профиль рельефа — отдельная приближённая модель, не проверка попадания.",
     "en": "The low-arc command follows the table. The terrain profile is a separate approximate model, not hit verification."
+  },
+  {
+    "ru": " · настильная: таблица",
+    "en": " · low arc: table"
+  },
+  {
+    "ru": " · настильная: высотная модель",
+    "en": " · low arc: height model"
   }
 ]
