@@ -352,8 +352,8 @@ void Controller::prepare_update() {
             }
             launch_installer();
         });
-    prepare_->start();
     deadline->start(10 * 60 * 1000);
+    prepare_->start();
 }
 
 void Controller::launch_installer() {

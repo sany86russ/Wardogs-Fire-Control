@@ -6,8 +6,10 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEvent>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
 #include <QFrame>
@@ -381,6 +383,73 @@ void zero_byte_failure_tests() {
     }
 }
 
+void failed_prepare_start_test() {
+    // Only the isolated Windows CI runner executes this fixture. The fake
+    // executable is deliberately invalid: no PowerShell or installer can run.
+    wardogs::i18n::set_language(wardogs::UiLanguage::english);
+    QWidget window;
+    QTemporaryDir install;
+    QTemporaryDir system;
+    check(install.isValid() && system.isValid(), "failed-start fixtures have private temporary directories");
+    write_portable_helper(install.path());
+    const auto fake_powershell = QDir(system.path()).filePath("System32/WindowsPowerShell/v1.0/powershell.exe");
+    check(QDir().mkpath(QFileInfo(fake_powershell).absolutePath()),
+          "the fake Windows PowerShell directory can be created");
+    QFile executable(fake_powershell);
+    check(executable.open(QIODevice::WriteOnly) && executable.write("not a Windows executable") > 0,
+          "the helper-start fixture contains invalid executable bytes instead of runnable code");
+    executable.close();
+    struct SystemRootScope {
+        QByteArray previous{qgetenv("SystemRoot")};
+        bool existed{qEnvironmentVariableIsSet("SystemRoot")};
+        explicit SystemRootScope(const QByteArray& replacement) {
+            if (!qputenv("SystemRoot", replacement)) throw std::runtime_error("Cannot set fake SystemRoot");
+        }
+        ~SystemRootScope() {
+            if (existed) qputenv("SystemRoot", previous);
+            else qunsetenv("SystemRoot");
+        }
+    } system_root(system.path().toUtf8());
+    MockNetwork network;
+    network.responses.push_back({release_json()});
+    network.responses.push_back({QByteArray("held download")});
+    wardogs::updates::Controller controller(&window, QStringLiteral("2.7.0"), install.path(), &network);
+    controller.check(false);
+    wait_for([&] { return !controller.banner_widget()->isHidden(); });
+    bool observed = false;
+    QString text, details;
+    QTimer dismiss;
+    dismiss.setInterval(1);
+    QObject::connect(&dismiss, &QTimer::timeout, &window, [&] {
+        for (auto* widget : QApplication::topLevelWidgets()) {
+            auto* message = qobject_cast<QMessageBox*>(widget);
+            if (!message || !message->isVisible() || message->objectName() != "updateFailureDialog") continue;
+            text = message->text();
+            details = message->detailedText();
+            // FailedToStart can be synchronous on Windows. Exercise deferred
+            // deletion inside its nested error dialog before start() returns,
+            // including the QProcess-owned deadline that previously dangled.
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            observed = true;
+            message->reject();
+        }
+    });
+    dismiss.start();
+    window.findChild<QPushButton*>("installUpdateButton")->click();
+    wait_for([&] { return observed; });
+    dismiss.stop();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    check(text.contains("Stage:") && text.contains("Preparing the update") && !details.isEmpty(),
+          "a failed PowerShell start reports its preparation phase and diagnostic instead of crashing");
+    check(network.requests.size() == 2 && !controller.banner_widget()->isHidden(),
+          "the failed preparation follows a verified download and keeps the current application usable");
+    check(QDir(install.path()).entryList({QStringLiteral(".wardogs-update-*")},
+              QDir::Dirs | QDir::Hidden).isEmpty(),
+          "failed helper startup removes its private work directory without approving installation");
+    check(wardogs::updates::installed_installer_script(install.path(), "2.7.0") == "installed trusted helper",
+          "failed helper startup preserves the original installed payload");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -411,6 +480,7 @@ int main(int argc, char** argv) {
     download_cancellation_and_lifetime_tests();
     installed_helper_tests();
     zero_byte_failure_tests();
+    failed_prepare_start_test();
     std::cout << assertions << " offline update UI assertions, " << failures << " failure(s)\n";
     return failures ? 1 : 0;
 }
