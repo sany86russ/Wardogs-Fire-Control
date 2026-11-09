@@ -47,7 +47,7 @@ The owner reported a successful check of the preceding preview. This is not an i
 - Preparation, readiness, transaction journal and installation-result receipts are written atomically through a temporary file and replacement. An unfinished write is not exposed as a completed JSON receipt.
 - A file that already matches the candidate manifest's size and SHA-256 is not rewritten or redundantly backed up. Final verification of the entire installed payload remains in place.
 - Strict version, SHA-256, path, personal-settings and `.wdt` guards remain in force, as does rollback of changed and removed files after transaction failure.
-- After successful installation, verification and launch, only the current update's prepared `staged/` and `download.zip` are removed. Changed-file backups, the trusted helper and receipts remain for recovery; preparation data is retained after failure or cancellation. An auxiliary cleanup failure records a warning without rolling back an already running new version.
+- After successful installation, verification and launch, only the current update's prepared `staged/` and `download.zip` are removed. Changed-file backups, the trusted helper and receipts remain for recovery; preparation data is retained if the external installer fails or is cancelled. Cancelled downloads are removed. An auxiliary cleanup failure records a warning without rolling back an already running new version.
 - **An already installed 2.16.0 uses its old download and installation code to reach 2.17.0.** These improvements apply to subsequent updates from 2.17.0 and cannot retroactively change the old application. If the old Update action fails, download the complete 2.17.0 Windows ZIP to a writable folder and follow the manual-update instructions while preserving personal data.
 
 ### Updating and data
@@ -66,6 +66,8 @@ Arrows must remain visible and distinguishable; an occluded or ambiguous frame m
 
 ![Main window 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-main-2.17.0.png)
 ![SPH-2 first-shot settings 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-settings-2.17.0.png)
+![SPH-2 mini card 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-vehicle-pinned-helpers-2.17.0.png)
+![Update failure and recovery in 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-update-error-2.17.0.png)
 
 ---
 

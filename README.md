@@ -321,6 +321,7 @@ c511df32f956e9171ac79bf939e955ea7f2851a4c39bdad6f924e46c989ede49
 |---|---|---|
 | Главное окно (2.17.0) | [Открыть](docs/screenshots/ru-main-2.17.0.png) | [Open](docs/screenshots/en-main-2.17.0.png) |
 | Первичный выстрел SPH-2 (2.17.0) | [Открыть](docs/screenshots/ru-settings-2.17.0.png) | [Open](docs/screenshots/en-settings-2.17.0.png) |
+| Ошибка обновления и восстановление (2.17.0) | [Открыть](docs/screenshots/ru-update-error-2.17.0.png) | [Open](docs/screenshots/en-update-error-2.17.0.png) |
 | Build helper (2.14.0) | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
 | Team Piker (2.14.0) | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
 | Мини-карточка L81 (2.14.0) | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |

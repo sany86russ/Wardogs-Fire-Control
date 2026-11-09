@@ -321,6 +321,7 @@ Native screenshots of the actual application: the main window, settings and SPH-
 |---|---|---|
 | Main window (2.17.0) | [Открыть](docs/screenshots/ru-main-2.17.0.png) | [Open](docs/screenshots/en-main-2.17.0.png) |
 | SPH-2 first shot (2.17.0) | [Открыть](docs/screenshots/ru-settings-2.17.0.png) | [Open](docs/screenshots/en-settings-2.17.0.png) |
+| Update failure and recovery (2.17.0) | [Открыть](docs/screenshots/ru-update-error-2.17.0.png) | [Open](docs/screenshots/en-update-error-2.17.0.png) |
 | Build helper (2.14.0) | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
 | Team Piker (2.14.0) | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
 | L81 mini card (2.14.0) | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |
