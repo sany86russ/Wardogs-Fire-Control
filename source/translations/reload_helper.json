@@ -126,5 +126,25 @@
   {
     "ru": "Пауза между комбинациями должна быть от 100 до 10000 мс",
     "en": "Sequence gap must be between 100 and 10000 ms"
+  },
+  {
+    "ru": "Диагностика одного цикла",
+    "en": "Single-cycle diagnostics"
+  },
+  {
+    "ru": "Записать один цикл для диагностики",
+    "en": "Record one cycle for diagnostics"
+  },
+  {
+    "ru": "После сохранения настроек включите помощник назначенной клавишей (по умолчанию F8) и перезарядите орудие клавишей R. Будет записан только следующий цикл. Запись сама не запускает перезарядку и не нажимает дополнительные клавиши.",
+    "en": "After saving settings, enable the helper with your assigned shortcut (F8 by default) and reload the gun with R. Only the next cycle will be recorded. Recording does not start reloading or press additional keys."
+  },
+  {
+    "ru": "Кадры и результаты распознавания сохраняются на этом компьютере без автоматической отправки. Первый автопоиск снимает всё окно игры; найденная область используется и при следующих перезарядках. Сохранённые кадры можно повторно разбирать без новых выстрелов.",
+    "en": "Frames and recognition results are saved on this computer without automatic upload. The first automatic search captures the whole game window; the detected area is reused for later reloads. Saved frames can be analyzed again without firing more shots."
+  },
+  {
+    "ru": "Открыть папку диагностики",
+    "en": "Open diagnostics folder"
   }
 ]

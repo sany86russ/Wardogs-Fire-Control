@@ -130,6 +130,7 @@ if(WIN32)
         src/ghost_reticle_window.cpp
         src/game_helpers_dialog.cpp
         src/hotkey_capture_edit.cpp
+        src/reload_diagnostics.cpp
         src/main_window.cpp
         src/pinned_result_window.cpp
         src/selection_overlay.cpp
@@ -288,12 +289,34 @@ target_compile_options(wardogs_reload_region_tests PRIVATE /W4 /permissive- /utf
 add_test(NAME wardogs_reload_region_tests COMMAND wardogs_reload_region_tests)
 set_tests_properties(wardogs_reload_region_tests PROPERTIES TIMEOUT 10)
 
+add_executable(wardogs_reload_tracking_tests tests/reload_tracking_tests.cpp)
+target_include_directories(wardogs_reload_tracking_tests PRIVATE src include)
+target_compile_options(wardogs_reload_tracking_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_tracking_tests COMMAND wardogs_reload_tracking_tests)
+set_tests_properties(wardogs_reload_tracking_tests PROPERTIES TIMEOUT 10)
+
+add_executable(wardogs_reload_pixel_mask_tests tests/reload_pixel_mask_tests.cpp)
+target_include_directories(wardogs_reload_pixel_mask_tests PRIVATE src)
+target_compile_definitions(wardogs_reload_pixel_mask_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_reload_pixel_mask_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_pixel_mask_tests COMMAND wardogs_reload_pixel_mask_tests)
+set_tests_properties(wardogs_reload_pixel_mask_tests PROPERTIES TIMEOUT 20)
+
 add_executable(wardogs_reload_capture_tests tests/reload_capture_tests.cpp src/capture.cpp)
 target_link_libraries(wardogs_reload_capture_tests PRIVATE wardogs_core user32 gdi32)
 target_compile_definitions(wardogs_reload_capture_tests PRIVATE WARDOGS_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(wardogs_reload_capture_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_reload_capture_tests COMMAND wardogs_reload_capture_tests)
 set_tests_properties(wardogs_reload_capture_tests PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
+
+add_executable(wardogs_reload_diagnostics_tests
+    tests/reload_diagnostics_tests.cpp src/reload_diagnostics.cpp)
+target_include_directories(wardogs_reload_diagnostics_tests PRIVATE src include)
+target_link_libraries(wardogs_reload_diagnostics_tests PRIVATE wardogs_core Qt6::Gui)
+target_compile_definitions(wardogs_reload_diagnostics_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_reload_diagnostics_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_reload_diagnostics_tests COMMAND wardogs_reload_diagnostics_tests)
+set_tests_properties(wardogs_reload_diagnostics_tests PROPERTIES TIMEOUT 20)
 
 add_executable(wardogs_game_helpers_dialog_tests
     tests/game_helpers_dialog_tests.cpp src/game_helpers_dialog.cpp src/hotkey_capture_edit.cpp)

@@ -22,6 +22,8 @@ public:
                                QWidget* parent = nullptr,
                                ReloadRegionSelector select_reload_region = {});
     [[nodiscard]] wardogs::GameHelpersPreferences preferences() const;
+    // Read after Accepted, like preferences(); never persisted in settings.
+    [[nodiscard]] bool reload_diagnostics_requested() const;
     void show_error(const QString& message);
 
 protected:
@@ -70,5 +72,6 @@ private:
     QSpinBox* reload_stage_random_max_{};
     QFormLayout* reload_random_form_{};
     QLabel* reload_timing_summary_{};
+    QCheckBox* reload_diagnostics_once_{};
     QLabel* validation_error_{};
 };

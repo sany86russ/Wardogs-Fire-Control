@@ -228,6 +228,194 @@ void outlined_synthetic() {
 
 }
 
+void outlined_arrow(Image& image, int cx, int cy, int size, ReloadArrow value,
+                    int body = 215, int outline = 2, int outline_level = 10) {
+    const int extent = size * 3;
+    auto glyph = solid(extent, extent, {0, 0, 0});
+    arrow(glyph, extent / 2, extent / 2, size, value);
+    for (int y = 0; y < extent; ++y) for (int x = 0; x < extent; ++x) {
+        if (glyph.bgr[(static_cast<std::size_t>(y) * extent + x) * 3] != 215) continue;
+        for (int dy = -outline; dy <= outline; ++dy)
+            for (int dx = -outline; dx <= outline; ++dx)
+                put(image, cx + x - extent / 2 + dx, cy + y - extent / 2 + dy,
+                    {static_cast<std::uint8_t>(outline_level), static_cast<std::uint8_t>(outline_level),
+                     static_cast<std::uint8_t>(outline_level)});
+    }
+    const auto level = static_cast<std::uint8_t>(body);
+    for (int y = 0; y < extent; ++y) for (int x = 0; x < extent; ++x)
+        if (glyph.bgr[(static_cast<std::size_t>(y) * extent + x) * 3] == 215)
+            put(image, cx + x - extent / 2, cy + y - extent / 2, {level, level, level});
+}
+
+Image contour_prompt(int size, const std::array<ReloadArrow, 4>& values,
+                     int joined, int background, int bridge_width = 1, int body = 215, int outline_level = 10) {
+    const int width = std::max(360, size * 9), height = std::max(180, size * 5);
+    auto scene = solid(width, height, background == 0 ? std::array<std::uint8_t, 3>{20, 20, 20}
+        : background == 1 ? std::array<std::uint8_t, 3>{235, 235, 235}
+        : background == 4 ? std::array<std::uint8_t, 3>{200, 200, 200}
+                          : std::array<std::uint8_t, 3>{80, 130, 185});
+    if (background == 3) {
+        std::mt19937 random(20261109);
+        for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
+            put(scene, x, y, {static_cast<std::uint8_t>(50 + random() % 190),
+                static_cast<std::uint8_t>(50 + random() % 190), static_cast<std::uint8_t>(50 + random() % 190)});
+    }
+    const int first = size * 2, middle = height / 2, step = size * 8 / 5;
+    for (int index = 0; index < 4; ++index)
+        outlined_arrow(scene, first + index * step, middle, size, values[index], body,
+                       std::max(1, size / 18), outline_level);
+    if (joined) {
+        const int border_y = middle - size * 2;
+        for (int x = first - size; x <= first + 3 * step + size; ++x)
+            put(scene, x, border_y, {215, 215, 215});
+        // Only a narrow break crosses the otherwise intact dark outline.
+        // Directions are independently rasterized before connecting their
+        // actual white bodies to the same external light component.
+        for (int index = 0; index < joined; ++index)
+            for (int y = border_y; y <= middle; ++y)
+                for (int dx = 0; dx < bridge_width; ++dx)
+                    put(scene, first + index * step - 1 + dx, y, {215, 215, 215});
+    }
+    return scene;
+}
+
+Image area_half(const Image& source) {
+    auto result = solid(source.width / 2, source.height / 2);
+    for (int y = 0; y < result.height; ++y) for (int x = 0; x < result.width; ++x) {
+        std::array<int, 3> sum{};
+        for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx) {
+            const auto offset = (static_cast<std::size_t>(y * 2 + dy) * source.width + x * 2 + dx) * 3;
+            for (int channel = 0; channel < 3; ++channel) sum[channel] += source.bgr[offset + channel];
+        }
+        put(result, x, y, {static_cast<std::uint8_t>(sum[0] / 4),
+            static_cast<std::uint8_t>(sum[1] / 4), static_cast<std::uint8_t>(sum[2] / 4)});
+    }
+    return result;
+}
+
+void outlined_cross_distractors(Image& scene) {
+    for (int item = 0; item < 90; ++item) {
+        const int cx = 32 + (item % 10) * 32, cy = 32 + (item / 10) * 32;
+        for (int y = -9; y <= 9; ++y) for (int x = -9; x <= 9; ++x)
+            if (std::abs(x) <= 4 || std::abs(y) <= 4) put(scene, cx + x, cy + y, {10, 10, 10});
+        for (int y = -7; y <= 7; ++y) for (int x = -7; x <= 7; ++x)
+            if (std::abs(x) <= 2 || std::abs(y) <= 2) put(scene, cx + x, cy + y, {215, 215, 215});
+    }
+}
+
+void contour_regressions() {
+    constexpr std::array<ReloadArrow, 4> values{{{ReloadDirection::up, false},
+        {ReloadDirection::right, false}, {ReloadDirection::down, false}, {ReloadDirection::left, false}}};
+    for (const int size : {14, 30, 70}) for (const int background : {0, 1, 2, 3}) {
+        for (const int joined : {0, 1, 2, 3, 4}) {
+            const auto scene = contour_prompt(size, values, joined, background);
+            const auto result = detect_reload_sequence(scene);
+            if (!expected(result, values)) std::cerr << "Contour size=" << size << " background=" << background
+                << " joined=" << joined << '\n';
+            check(expected(result, values), "visible outlined arrows survive zero through four one-pixel scenery bridges");
+        }
+    }
+    for (const int size : {30, 70}) {
+        check(expected(detect_reload_sequence(contour_prompt(size, values, 4, 1, 2)), values),
+              "four outlined arrows survive two-pixel connections to a bright frame");
+    }
+    // Every possible four-key combination is independently rendered. These
+    // are actual per-slot directions; no sequence rule predicts any of them.
+    for (int combination = 0; combination < 256; ++combination) {
+        auto directions = values;
+        for (int index = 0; index < 4; ++index)
+            directions[index].direction = static_cast<ReloadDirection>((combination >> (index * 2)) & 3);
+        const auto result = detect_reload_sequence(contour_prompt(30, directions, 4, combination % 4));
+        if (!expected(result, directions)) std::cerr << "Joined combination=" << combination << '\n';
+        check(expected(result, directions), "all 256 four-direction sequences retain exact order when all bodies touch scenery");
+    }
+    for (const int body : {120, 140, 160, 200}) {
+        check(expected(detect_reload_sequence(contour_prompt(30, values, 0, 1, 1, body)), values),
+              "visible dark outlines preserve directions when neutral fill becomes dimmer");
+    }
+    for (const int size : {14, 22, 35, 70}) {
+        const auto antialiased = area_half(contour_prompt(size * 2, values, 0, 1));
+        check(expected(detect_reload_sequence(antialiased), values),
+              "area-resampled dark outlines and white fills preserve all directions across HUD scales");
+    }
+    for (const int size : {14, 30}) for (const int background : {1, 4})
+        for (const int outline_level : {80, 100, 140}) for (int joined = 1; joined <= 4; ++joined) {
+            const auto result = detect_reload_sequence(contour_prompt(size, values, joined, background,
+                1, 215, outline_level));
+            if (!expected(result, values)) std::cerr << "Gray contour size=" << size << " background=" << background
+                << " outline=" << outline_level << " joined=" << joined << '\n';
+            check(expected(result, values), "visible gray outlines separate four white arrow shapes despite scenery bridges");
+        }
+    for (const int joined : {0, 4}) {
+        const auto result = detect_reload_sequence(contour_prompt(30, values, joined, 4, 1, 120, 80));
+        check(expected(result, values), "local forty-level fill-to-outline contrast remains readable below the primary white threshold");
+        const auto light_outline = detect_reload_sequence(contour_prompt(30, values, joined, 4, 1, 215, 180));
+        check(expected(light_outline, values), "visible thirty-five-level gray outlines remain readable above the primary white threshold");
+    }
+    {
+        auto scene = contour_prompt(30, values, 4, 1);
+        auto duplicated = solid(scene.width, scene.height * 2, {235, 235, 235});
+        paste(duplicated, scene, 0, 0); paste(duplicated, scene, 0, scene.height);
+        check(!detect_reload_sequence(duplicated), "two recovered outlined rows remain ambiguous");
+    }
+    {
+        auto scene = contour_prompt(30, values, 4, 1);
+        const int center = scene.height / 2;
+        for (int y = center - 20; y <= center + 20; ++y)
+            for (int x = 60 - 20; x <= 60 + 20; ++x) put(scene, x, y, {235, 235, 235});
+        check(!detect_reload_sequence(scene), "an erased arrow cannot be inferred from the remaining three slots");
+    }
+    {
+        auto scene = solid(360, 180, {235, 235, 235});
+        for (int index = 0; index < 4; ++index) {
+            const int cx = 60 + index * 48;
+            for (int y = 65; y <= 115; ++y) for (int x = cx - 18; x <= cx + 18; ++x)
+                if (std::abs(x - cx) >= 15 || y <= 68 || y >= 112)
+                    put(scene, x, y, {10, 10, 10});
+        }
+        check(!detect_reload_sequence(scene), "four dark rectangular outlines do not become four directional arrows");
+    }
+    {
+        auto scene = contour_prompt(30, values, 4, 1);
+        outlined_arrow(scene, 60 + 4 * 48, scene.height / 2, 30, {ReloadDirection::up, false});
+        for (int x = 30; x <= 60 + 4 * 48 + 30; ++x) put(scene, x, 30, {215, 215, 215});
+        for (int y = 30; y <= scene.height / 2; ++y) put(scene, 59 + 4 * 48, y, {215, 215, 215});
+        check(!detect_reload_sequence(scene), "five scenery-joined outlined arrows cannot be shortened into a four-key prompt");
+    }
+    {
+        auto scene = solid(360, 180, {235, 235, 235});
+        for (int index = 0; index < 4; ++index) {
+            const int cx = 60 + index * 48;
+            for (int y = -17; y <= 17; ++y) for (int x = -17; x <= 17; ++x)
+                if ((std::abs(x) <= 5 && std::abs(y) <= 17) ||
+                    (std::abs(y) <= 5 && std::abs(x) <= 17))
+                    put(scene, cx + x, 90 + y, {10, 10, 10});
+            for (int y = -15; y <= 15; ++y) for (int x = -15; x <= 15; ++x)
+                if (std::abs(x) <= 3 || std::abs(y) <= 3)
+                    put(scene, cx + x, 90 + y, {215, 215, 215});
+            for (int y = 30; y <= 90; ++y) put(scene, cx - 1, y, {215, 215, 215});
+        }
+        for (int x = 30; x <= 235; ++x) put(scene, x, 30, {215, 215, 215});
+        check(!detect_reload_sequence(scene), "joined outlined crosses retain directional ambiguity after recovery");
+    }
+    {
+        auto scene = solid(352, 352, {235, 235, 235});
+        outlined_cross_distractors(scene);
+        ReloadVisionDiagnostics diagnostics;
+        check(!detect_reload_sequence(scene, &diagnostics) && diagnostics.contour_passes > 0 &&
+              diagnostics.contour_passes <= 32 && diagnostics.joined_recovery_rois == 0,
+              "many small outlined non-arrows are rejected with bounded contour passes and no invented row");
+    }
+    for (const int size : {14, 30, 70}) for (const int joined : {0, 4}) {
+        auto scene = solid(1400, 900, {235, 235, 235});
+        outlined_cross_distractors(scene);
+        paste(scene, contour_prompt(size, values, joined, 1), 700, 500);
+        ReloadVisionDiagnostics diagnostics;
+        check(expected(detect_reload_sequence(scene, &diagnostics), values),
+              "ninety unrelated tiny outlined non-arrows cannot disable a real intact or recovered HUD row");
+    }
+}
+
 void synthetic_scenes() {
     constexpr std::array<ReloadArrow, 4> all_directions{{
         {ReloadDirection::left, false}, {ReloadDirection::down, false},
@@ -314,6 +502,106 @@ void synthetic_scenes() {
     check(!detect_reload_sequence(solid(800, 400, {0, 0, 0})), "blank dark frame has no arrows");
 }
 
+void joined_arrow_with_distractors() {
+    constexpr std::array<ReloadArrow, 4> values{{{ReloadDirection::up, false},
+        {ReloadDirection::right, false}, {ReloadDirection::down, false}, {ReloadDirection::left, false}}};
+    auto scene = solid(1100, 750, {14, 14, 14});
+    band(scene, 800, 600, 30, values);
+    // A thin neutral border touches only the first arrow. Its complete
+    // component is not an arrow; local opening must recover its actual shape.
+    for (int y = 550; y <= 586; ++y) put(scene, 799, y, {215, 215, 215});
+    for (int x = 760; x <= 1000; ++x) put(scene, x, 550, {215, 215, 215});
+    const ImageRect local{740, 530, 1030, 650};
+    check(expected(detect_reload_sequence(cropped(scene, local)), values),
+          "a border-joined arrow can be recovered from three neighboring silhouettes");
+    // These 25 valid, unrelated silhouettes are too far apart to form rows.
+    // Their presence elsewhere must not disable recovery inside the HUD.
+    for (int index = 0; index < 25; ++index)
+        arrow(scene, 60 + (index % 5) * 110, 60 + (index / 5) * 80, 22,
+              {static_cast<ReloadDirection>(index % 4), false});
+    ReloadVisionDiagnostics diagnostics;
+    check(expected(detect_reload_sequence(scene, &diagnostics), values),
+          "unrelated valid silhouettes do not disable local joined-arrow recovery");
+    check(diagnostics.failure == ReloadDetectionFailure::none && diagnostics.glyphs == 29 &&
+          diagnostics.rows == 1 && diagnostics.joined_recovery_rois > 0 &&
+          !diagnostics.recovery_budget_exhausted && diagnostics.glyph_bounds.size() == 29,
+          "diagnostics report successful local recovery without a global glyph cap");
+    for (int joined = 1; joined < 4; ++joined) {
+        auto another = solid(1100, 750, {14, 14, 14});
+        band(another, 800, 600, 30, values);
+        for (int y = 550; y <= 600; ++y)
+            put(another, 799 + joined * 48, y, {215, 215, 215});
+        for (int x = 760; x <= 1000; ++x) put(another, x, 550, {215, 215, 215});
+        for (int index = 0; index < 25; ++index)
+            arrow(another, 60 + (index % 5) * 110, 60 + (index / 5) * 80, 22,
+                  {static_cast<ReloadDirection>(index % 4), false});
+        check(expected(detect_reload_sequence(another, &diagnostics), values) &&
+              diagnostics.joined_recovery_rois > 0 && !diagnostics.recovery_budget_exhausted,
+              "local recovery handles a joined arrow in every slot including doubled seed gaps");
+    }
+}
+
+void diagnostic_regressions() {
+    ReloadVisionDiagnostics diagnostics;
+    diagnostics.glyph_bounds.push_back({1, 2, 3, 4});
+    check(!detect_reload_sequence({}, &diagnostics) &&
+          diagnostics.failure == ReloadDetectionFailure::invalid_image &&
+          diagnostics.components == 0 && diagnostics.glyph_bounds.empty(),
+          "diagnostics reset and distinguish invalid image storage");
+    check(!detect_reload_sequence(solid(100, 100, {14, 14, 14}), &diagnostics) &&
+          diagnostics.failure == ReloadDetectionFailure::not_enough_glyphs && diagnostics.glyphs == 0,
+          "diagnostics distinguish a valid image without silhouettes");
+
+    constexpr std::array<ReloadArrow, 4> values{{{ReloadDirection::up, false},
+        {ReloadDirection::right, false}, {ReloadDirection::down, false}, {ReloadDirection::left, false}}};
+    auto scene = solid(800, 500, {14, 14, 14});
+    band(scene, 150, 150, 30, values);
+    const auto plain = detect_reload_sequence(scene);
+    const auto traced = detect_reload_sequence(scene, &diagnostics);
+    check(expected(traced, values) && plain && plain->arrows == traced->arrows &&
+          plain->bounds.left == traced->bounds.left && plain->bounds.top == traced->bounds.top &&
+          plain->bounds.right == traced->bounds.right && plain->bounds.bottom == traced->bounds.bottom &&
+          plain->confidence == traced->confidence &&
+          diagnostics.failure == ReloadDetectionFailure::none && diagnostics.components == 4 &&
+          diagnostics.glyphs == 4 && diagnostics.rows == 1 && diagnostics.glyph_bounds.size() == 4,
+          "optional diagnostics preserve the observation and count classified silhouettes");
+    band(scene, 150, 350, 30, values);
+    check(!detect_reload_sequence(scene, &diagnostics) &&
+          diagnostics.failure == ReloadDetectionFailure::ambiguous_rows && diagnostics.rows == 2,
+          "diagnostics retain two-row ambiguity instead of reporting a missing row");
+
+    scene = solid(1100, 950, {14, 14, 14});
+    for (int index = 0; index < 513; ++index)
+        arrow(scene, 35 + (index % 25) * 42, 35 + (index / 25) * 42, 14, values[index % 4]);
+    check(!detect_reload_sequence(scene, &diagnostics) &&
+          diagnostics.failure == ReloadDetectionFailure::glyph_limit && diagnostics.glyphs == 513 &&
+          diagnostics.glyph_bounds.size() == 512,
+          "excessive classified glyphs reject the frame and bound diagnostic storage");
+
+    // Many separate three-arrow groups exercise bounded recovery work. No
+    // fourth direction exists, so exhaustion must never invent one.
+    scene = solid(220, 1800, {14, 14, 14});
+    for (int row = 0; row < 34; ++row)
+        for (int column = 0; column < 3; ++column)
+            arrow(scene, 50 + column * 35, 40 + row * 50, 22, values[column]);
+    check(!detect_reload_sequence(scene, &diagnostics) &&
+          diagnostics.failure == ReloadDetectionFailure::no_row && diagnostics.rows == 0 &&
+          diagnostics.joined_recovery_rois == 32 && diagnostics.recovery_budget_exhausted,
+          "local recovery has a reported work budget and never guesses the missing fourth arrow");
+
+    const std::array<std::uint8_t, 3> white{215, 215, 215}, green{35, 200, 105}, dark{14, 14, 14};
+    check(reload_pixel_class(white.data()) == 1 && reload_pixel_class(green.data()) == 2 &&
+          reload_pixel_class(dark.data()) == 0,
+          "offline diagnostic masks share the detector's exact colour classification");
+    check(std::string(reload_detection_failure_name(ReloadDetectionFailure::invalid_image)) == "invalid_image" &&
+          std::string(reload_detection_failure_name(ReloadDetectionFailure::glyph_limit)) == "glyph_limit" &&
+          std::string(reload_detection_failure_name(ReloadDetectionFailure::not_enough_glyphs)) == "not_enough_glyphs" &&
+          std::string(reload_detection_failure_name(ReloadDetectionFailure::no_row)) == "no_row" &&
+          std::string(reload_detection_failure_name(ReloadDetectionFailure::ambiguous_rows)) == "ambiguous_rows" &&
+          std::string(reload_detection_failure_name(ReloadDetectionFailure::none)) == "none",
+          "diagnostic failure names are stable for saved recordings");
+}
+
 void malformed() {
     check(!detect_reload_sequence(Image{}), "empty frame rejected");
     check(!detect_reload_sequence(Image{-1, 10, {}}), "negative dimensions rejected");
@@ -326,7 +614,7 @@ void malformed() {
 }  // namespace
 
 int main() {
-    try { fixture_regressions(); outlined_synthetic(); synthetic_scenes(); malformed(); }
+    try { fixture_regressions(); outlined_synthetic(); contour_regressions(); synthetic_scenes(); joined_arrow_with_distractors(); diagnostic_regressions(); malformed(); }
     catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
     std::cout << checks << " reload vision checks, " << failures << " failures\n";
     return failures ? 1 : 0;

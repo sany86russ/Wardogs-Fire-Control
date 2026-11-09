@@ -6,6 +6,8 @@
 #include "selection_overlay.hpp"
 #include "settings_dialog.hpp"
 #include "game_helpers_dialog.hpp"
+#include "reload_diagnostics.hpp"
+#include "reload_tracking.hpp"
 #include "wardogs/game_helpers.hpp"
 #include "wardogs/reload_helper.hpp"
 #include "wardogs/reload_region.hpp"
@@ -49,6 +51,8 @@
 #include <QChar>
 #include <QCheckBox>
 #include <QDateTime>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QUuid>
 #include <QDir>
 #include <QElapsedTimer>
@@ -414,6 +418,15 @@ struct ReloadCaptureContext {
     wardogs::ImageRect search{};
     std::optional<wardogs::ImageRect> tracked;
     unsigned observed_frames{};
+    bool recognition_failed{};
+    std::shared_ptr<wardogs_ui::ReloadDiagnosticSession> recorder;
+    bool recording_failed{};
+    const std::chrono::steady_clock::time_point started{std::chrono::steady_clock::now()};
+
+    wardogs_ui::ReloadRegionKey region_key() const noexcept {
+        return {reinterpret_cast<std::uintptr_t>(window), client.right - client.left,
+            client.bottom - client.top, search};
+    }
 
     bool unchanged() const {
         if (!wardogs::helper_window_allows_input(reinterpret_cast<std::uintptr_t>(window)) ||
@@ -433,14 +446,44 @@ struct ReloadCaptureContext {
             physical.left < info.rcMonitor.left || physical.top < info.rcMonitor.top ||
             physical.right > info.rcMonitor.right || physical.bottom > info.rcMonitor.bottom)
             throw std::runtime_error("Область стрелок должна находиться внутри одного монитора");
+        const auto capture_started = std::chrono::steady_clock::now();
         auto frame = wardogs::capture_reload_screen(wardogs::make_capture_region(monitor, physical));
+        const auto captured = std::chrono::steady_clock::now();
         if (!unchanged()) throw std::runtime_error("Окно игры изменилось. Запустите помощник заново.");
-        auto observation = wardogs::detect_reload_sequence(frame);
+        wardogs::ReloadVisionDiagnostics vision;
+        const auto recognition_started = std::chrono::steady_clock::now();
+        auto observation = wardogs::detect_reload_sequence(frame, &vision);
+        if (!observation) recognition_failed = true;
+        const auto recognized = std::chrono::steady_clock::now();
+        const auto milliseconds = [](auto duration) {
+            return std::chrono::duration<double, std::milli>(duration).count();
+        };
         std::ostringstream diagnostic;
         diagnostic.imbue(std::locale::classic());
         diagnostic << "reload.capture frame=" << ++observed_frames
             << " size=" << frame.width << 'x' << frame.height
-            << " tracked=" << (tracked ? 1 : 0) << " arrows=" << (observation ? 1 : 0);
+            << " tracked=" << (tracked ? 1 : 0) << " arrows=" << (observation ? 1 : 0)
+            << " reason=" << wardogs::reload_detection_failure_name(vision.failure)
+            << " components=" << vision.components << " glyphs=" << vision.glyphs
+            << " rows=" << vision.rows << " recovery_rois=" << vision.joined_recovery_rois
+            << " contour_glyphs=" << vision.contour_glyphs << " contour_passes=" << vision.contour_passes
+            << " recovery_limited=" << vision.recovery_budget_exhausted
+            << " capture_ms=" << milliseconds(captured - capture_started)
+            << " recognition_ms=" << milliseconds(recognized - recognition_started)
+            << " algorithm=" << wardogs::reload_vision_revision;
+        // Retain the exact frame we just read. PNG encoding and disk writes
+        // happen only after the input worker finishes; no extra captures.
+        if (recorder && !recording_failed) {
+            try {
+                const bool stored = recorder->add_frame(std::move(frame), area, vision, observation,
+                    milliseconds(captured - capture_started), milliseconds(recognized - recognition_started),
+                    milliseconds(recognized - started));
+                diagnostic << " diagnostic_image=" << (stored ? "stored" : "omitted");
+            } catch (const std::exception& error) {
+                recording_failed = true;
+                wardogs::log_error(std::string("reload.diagnostics_capture_failed ") + error.what());
+            }
+        }
         if (observation) {
             auto& bounds = observation->bounds;
             bounds.left += area.left; bounds.right += area.left;
@@ -744,6 +787,7 @@ public:
         if (rapid_warmup_.joinable()) { rapid_warmup_.request_stop(); rapid_warmup_.join(); }
         if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
         if (accuracy_writer_) accuracy_writer_->stop();
+        if (reload_diagnostics_writer_.joinable()) reload_diagnostics_writer_.join();
     }
 
     bool export_snapshot(const QString& mode, const QString& path) {
@@ -1160,6 +1204,48 @@ public:
             if (button) button->click();
             QApplication::processEvents();
         };
+        {
+            // Exercise the real controller's post-cycle writer twice using
+            // synthetic RAM frames, without capture, game input or a profile.
+            QTemporaryDir temporary(QStringLiteral("wardogs-reload-writer-XXXXXX"));
+            bool saved = temporary.isValid();
+            for (int cycle = 1; saved && cycle <= 2; ++cycle) {
+                auto context = std::make_shared<ReloadCaptureContext>();
+                const auto directory = std::filesystem::path{temporary.path().toStdWString()} /
+                    std::to_wstring(cycle);
+                context->recorder = std::make_shared<wardogs_ui::ReloadDiagnosticSession>(directory);
+                wardogs::Image frame;
+                frame.width = 2; frame.height = 2; frame.bgr.assign(12, 0);
+                wardogs::ReloadVisionDiagnostics vision;
+                vision.failure = wardogs::ReloadDetectionFailure::not_enough_glyphs;
+                saved = context->recorder->add_frame(std::move(frame), {0, 0, 2, 2},
+                    vision, std::nullopt, 1, 1, 2);
+                reload_capture_context_ = context;
+                finish_reload_capture();
+                if (reload_diagnostics_writer_.joinable()) reload_diagnostics_writer_.join();
+                QApplication::processEvents();
+                saved = saved && !reload_diagnostics_saving_.load(std::memory_order_acquire) &&
+                    !reload_capture_context_ && std::filesystem::exists(directory / L"session.json") &&
+                    !std::filesystem::exists(directory / L"frame-2.png");
+            }
+            check("reload_diagnostics_writer_saves_once_and_can_be_reused_without_input", saved);
+        }
+        {
+            auto context = std::make_shared<ReloadCaptureContext>();
+            context->window = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(123));
+            context->client = {100, 100, 2660, 1540};
+            context->search = {0, 0, 2560, 1440};
+            context->tracked = wardogs::ImageRect{1100, 900, 1390, 1030};
+            reload_capture_context_ = context;
+            finish_reload_capture();
+            check("reload_finished_capture_retains_strip_for_the_next_R",
+                reload_region_tracker_.lookup(context->region_key()).has_value());
+            context->recognition_failed = true;
+            reload_capture_context_ = context;
+            finish_reload_capture();
+            check("reload_failed_capture_discards_position_for_fresh_discovery",
+                !reload_region_tracker_.lookup(context->region_key()));
+        }
         check("first_launch_has_no_fake_base", !base_set_ && !target_ && distance_->text() == QStringLiteral("—"));
         check("default_workspace_has_one_next_action_and_three_steps", next_step_ && !next_step_->text().isEmpty() &&
             std::all_of(workflow_steps_.begin(), workflow_steps_.end(), [](const auto* step) { return step && !step->text().isEmpty(); }));
@@ -3354,6 +3440,11 @@ private:
     wardogs::ReloadTrigger reload_trigger_;
     HWND reload_trigger_window_{};
     bool reload_cycle_started_{};
+    bool reload_diagnostics_armed_{};
+    std::shared_ptr<ReloadCaptureContext> reload_capture_context_;
+    wardogs_ui::ReloadRegionTracker reload_region_tracker_;
+    std::atomic_bool reload_diagnostics_saving_{false};
+    std::jthread reload_diagnostics_writer_;
     bool displayed_reload_waiting_{};
     wardogs::ReloadHelperState displayed_reload_state_{wardogs::ReloadHelperState::stopped};
     int displayed_reload_count_{};
@@ -7192,7 +7283,60 @@ private:
             reload_trigger_.armed() && !reload_helper_.running());
     }
 
+    std::filesystem::path reload_diagnostics_directory() const {
+        return wardogs::settings_path().parent_path() / L"diagnostics" / L"reload";
+    }
+
+    void finish_reload_capture() {
+        if (!reload_capture_context_ || reload_helper_.running()) return;
+        // Join the stopped input worker before reading its retained frames.
+        reload_helper_.stop();
+        auto context = std::move(reload_capture_context_);
+        if (context->recognition_failed) reload_region_tracker_.clear();
+        else if (context->tracked && context->window) {
+            if (!reload_region_tracker_.remember(context->region_key(), *context->tracked))
+                wardogs::log_warning("reload.region_cache_rejected invalid_geometry=1");
+        }
+        auto session = std::move(context->recorder);
+        if (!session) return;
+        std::string outcome = reload_helper_.state() == wardogs::ReloadHelperState::completed
+            ? "completed" : "stopped";
+        if (const auto error = reload_helper_.last_error(); !error.empty()) outcome = error;
+        if (context->recording_failed) outcome += "; diagnostic capture failed (see log)";
+        if (reload_diagnostics_writer_.joinable()) reload_diagnostics_writer_.join();
+        reload_diagnostics_saving_.store(true, std::memory_order_release);
+        try {
+            reload_diagnostics_writer_ = std::jthread([this, session, outcome] {
+                if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL))
+                    wardogs::log_warning("reload.diagnostics_priority_failed");
+                QString failure;
+                try {
+                    session->save(outcome);
+                    wardogs::log_info("reload.diagnostics_saved directory=" +
+                        utf8(QString::fromStdWString(session->directory().native())));
+                } catch (const std::exception& error) {
+                    failure = QString::fromUtf8(error.what());
+                    wardogs::log_error("reload.diagnostics_save_failed error=" + std::string(error.what()));
+                }
+                reload_diagnostics_saving_.store(false, std::memory_order_release);
+                QMetaObject::invokeMethod(this, [this, failure] {
+                    if (closing_) return;
+                    if (!failure.isEmpty()) set_status(wardogs::i18n::text(
+                        QStringLiteral("Не удалось сохранить диагностику перезарядки: %1")).arg(failure), true);
+                    else if (!reload_helper_.running()) set_status(wardogs::i18n::text(
+                        QStringLiteral("Диагностика перезарядки сохранена. Папка — в настройках помощников.")));
+                }, Qt::QueuedConnection);
+            });
+        } catch (const std::exception& error) {
+            reload_diagnostics_saving_.store(false, std::memory_order_release);
+            wardogs::log_error("reload.diagnostics_writer_failed error=" + std::string(error.what()));
+            set_status(wardogs::i18n::text(QStringLiteral("Не удалось сохранить диагностику перезарядки: %1"))
+                .arg(error_text(error)), true);
+        }
+    }
+
     void update_game_helper_status() {
+        finish_reload_capture();
         sync_pinned_helpers();
         const auto mode = reload_trigger_.armed() || reload_helper_.running()
             ? wardogs::GameHelperMode::reload : game_helper_.mode();
@@ -7346,6 +7490,7 @@ private:
     void begin_reload_cycle(HWND activation_window) {
         if (!reload_trigger_.armed() || reload_helper_.running() ||
             activation_window != GetForegroundWindow()) return;
+        finish_reload_capture();
         try {
             const auto hotkey = wardogs::parse_hotkey(settings_.game_helpers.reload.hotkey);
             auto context = std::make_shared<ReloadCaptureContext>();
@@ -7354,6 +7499,20 @@ private:
             context->search = wardogs::reload_search_rect(
                 context->client.right - context->client.left, context->client.bottom - context->client.top,
                 settings_.game_helpers.reload);
+            context->tracked = reload_region_tracker_.lookup(context->region_key());
+            if (reload_diagnostics_armed_ && !reload_diagnostics_saving_.load(std::memory_order_acquire)) {
+                try {
+                    const auto name = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz")) +
+                        QLatin1Char('-') + QUuid::createUuid().toString(QUuid::WithoutBraces);
+                    context->recorder = std::make_shared<wardogs_ui::ReloadDiagnosticSession>(
+                        reload_diagnostics_directory() / name.toStdWString());
+                } catch (const std::exception& error) {
+                    reload_diagnostics_armed_ = false;
+                    wardogs::log_error("reload.diagnostics_start_failed error=" + std::string(error.what()));
+                    set_status(wardogs::i18n::text(QStringLiteral("Не удалось сохранить диагностику перезарядки: %1"))
+                        .arg(error_text(error)), true);
+                }
+            }
             reload_helper_.start({
                 [context] { return context->unchanged(); },
                 [hotkey] {
@@ -7375,6 +7534,11 @@ private:
                     return wardogs::send_reload_key(reinterpret_cast<std::uintptr_t>(context->window),
                                                      direction, pressed);
                 }}, wardogs::reload_helper_timing(settings_.game_helpers.reload));
+            reload_capture_context_ = context;
+            if (context->recorder) {
+                reload_diagnostics_armed_ = false;
+                wardogs::log_info("reload.diagnostics_started one_cycle=1");
+            }
             reload_cycle_started_ = true;
             last_started_helper_ = wardogs::GameHelperMode::reload;
             wardogs::log_info("helper.started mode=sph2_reload");
@@ -7438,6 +7602,17 @@ private:
         GameHelpersDialog dialog(settings_, this, [this](const auto& preferences) {
             return select_reload_helper_region(preferences);
         });
+        if (auto* checkbox = dialog.findChild<QCheckBox*>(QStringLiteral("reloadDiagnosticsOnce"))) {
+            checkbox->setChecked(reload_diagnostics_armed_);
+            checkbox->setEnabled(!reload_diagnostics_saving_.load(std::memory_order_acquire));
+        }
+        if (auto* folder = dialog.findChild<QPushButton*>(QStringLiteral("reloadDiagnosticsFolder"))) {
+            connect(folder, &QPushButton::clicked, &dialog, [this, &dialog] {
+                const auto directory = QString::fromStdWString(reload_diagnostics_directory().native());
+                if (!QDir().mkpath(directory) || !QDesktopServices::openUrl(QUrl::fromLocalFile(directory)))
+                    dialog.show_error(wardogs::i18n::text(QStringLiteral("Не удалось открыть папку диагностики перезарядки.")));
+            });
+        }
         unregister_hotkeys();
         for (;;) {
             if (dialog.exec() != QDialog::Accepted) {
@@ -7455,6 +7630,7 @@ private:
                 register_hotkeys(candidate, false);
                 if (!diagnostic_) wardogs::save_settings(candidate);
                 settings_ = candidate;
+                reload_diagnostics_armed_ = dialog.reload_diagnostics_requested();
                 set_status(wardogs::i18n::text(QStringLiteral("Настройки помощников сохранены. Запуск — назначенной клавишей в игре.")));
                 return;
             } catch (const std::exception& error) {

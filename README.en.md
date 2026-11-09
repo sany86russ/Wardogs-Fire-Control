@@ -213,7 +213,11 @@ Drag the mini card to move it and drag its edges to resize it. It remembers the 
 
 The **50 / 90 / 750 ms** defaults apply to new profiles and missing settings. Updating preserves saved intervals; adjust them on the SPH-2 tab if required.
 
-**SPH-2:** press F8 once in the game, then press and release **R** after each shot. After 500 ms the helper reads four arrows from one snapshot and sends those keys in order; it repeats this **four times — 16 keys**. Arrow shapes are detected independently of the circle or background, and the search region is selected automatically for the current resolution. A manual region is also available. The helper returns to **Waiting for R** after a cycle; no new F8 is required before the next shot. Animation and green acceptance indicators are not checked.
+**SPH-2:** press F8 once in the game, then press and release **R** after each shot. After 500 ms the helper reads four arrows from one snapshot and sends those keys in order; it repeats this **four times — 16 keys**. The helper looks for arrow shapes without using the circle as a template, and selects the search region automatically for the current resolution. A manual region is also available. The helper returns to **Waiting for R** after a cycle; no new F8 is required before the next shot. Animation and green acceptance indicators are not checked.
+
+For troubleshooting, [record one cycle](docs/RELOAD-DIAGNOSTICS.md): raw captures, masks and results are saved locally after input ends. Replay them offline without firing again. Recording is off by default and adds no captures or key presses.
+
+Recognition uses arrow fill and contrasting boundaries. The detected area is retained across reloads for the same window, resolution and search region; directions are always read afresh. Captures retain their original resolution. Invisible, occluded or ambiguous arrows are not guessed.
 
 Only one helper runs at a time. Switching windows interrupts input: Build helper and Team Piker require a new start, while armed SPH-2 waits for a fresh R in the game. Capture pause keeps left-button helpers running but interrupts the current reload; a new R is required after resuming. **Stop helpers**, opening settings and closing the application turn all modes off. Preferences persist, but every helper starts stopped after launching the application. Mini cards show the actual shortcuts and current states.
 
