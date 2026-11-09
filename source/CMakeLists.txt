@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(WarDogsDistanceCalculator VERSION 2.16.0 LANGUAGES C CXX)
+project(WarDogsDistanceCalculator VERSION 2.17.0 LANGUAGES C CXX)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Network)
 qt_standard_project_setup()
@@ -20,7 +20,7 @@ qt_add_resources(wardogs_i18n localization
     BASE translations
     FILES translations/main.json translations/dialogs.json
           translations/errors.json translations/common.json translations/planning.json translations/helpers.json
-          translations/helper_errors.json translations/helper_runtime.json translations/pinned_helpers.json translations/reload_helper.json translations/reload_runtime.json translations/qtbase_ru.json
+          translations/helper_errors.json translations/helper_runtime.json translations/pinned_helpers.json translations/reload_helper.json translations/reload_runtime.json translations/sph2_first_shot.json translations/sph2_first_shot_runtime.json translations/qtbase_ru.json
 )
 
 add_library(wardogs_updates STATIC src/update_service.cpp src/update_ui.cpp)
@@ -376,6 +376,12 @@ target_link_libraries(wardogs_firing_analysis_tests PRIVATE wardogs_core)
 target_compile_options(wardogs_firing_analysis_tests PRIVATE /W4 /permissive- /utf-8)
 add_test(NAME wardogs_firing_analysis_tests COMMAND wardogs_firing_analysis_tests)
 
+add_executable(wardogs_sph2_first_shot_tests tests/sph2_first_shot_tests.cpp)
+target_link_libraries(wardogs_sph2_first_shot_tests PRIVATE wardogs_core)
+target_compile_options(wardogs_sph2_first_shot_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_sph2_first_shot_tests COMMAND wardogs_sph2_first_shot_tests)
+set_tests_properties(wardogs_sph2_first_shot_tests PROPERTIES TIMEOUT 20)
+
 add_executable(wardogs_fire_missions_tests tests/fire_missions_tests.cpp)
 target_link_libraries(wardogs_fire_missions_tests PRIVATE wardogs_missions)
 target_compile_options(wardogs_fire_missions_tests PRIVATE /W4 /permissive- /utf-8)
@@ -571,6 +577,15 @@ if(MSVC)
     target_compile_options(wardogs_settings_tests PRIVATE /W4 /permissive- /utf-8)
 endif()
 add_test(NAME wardogs_settings_tests COMMAND wardogs_settings_tests)
+
+add_executable(wardogs_settings_dialog_tests tests/settings_dialog_tests.cpp src/settings_dialog.cpp)
+target_include_directories(wardogs_settings_dialog_tests PRIVATE src include)
+target_link_libraries(wardogs_settings_dialog_tests PRIVATE
+    wardogs_planning_ui wardogs_i18n wardogs_core Qt6::Widgets)
+target_compile_definitions(wardogs_settings_dialog_tests PRIVATE UNICODE _UNICODE NOMINMAX)
+target_compile_options(wardogs_settings_dialog_tests PRIVATE /W4 /permissive- /utf-8)
+add_test(NAME wardogs_settings_dialog_tests COMMAND wardogs_settings_dialog_tests -platform offscreen)
+set_tests_properties(wardogs_settings_dialog_tests PROPERTIES TIMEOUT 20)
 
 add_executable(wardogs_ocr_tests tests/ocr_tests.cpp)
 target_link_libraries(wardogs_ocr_tests PRIVATE wardogs_core)

@@ -821,6 +821,7 @@ void PlanningDialog::refresh() {
         wardogs::FiringAnalysisRequest request;
         request.weapon = s.context.weapon;
         request.arc = s.selected_arc();
+        request.sph2_height_policy = s.context.sph2_height_policy;
         request.base = *s.context.base;
         request.target = *s.context.target;
         request.terrain = s.context.terrain;
@@ -847,6 +848,10 @@ void PlanningDialog::refresh() {
         s.analysis = request.flight_profile ? wardogs::analyze_firing(request) : std::move(first);
         const auto& result = *s.analysis;
         QString summary = ui_text("До цели %1 м").arg(result.distance_m, 0, 'f', 2);
+        if (!l81 && request.arc == wardogs::Arc::low &&
+            request.sph2_height_policy == wardogs::Sph2HeightPolicy::empirical_flat_low) {
+            summary += QLatin1Char('\n') + ui_text("Настильная команда — по таблице. Профиль рельефа — отдельная приближённая модель, не проверка попадания.");
+        }
         QString concise = ui_text("До цели %1 м").arg(result.distance_m, 0, 'f', 0);
         if (!l81 && s.context.active_solution && s.context.active_arc &&
             s.context.active_solution->arc == *s.context.active_arc &&

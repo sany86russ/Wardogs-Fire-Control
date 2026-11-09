@@ -4,16 +4,16 @@
 
 **A WARDOGS mortar and artillery calculator for L81 and SPH-2, on Windows 10/11 x64.** Calculate range, bearing and MIL from map coordinates, select an SPH-2 arc and optionally refine aim from an actual impact. Enter coordinates manually or capture them with local OCR; view the solution in the main window or an always-on-top mini card.
 
-[![Version](https://img.shields.io/badge/version-2.16.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
+[![Version](https://img.shields.io/badge/version-2.17.0-46cfc0)](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest)
 [![Platform](https://img.shields.io/badge/Windows-10%2F11%20x64-0078d4)](#download-and-update)
 [![Languages](https://img.shields.io/badge/UI-RU%20%2F%20EN-8b7cf7)](#interface-and-settings)
 [![License](https://img.shields.io/badge/license-MIT-blue)](source/LICENSE)
 
 [Русский](README.md) · **English** · [Download for Windows](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest) · [Quick start](source/docs/QUICKSTART-EN.md) · [Report an issue](https://github.com/sany86russ/Wardogs-Fire-Control/issues)
 
-**Version 2.16.0:** an **SPH-2 reload** helper, persistent **F8 → R** operation, configurable **50 / 90 / 750 ms** timing, independent Humanizer controls and **Mouse4 / Mouse5** with keyboard chords for every helper. [Full release EN/RU](docs/releases/v2.16.0.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
+**Version 2.17.0:** contour-based **SPH-2 reload** recognition, reuse of the detected region and a table-based initial low-trajectory command. The previous approximate height model is separately selectable in settings; subsequent updates gain network retries, clearer diagnostics and more durable installation receipts. [Full release EN/RU](docs/releases/v2.17.0.md) · [Full ChangeLog EN](source/docs/RELEASE-NOTES-EN.md) · [RU](source/docs/RELEASE-NOTES-RU.md).
 
-![WARDOGS Fire Control 2.16.0 main window — calculation and game helpers](docs/screenshots/en-main-2.16.0.png)
+![WARDOGS Fire Control 2.17.0 main window — table-based low trajectory](docs/screenshots/en-main-2.17.0.png)
 
 **2.16.0** also publishes automatic learning, which stores marked impacts locally and provisionally refines MIL for new targets from consistent observations. The normal workflow and Alt+I remain; background sight reading and a flashing frame are not used. [How learning works](source/docs/AUTOMATIC-LEARNING-EN.md).
 
@@ -54,7 +54,7 @@ A native screenshot of the actual app. Demonstration coordinates and statuses ar
 | **Mini card and auxiliary reticle** | Aim over other windows; size, opacity and locking; remembered card monitor and placement |
 | **SPH-2 ranging** | Optional **Alt+I** correction, miss distance and the bearing/MIL change already applied |
 | **SPH-2 automatic learning** | A local archive of accepted impacts and provisional MIL transfer to compatible new targets |
-| **SPH-2 terrain** | Elevation correction and an approximate ground-intersection assessment with a compatible local pack |
+| **SPH-2 terrain** | Heights and an approximate ground-intersection assessment; low-trajectory height correction is optional |
 | **Positions and flight** | Target shifts, saved points, ground profiles and personal flight-time observations |
 | **History** | Up to 12 session targets, 64 recent accepted points and 500 named records |
 | **Capture pause** | **Ctrl+Alt+P** releases capture shortcuts, F4 and middle-click while retaining the solution |
@@ -69,7 +69,7 @@ The app calculates aiming values. The player sets bearing and MIL, fires and che
 **Requirements:** Windows 10/11 x64. Running the app does not require administrator privileges, Qt SDK, Visual Studio or Python.
 
 1. Open the [latest stable release](https://github.com/sany86russ/Wardogs-Fire-Control/releases/latest).
-2. Under **Assets**, download **WardogsFireControl-v2.16.0-win-x64.zip**.
+2. Under **Assets**, download **WardogsFireControl-v2.17.0-win-x64.zip**.
 3. **Extract the complete ZIP** to a separate folder.
 4. Run **Start.cmd**, **Запустить.cmd** or **WarDogsDistanceCalculator.exe** from that folder.
 
@@ -80,13 +80,13 @@ Do not move only the EXE: the other DLLs and the `platforms` and `models` folder
 Compare the result with **SHA256SUMS.txt** from the same release:
 
 ~~~powershell
-Get-FileHash .\WardogsFireControl-v2.16.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\WardogsFireControl-v2.17.0-win-x64.zip -Algorithm SHA256
 ~~~
 
 With GitHub CLI installed, you can also verify the build's origin:
 
 ~~~powershell
-gh attestation verify .\WardogsFireControl-v2.16.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
+gh attestation verify .\WardogsFireControl-v2.17.0-win-x64.zip --repo sany86russ/Wardogs-Fire-Control
 ~~~
 
 ### Update inside the app
@@ -94,6 +94,10 @@ gh attestation verify .\WardogsFireControl-v2.16.0-win-x64.zip --repo sany86russ
 Stable-release checks run in the background and can be disabled in settings; **Check for updates** remains available. The calculator continues working without an internet connection.
 
 Installation starts after you click **Update**: the app downloads the complete ZIP, verifies its size, SHA-256 and file manifest, closes, replaces the package and restarts. You can cancel the download before installation. Settings, imported elevations, saved points and personal measurements in the Windows profile are preserved. The active solution and session history are not automatically restored after restarting.
+
+Since **2.17.0**, transient network failures get up to three attempts, and errors show their stage, details and **Retry / Open release** actions. Installation verifies the trusted helper, retries brief file locks and avoids rewriting already matching files. After success, the prepared ZIP and extracted staging are removed; changed-file backups and receipts remain for recovery.
+
+An already installed **2.16.0** starts the transition with its old code. If its Update action fails, download the complete 2.17.0 ZIP manually to a writable folder; the new mechanisms apply after 2.17.0 is installed. [Manual transition while preserving data](docs/UPDATES-EN.md).
 
 To upgrade from **2.7.0 or earlier**, download the new ZIP manually once. Automatic installation requires a complete portable package and write access to its folder. If replacement fails, the updater restores the previous files; its backup and log remain in `.wardogs-update-…`. [Update and recovery details](docs/UPDATES-EN.md).
 
@@ -133,7 +137,9 @@ L81 displays approximately **340 m / 110.7° / 649 MIL**. Calculations use exact
 | **SPH-2, low** | 59 | 1181–2629 m | 20–600 MIL |
 | **SPH-2, high** | 80 | 735–2629 m | 610–1400 MIL |
 
-These are retained **community tables**, not verified data for the current WARDOGS patch. SPH-2 ranges describe level ground; arc availability with an elevation difference depends on the model and the permitted final sight setting. Unsupported solutions do not produce invented MIL values. **L81 has no elevation correction.**
+These are retained **community tables**, not verified data for the current WARDOGS patch. SPH-2 ranges describe level ground. When the elevation model is applied, arc availability also depends on the height difference and permitted final sight setting. Unsupported solutions do not produce invented MIL values. **L81 has no elevation correction.**
+
+Since **2.17.0**, initial **SPH-2 low-trajectory aiming uses the table without a height correction by default**. Enable “Approximate height correction for SPH-2 low trajectory” under **Settings → General** to use the previous approximation; changing this mode resets ranging corrections. Actual heights remain available to the separate model-arc assessment; high trajectory and Alt+I retain their previous behavior. No fixed 50 MIL offset is introduced. Choosing this baseline does not guarantee a first-shot hit across maps and elevation differences.
 
 **MIL is the game's aiming scale, not miles or metres.** Set the selected command's bearing and final MIL to fire. **To target** is horizontal map distance. **Table ≈** is the inverse range estimate of the current MIL; it may differ after elevation correction or ranging and is not a promise of agreement with the in-game RNG display.
 
@@ -156,7 +162,7 @@ After observations from at least three independent targets at a stationary gun p
 
 The app does not observe firing, actual sight settings or chassis tilt. Alt+I refers to the command displayed when reading starts. If the chassis changes attitude at the same coordinates, **reset corrections manually**. [Ranging calculations and limits](source/docs/SPH2-VALIDATION-EN.md).
 
-![SPH-2 mini card 2.16.0 — aiming values and helper statuses](docs/screenshots/en-vehicle-pinned-helpers-2.16.0.png)
+![SPH-2 mini card 2.17.0 — aiming values and helper statuses](docs/screenshots/en-vehicle-pinned-helpers-2.17.0.png)
 
 The card shows a synthetic solution and demonstration helper statuses. The strip displays actual assigned shortcuts; highlighting indicates a running loop, not a confirmed in-game hammer hit.
 
@@ -309,22 +315,24 @@ Logs contain OCR and calculation diagnostics and may include game coordinates an
 
 ## RU and EN screenshots
 
-Native screenshots of the actual **2.16.0** application with synthetic calculations and helper states; older Build helper, Team Piker and L81 views are labelled 2.14.0. Capture does not use the game or send real game input; images do not establish in-game accuracy or anti-cheat approval.
+Native screenshots of the actual application: the main window, settings and SPH-2 mini card are updated for **2.17.0**; unchanged reload and Humanizer windows are labelled 2.16.0, and Build helper, Team Piker and L81 are labelled 2.14.0. Coordinates and states are synthetic; capture does not use the game or send real game input. Images do not establish in-game accuracy or anti-cheat approval.
 
 | Window | Русский | English |
 |---|---|---|
-| Main window | [Открыть](docs/screenshots/ru-main-2.16.0.png) | [Open](docs/screenshots/en-main-2.16.0.png) |
+| Main window (2.17.0) | [Открыть](docs/screenshots/ru-main-2.17.0.png) | [Open](docs/screenshots/en-main-2.17.0.png) |
+| SPH-2 first shot (2.17.0) | [Открыть](docs/screenshots/ru-settings-2.17.0.png) | [Open](docs/screenshots/en-settings-2.17.0.png) |
+| Update failure and recovery (2.17.0) | [Открыть](docs/screenshots/ru-update-error-2.17.0.png) | [Open](docs/screenshots/en-update-error-2.17.0.png) |
 | Build helper (2.14.0) | [Открыть](docs/screenshots/ru-helpers-build-2.14.0.png) | [Open](docs/screenshots/en-helpers-build-2.14.0.png) |
 | Team Piker (2.14.0) | [Открыть](docs/screenshots/ru-helpers-team-2.14.0.png) | [Open](docs/screenshots/en-helpers-team-2.14.0.png) |
 | L81 mini card (2.14.0) | [Открыть](docs/screenshots/ru-pinned-helpers-2.14.0.png) | [Open](docs/screenshots/en-pinned-helpers-2.14.0.png) |
 | SPH-2 reload | [Открыть](docs/screenshots/ru-helpers-reload-2.16.0.png) | [Open](docs/screenshots/en-helpers-reload-2.16.0.png) |
 | SPH-2 Humanizer | [Открыть](docs/screenshots/ru-helpers-humanizer-2.16.0.png) | [Open](docs/screenshots/en-helpers-humanizer-2.16.0.png) |
-| SPH-2 mini card and helpers | [Открыть](docs/screenshots/ru-vehicle-pinned-helpers-2.16.0.png) | [Open](docs/screenshots/en-vehicle-pinned-helpers-2.16.0.png) |
+| SPH-2 mini card and helpers | [Открыть](docs/screenshots/ru-vehicle-pinned-helpers-2.17.0.png) | [Open](docs/screenshots/en-vehicle-pinned-helpers-2.17.0.png) |
 
 <details>
 <summary>Historical 2.13.2 settings and help</summary>
 
-These retained images document the previous version and do not show the new 2.16.0 features.
+These retained images document the previous version and do not show the new 2.16.0–2.17.0 features.
 
 ![EN settings 2.13.2](docs/screenshots/en-settings-2.13.2.png)
 ![EN help 2.13.2](docs/screenshots/en-help-2.13.2.png)

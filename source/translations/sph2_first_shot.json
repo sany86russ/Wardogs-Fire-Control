@@ -1,0 +1,18 @@
+[
+  {
+    "ru": "По умолчанию — таблица. Модель не проверена.\nСмена режима сбрасывает пристрелку.",
+    "en": "Table aiming by default. Unvalidated model.\nChanging this mode resets ranging."
+  },
+  {
+    "ru": "Первичный выстрел SPH-2",
+    "en": "SPH-2 first shot"
+  },
+  {
+    "ru": "Приближённая высотная поправка\nдля настильной SPH-2",
+    "en": "Approximate height correction\nfor SPH-2 low trajectory"
+  },
+  {
+    "ru": "По умолчанию выключено: первичная настильная наводка использует таблицу без высотной поправки. Приближённая модель не подтверждена игровыми измерениями. Высоты по-прежнему показываются; навесная траектория и запись поправок по попаданиям работают как прежде. При смене режима пристрелка сбрасывается.",
+    "en": "Off by default: initial low-trajectory aiming uses the table without a height correction. The approximate model has not been validated by in-game measurements. Heights remain visible; high trajectory and impact correction recording work as before. Changing this mode resets ranging corrections."
+  }
+]

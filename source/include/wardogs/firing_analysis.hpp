@@ -74,6 +74,9 @@ struct FiringAnalysisRequest {
     std::optional<FlightTimeProfile> flight_profile;
     std::string ammunition_id;
     std::string game_version;
+    // Command baseline only. Actual heights remain in trajectory/time/terrain
+    // estimates, which do not certify the game's physical barrel direction.
+    Sph2HeightPolicy sph2_height_policy{Sph2HeightPolicy::retained_approximation};
 };
 
 enum class HeightSource { assumed_level, explicit_delta, terrain, unavailable };

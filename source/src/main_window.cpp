@@ -1247,6 +1247,25 @@ public:
                 !reload_region_tracker_.lookup(context->region_key()));
         }
         check("first_launch_has_no_fake_base", !base_set_ && !target_ && distance_->text() == QStringLiteral("—"));
+        check("sph2_first_low_command_defaults_to_empirical_table",
+            !settings_.sph2_low_height_model &&
+            sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low);
+        {
+            const auto policy = sph2_height_policy();
+            continuous_calibration_.emplace(wardogs::Point{0, 0},
+                wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0},
+                wardogs::ContinuousCorrectionMode::local_only, false, false, policy);
+            const auto firing = continuous_calibration_->firing_snapshot({20, 0}, wardogs::Arc::low, -63.45);
+            (void)continuous_calibration_->add_landing(firing, {19.5, 0}, -63.45);
+            automatic_analysis_ = AnalysisCache{{0, 0}, {20, 0}, wardogs::GameMap::training, nullptr, {}, policy};
+            settings_.sph2_low_height_model = true;
+            refresh_sph2_height_policy();
+            check("sph2_height_policy_change_discards_incompatible_corrections_and_analysis",
+                !continuous_calibration_ && !automatic_analysis_ && !base_set_ && !target_ &&
+                sph2_height_policy() == wardogs::Sph2HeightPolicy::retained_approximation);
+            settings_.sph2_low_height_model = false;
+            refresh_sph2_height_policy();
+        }
         check("default_workspace_has_one_next_action_and_three_steps", next_step_ && !next_step_->text().isEmpty() &&
             std::all_of(workflow_steps_.begin(), workflow_steps_.end(), [](const auto* step) { return step && !step->text().isEmpty(); }));
         check("secondary_session_and_ranging_details_start_collapsed", side_panel_->isHidden() && fire_details_->isHidden());
@@ -1701,7 +1720,10 @@ public:
         check("SPH2_flat_solution_is_ready_without_calibration_or_impact_history",
               !continuous_calibration_ && low_result_ && high_result_ && copy_button_->isEnabled() &&
               vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("Табличный расчёт"))) &&
-              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("рельеф не учтён"))));
+              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral("рельеф не учтён"))) &&
+              vehicle_note_->text().contains(wardogs::i18n::text(QStringLiteral(" · настильная: таблица"))) &&
+              vehicle_note_->toolTip().contains(wardogs::i18n::text(QStringLiteral(
+                  "Настильная: табличная база без высотной модели · наклон орудия не измерен"))));
         check("SPH2_optional_editor_has_no_first_second_shot_sequence",
               calibration_toggle_->text() == wardogs::i18n::text(QStringLiteral("Поправки по попаданию")) &&
               continuous_aim_->isReadOnly() && continuous_impact_->isEnabled() &&
@@ -2773,7 +2795,8 @@ public:
         check("pinned_context_matches_confirmed_map_and_retains_real_terrain_limitations",
               vehicle_mode_ && map_confirmed_ && current_game_map_ == wardogs::GameMap::training && !terrain_map_ &&
               card_context && card_context->text() == wardogs::i18n::text(QStringLiteral("Стрельбище")) +
-                  wardogs::i18n::text(QStringLiteral(" · без высот")) &&
+                  wardogs::i18n::text(QStringLiteral(" · без высот")) +
+                  wardogs::i18n::text(QStringLiteral(" · табличная настильная база")) &&
               !terrain_assistance_->text().isEmpty() &&
               card_context->toolTip().contains(terrain_assistance_->text()) &&
               card_context->accessibleDescription() == card_context->toolTip());
@@ -3416,6 +3439,7 @@ private:
         wardogs::GameMap map;
         const wardogs::TerrainPackage* terrain;
         std::array<std::optional<wardogs::FiringAnalysis>, 2> arcs;
+        wardogs::Sph2HeightPolicy height_policy;
     };
     std::optional<AnalysisCache> automatic_analysis_;
     QString recent_history_error_;
@@ -3667,15 +3691,31 @@ private:
         }
     }
 
+    wardogs::Sph2HeightPolicy sph2_height_policy() const noexcept {
+        if (continuous_calibration_) return continuous_calibration_->height_policy();
+        return settings_.sph2_low_height_model
+            ? wardogs::Sph2HeightPolicy::retained_approximation
+            : wardogs::Sph2HeightPolicy::empirical_flat_low;
+    }
+
+    void refresh_sph2_height_policy() {
+        automatic_analysis_.reset();
+        invalidate_corrections();
+        if (vehicle_mode_ && base_set_ && target_ && map_confirmed_ && !ocr_hold_ && !base_capture_pending_)
+            (void)show_result(*target_);
+    }
+
     void cache_automatic_analysis(const wardogs::Shot& shot) {
         if (automatic_analysis_ && automatic_analysis_->base == shot.base &&
             automatic_analysis_->target == shot.target && automatic_analysis_->map == current_game_map_ &&
-            automatic_analysis_->terrain == terrain_.get()) return;
-        AnalysisCache cache{shot.base, shot.target, current_game_map_, terrain_.get(), {}};
+            automatic_analysis_->terrain == terrain_.get() &&
+            automatic_analysis_->height_policy == sph2_height_policy()) return;
+        AnalysisCache cache{shot.base, shot.target, current_game_map_, terrain_.get(), {}, sph2_height_policy()};
         for (std::size_t index = 0; index < 2; ++index) {
             try {
                 wardogs::FiringAnalysisRequest request;
                 request.weapon = wardogs::AnalysisWeapon::sph2;
+                request.sph2_height_policy = sph2_height_policy();
                 request.arc = index == 0 ? wardogs::Arc::low : wardogs::Arc::high;
                 request.base = shot.base; request.target = shot.target;
                 if (terrain_) request.terrain = [this](wardogs::Point point) { return terrain_->height_at(point); };
@@ -5567,6 +5607,7 @@ private:
             observation.map_id = utf8(qtext(std::wstring{wardogs::game_map_key(current_game_map_)}));
             observation.base = base_;
             observation.firing = firing;
+            observation.table_profile = std::string(wardogs::sph2_table_profile(firing.arc, sph2_height_policy()));
             observation.impact = impact;
             observation.impact_height_delta_m = impact_height;
             observation.height_source = terrain_ ? "terrain" : "assumed_level";
@@ -5669,7 +5710,7 @@ private:
                     << " arc=" << (firing.arc == wardogs::Arc::low ? "low" : "high")
                     << " bearing=" << firing.bearing_deg << " mil=" << firing.mil
                     << " target_height_delta_m=" << firing.target_height_delta_m
-                    << " table_profile=sph2_retained_v1";
+                    << " table_profile=" << wardogs::sph2_table_profile(firing.arc, sph2_height_policy());
             if (evidence && evidence->impact_computed)
                 request << " computed_bearing=" << evidence->impact_computed->bearing_deg
                         << " computed_mil=" << evidence->impact_computed->mil;
@@ -5696,7 +5737,7 @@ private:
             if (replace_assumed_history) candidate.reset();
             if (!candidate)
                 candidate.emplace(base_, wardogs::PlatformCalibration{wardogs::identity_rotation(), 0.0},
-                                  wardogs::ContinuousCorrectionMode::local_only, true, true);
+                                  wardogs::ContinuousCorrectionMode::local_only, true, true, sph2_height_policy());
             const auto impact_height_delta = target_height_delta(impact);
             observed_impact_height = impact_height_delta;
             const auto assessment = candidate->add_landing(firing, impact, impact_height_delta);
@@ -6118,7 +6159,7 @@ private:
                           result.target, arc, height_delta)
                     : wardogs::corrected_solution(
                           result.base, result.target, calibration, arc,
-                          height_delta);
+                          height_delta, sph2_height_policy());
                 card->set_solution(solution, result.distance * 100.0);
                 const auto displayed = wardogs::displayed_firing_command(solution);
                 const auto command_index = arc == wardogs::Arc::low ? 0U : 1U;
@@ -6138,7 +6179,18 @@ private:
                        << " bearing=" << displayed.bearing_deg << " mil=" << displayed.mil
                        << " table_range_m=" << displayed.table_distance_m
                        << " computed_bearing=" << solution.bearing_deg << " computed_mil=" << solution.mil
-                       << " target_height_delta_m=" << height_delta << " table_profile=sph2_retained_v1";
+                       << " target_height_delta_m=" << height_delta
+                       << " height_correction_applied=" << (height_delta != 0.0 && (arc == wardogs::Arc::high ||
+                            sph2_height_policy() == wardogs::Sph2HeightPolicy::retained_approximation))
+                       << " table_profile=" << wardogs::sph2_table_profile(arc, sph2_height_policy());
+                const auto [first_mil, last_mil] = wardogs::sph2_mil_bounds(arc);
+                const auto first_range = wardogs::sph2_distance_for_mil(first_mil, arc);
+                const auto last_range = wardogs::sph2_distance_for_mil(last_mil, arc);
+                const double horizontal_range = result.distance * 100.0;
+                if (horizontal_range >= std::min(first_range, last_range) &&
+                    horizontal_range <= std::max(first_range, last_range))
+                    issued << " flat_table_mil=" << wardogs::sph2_mil_for_distance(horizontal_range, arc);
+                else issued << " flat_table_mil=unavailable";
                 if (continuous_calibration_) {
                     const auto assessment = continuous_calibration_->assess(result.target, arc, height_delta);
                     if (assessment.bearing_prediction_applied) predicted_arcs.push_back(name.toLower());
@@ -6156,7 +6208,7 @@ private:
                 wardogs::log_info(issued.str());
                 if (continuous_calibration_) {
                     const auto baseline = wardogs::corrected_solution(
-                        result.base, result.target, calibration, arc, height_delta);
+                        result.base, result.target, calibration, arc, height_delta, sph2_height_policy());
                     const auto displayed_baseline = wardogs::displayed_firing_command(baseline);
                     active_aim_offsets_[arc == wardogs::Arc::low ? 0U : 1U] = {
                         std::remainder(displayed.bearing_deg - displayed_baseline.bearing_deg, 360.0),
@@ -6221,6 +6273,14 @@ private:
         if (!range_predicted_arcs.isEmpty())
             vehicle_note_->setText(wardogs::i18n::text(QStringLiteral("Прогноз MIL: %1 · предварительно\n"))
                 .arg(range_predicted_arcs.join(QStringLiteral(", "))) + vehicle_note_->text());
+        vehicle_note_->setText(vehicle_note_->text() + wardogs::i18n::text(
+            sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low
+                ? QStringLiteral(" · настильная: таблица")
+                : QStringLiteral(" · настильная: высотная модель")));
+        vehicle_note_->setToolTip(wardogs::i18n::text(
+            sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low
+                ? QStringLiteral("Настильная: табличная база без высотной модели · наклон орудия не измерен")
+                : QStringLiteral("Настильная: приближённая высотная модель · наклон орудия не измерен")));
         return false;
     }
 
@@ -6290,9 +6350,12 @@ private:
         QStringList details;
         if (quick_state_) details.append(quick_state_->text());
         if (map_confirmed_ && vehicle_mode_) {
-            caption += terrain_map_ ? wardogs::i18n::text(ready ? QStringLiteral(" · высоты учтены")
-                                                             : QStringLiteral(" · высоты подключены"))
+            const bool empirical_low = arc && *arc == wardogs::Arc::low &&
+                sph2_height_policy() == wardogs::Sph2HeightPolicy::empirical_flat_low;
+            caption += terrain_map_ ? wardogs::i18n::text(ready && !empirical_low ? QStringLiteral(" · высоты учтены")
+                                                                               : QStringLiteral(" · высоты подключены"))
                                     : wardogs::i18n::text(QStringLiteral(" · без высот"));
+            if (empirical_low) caption += wardogs::i18n::text(QStringLiteral(" · табличная настильная база"));
             if (ready && terrain_ && automatic_analysis_ && automatic_analysis_->arcs[*arc == wardogs::Arc::low ? 0U : 1U]) {
                 const auto& clearance = automatic_analysis_->arcs[*arc == wardogs::Arc::low ? 0U : 1U]->clearance;
                 if (clearance.status == wardogs::TerrainClearanceStatus::blocked)
@@ -6484,6 +6547,7 @@ private:
 
     PlanningContext planning_context() {
         PlanningContext context;
+        context.sph2_height_policy = sph2_height_policy();
         context.map = current_game_map_;
         context.weapon = vehicle_mode_ ? wardogs::AnalysisWeapon::sph2 : wardogs::AnalysisWeapon::l81;
         context.preferred_arc = settings_.ghost_reticle.preferred_arc;
@@ -7676,6 +7740,9 @@ private:
             register_mouse_trigger(candidate);
             if (!diagnostic_) wardogs::save_settings(candidate);
             settings_ = candidate;
+            if (settings_.sph2_low_height_model != previous.sph2_low_height_model) {
+                refresh_sph2_height_policy();
+            }
             if (settings_.automatic_chat_region != previous.automatic_chat_region)
                 last_capture_monitor_.clear();
             advance_input_epoch();

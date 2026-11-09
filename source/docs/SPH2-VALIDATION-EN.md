@@ -1,5 +1,7 @@
 # SPH-2 validation and the 10 m criterion
 
+Since 2.17.0, low-trajectory commands use the table baseline without a height correction by default; settings can enable the previous approximation. The selected policy is consistent across the initial solution, command snapshot and Alt+I. Actual heights remain available, and analysis groups are separated by `table_profile`. The owner reported a successful check of the preceding preview; this is not an independent series covering all maps, ranges and gun positions. [Setting and limitations](CALCULATIONS-EN.md).
+
 The 2.15 source adds [automatic observation collection and separately validated MIL transfer](AUTOMATIC-LEARNING-EN.md). Background sight reading stays disabled and the normal Alt+I workflow is unchanged.
 
 [Русский](SPH2-VALIDATION-RU.md) · [Ranging model](continuous-calibration.md)

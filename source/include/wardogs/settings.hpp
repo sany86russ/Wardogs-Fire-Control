@@ -23,6 +23,9 @@ struct AppSettings {
 
     UiLanguage language{UiLanguage::russian};
     bool check_updates_on_start{true};
+    // The retained low-arc height model is approximate. Initial SPH-2 low
+    // commands use the measured flat-ground table unless explicitly enabled.
+    bool sph2_low_height_model{false};
     std::wstring region_hotkey{L"Alt+R"};
     std::wstring base_hotkey{L"Alt+X"};
     std::wstring target_hotkey{L"Alt+T"};

@@ -18,15 +18,53 @@ $script:MaximumExpandedBytes = 1GB
 $script:MaximumFileBytes = 256MB
 $script:MaximumManifestBytes = 5MB
 $script:MaximumFiles = 10000
+$script:FileRetryAttempts = 12
+$script:FileRetryDelayMilliseconds = 250
+
+function Test-WardogsTransientFileError {
+    param([Exception]$Failure)
+    while ($Failure) {
+        # A short-lived scanner/loader lock can disappear after the app closes.
+        # Never retry permissions, missing files, invalid data, or hash failures.
+        if ($Failure -is [IO.IOException] -and ($Failure.HResult -band 0xffff) -in @(32, 33)) { return $true }
+        $Failure = $Failure.InnerException
+    }
+    return $false
+}
+
+function Invoke-WardogsFileOperation {
+    param([scriptblock]$Action)
+    for ($attempt = 1; ; ++$attempt) {
+        try { return & $Action }
+        catch {
+            if ($attempt -ge $script:FileRetryAttempts -or -not (Test-WardogsTransientFileError $_.Exception)) { throw }
+            [Threading.Thread]::Sleep($script:FileRetryDelayMilliseconds)
+        }
+    }
+}
 
 function Write-WardogsJson {
     param([string]$Path, [object]$Value)
-    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    [void](Assert-WardogsPathWithoutReparse $Path)
+    $temporary = $Path + '.write-' + [Guid]::NewGuid().ToString('N')
+    try {
+        [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+        Invoke-WardogsFileOperation {
+            if (Test-Path -LiteralPath $Path -PathType Leaf) {
+                # NullString avoids PowerShell converting $null to an empty backup path.
+                [IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value)
+            } else {
+                [IO.File]::Move($temporary, $Path)
+            }
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction Stop }
+    }
 }
 
 function Get-WardogsFileHash {
     param([string]$Path)
-    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $stream = Invoke-WardogsFileOperation { [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read) }
     $sha = [Security.Cryptography.SHA256]::Create()
     try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose(); $stream.Dispose() }
@@ -198,7 +236,7 @@ function Get-WardogsBoundedStreamHash {
 
 function Assert-WardogsExecutable {
     param([string]$Path, [string]$ExpectedVersion)
-    $stream = [IO.File]::OpenRead($Path)
+    $stream = Invoke-WardogsFileOperation { [IO.File]::OpenRead($Path) }
     $reader = [IO.BinaryReader]::new($stream)
     try {
         if ($stream.Length -lt 256 -or $reader.ReadUInt16() -ne 0x5a4d) { throw 'Application is not a Windows executable.' }
@@ -225,7 +263,7 @@ function Open-WardogsVerifiedArchive {
         throw 'Downloaded archive is missing or exceeds the size limit.'
     }
     # Hash and read the same locked file handle, preventing an archive swap between those operations.
-    $archiveStream = [IO.File]::Open($Context.Archive, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $archiveStream = Invoke-WardogsFileOperation { [IO.File]::Open($Context.Archive, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read) }
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
         $actualHash = [BitConverter]::ToString($sha.ComputeHash($archiveStream)).Replace('-', '').ToLowerInvariant()
@@ -341,6 +379,12 @@ function Get-WardogsInstallPlan {
             $ancestor = [IO.Path]::GetDirectoryName($ancestor)
         }
         [void]$paths.Add($file.path)
+        # Leave byte-identical dependencies in place. Their hashes are still
+        # checked again after installation; unnecessary writes/backup IO add
+        # lock failures and disk use without changing the released payload.
+        if ((Test-Path -LiteralPath $target -PathType Leaf) -and
+                (Get-Item -LiteralPath $target).Length -eq $file.length -and
+                (Get-WardogsFileHash $target) -ieq $file.sha256) { continue }
         $plan.Add([pscustomobject]@{ path = $file.path; action = 'replace'; existed = (Test-Path -LiteralPath $target -PathType Leaf) })
     }
     $oldManifestPath = Get-WardogsChildPath $Context.Install 'package-manifest.json'
@@ -372,6 +416,67 @@ function Start-WardogsApplication {
     Start-Process -FilePath (Join-Path $Context.Install 'WarDogsDistanceCalculator.exe') -WorkingDirectory $Context.Install -ErrorAction Stop | Out-Null
 }
 
+function Invoke-WardogsSuccessfulCleanup {
+    param([object]$Context, [object]$Journal)
+    $warnings = [Collections.Generic.List[string]]::new()
+    $removed = [Collections.Generic.List[string]]::new()
+    foreach ($item in @(
+        @{ name = 'staged'; path = $Context.Stage; directory = $true },
+        @{ name = 'download.zip'; path = $Context.Archive; directory = $false }
+    )) {
+        try {
+            $expected = [IO.Path]::GetFullPath((Join-Path $Context.Work $item.name))
+            $actual = [IO.Path]::GetFullPath($item.path)
+            if ($actual -ine $expected -or [IO.Path]::GetDirectoryName($actual) -ine $Context.Work) {
+                throw 'Cleanup target is not the exact prepared child of this update directory.'
+            }
+            [void](Assert-WardogsPathWithoutReparse $Context.Work)
+            if (Test-Path -LiteralPath $actual) {
+                $resolved = (Resolve-Path -LiteralPath $actual).ProviderPath
+                if ($resolved -ine $expected) { throw 'Cleanup resolved outside its exact prepared path.' }
+                if ($item.directory) {
+                    Assert-WardogsDirectoryTree $resolved
+                    Invoke-WardogsFileOperation {
+                        if (Test-Path -LiteralPath $resolved) {
+                            # Revalidate immediately before every recursive removal attempt.
+                            if ((Resolve-Path -LiteralPath $resolved).ProviderPath -ine $expected) { throw 'Cleanup path changed.' }
+                            Assert-WardogsDirectoryTree $resolved
+                            Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction Stop
+                        }
+                    }
+                } else {
+                    [void](Assert-WardogsPathWithoutReparse $resolved)
+                    Invoke-WardogsFileOperation { Remove-Item -LiteralPath $resolved -Force -ErrorAction Stop }
+                }
+            }
+            $removed.Add($item.name)
+        } catch { $warnings.Add($item.name + ': ' + $_.Exception.Message) }
+    }
+    $Journal.cleanup_state = if ($warnings.Count) { 'warning' } else { 'complete' }
+    $Journal.cleanup_removed = @($removed.ToArray())
+    $Journal.cleanup_warnings = @($warnings.ToArray())
+    foreach ($receiptName in @('transaction.json', 'installed.json')) {
+        try {
+            $value = if ($receiptName -eq 'transaction.json') { $Journal } else {
+                [ordered]@{ state = 'installed'; version = $Context.Version; cleanup_state = $Journal.cleanup_state
+                    cleanup_removed = @($removed.ToArray()); cleanup_warnings = @($warnings.ToArray()) }
+            }
+            Write-WardogsJson (Join-Path $Context.Work $receiptName) $value
+        } catch { $warnings.Add($receiptName + ': ' + $_.Exception.Message) }
+    }
+    if ($warnings.Count) {
+        # The new executable may already be running: an auxiliary cleanup failure
+        # must never roll its files back. Retain explicit diagnostics instead.
+        $text = 'Update installed, but prepared-file cleanup was incomplete. ' + ($warnings -join '; ')
+        try {
+            $warningPath = Join-Path $Context.Work 'cleanup-warning.log'
+            [void](Assert-WardogsPathWithoutReparse $warningPath)
+            [IO.File]::WriteAllText($warningPath, $text, [Text.UTF8Encoding]::new($false))
+        } catch { Write-Warning ('Cleanup diagnostics could not be saved: ' + $_.Exception.Message) }
+        Write-Warning $text
+    }
+}
+
 function Invoke-WardogsInstall {
     param([object]$Context, [int]$ParentProcessId, [switch]$SkipRestart)
     if (-not $SkipRestart -and $ParentProcessId -le 0) { throw 'A positive parent process ID is required.' }
@@ -388,6 +493,7 @@ function Invoke-WardogsInstall {
     $verified = Open-WardogsVerifiedArchive $Context
     $parentExited = $false
     $restartHandled = $false
+    $installationSucceeded = $false
     try {
         Assert-WardogsStagedPackage $Context $verified
         [void](Get-WardogsInstallPlan $Context $verified.Manifest)
@@ -423,13 +529,16 @@ function Invoke-WardogsInstall {
         Assert-WardogsDirectoryTree $Context.Install
         Assert-WardogsStagedPackage $Context $verified
         $plan = @(Get-WardogsInstallPlan $Context $verified.Manifest)
+        $changedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($entry in $plan) { [void]$changedPaths.Add($entry.path) }
+        $keptFiles = @($verified.Manifest.files | Where-Object { -not $changedPaths.Contains($_.path) })
         New-Item -ItemType Directory -Path $Context.Backup | Out-Null
         foreach ($entry in $plan) {
             if ($entry.existed) {
                 $target = Get-WardogsChildPath $Context.Install $entry.path
                 $backupPath = Get-WardogsChildPath $Context.Backup $entry.path
                 New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($backupPath)) -Force | Out-Null
-                Copy-Item -LiteralPath $target -Destination $backupPath -ErrorAction Stop
+                Invoke-WardogsFileOperation { Copy-Item -LiteralPath $target -Destination $backupPath -ErrorAction Stop }
                 if ((Get-WardogsFileHash $target) -ine
                         (Get-WardogsFileHash $backupPath)) { throw "Backup verification failed: $($entry.path)" }
             }
@@ -447,9 +556,10 @@ function Invoke-WardogsInstall {
                 $journal.applied = @($applied | ForEach-Object { $_.path })
                 Write-WardogsJson $journalPath $journal
                 if ($entry.action -eq 'remove') {
-                    Remove-Item -LiteralPath $target -Force -ErrorAction Stop
+                    Invoke-WardogsFileOperation { Remove-Item -LiteralPath $target -Force -ErrorAction Stop }
                 } else {
-                    Copy-Item -LiteralPath (Get-WardogsChildPath $Context.Stage $entry.path) -Destination $target -Force -ErrorAction Stop
+                    $stagedPath = Get-WardogsChildPath $Context.Stage $entry.path
+                    Invoke-WardogsFileOperation { Copy-Item -LiteralPath $stagedPath -Destination $target -Force -ErrorAction Stop }
                 }
             }
             foreach ($file in $verified.Manifest.files) {
@@ -463,6 +573,7 @@ function Invoke-WardogsInstall {
             Write-WardogsJson (Join-Path $Context.Work 'installed.json') ([ordered]@{ state = 'installed'; version = $Context.Version })
             # Launch is the final fallible action: never roll files back underneath a running new executable.
             if (-not $SkipRestart) { Start-WardogsApplication $Context }
+            $installationSucceeded = $true
         } catch {
             # This catch owns all recovery from the first possible write onward.
             # Set this before recovery/logging can fail, so the outer catch never starts a mixed installation.
@@ -480,14 +591,27 @@ function Invoke-WardogsInstall {
                         if (-not (Test-Path -LiteralPath $target -PathType Leaf) -or
                                 (Get-WardogsFileHash $target) -ine
                                 (Get-WardogsFileHash $backupPath)) {
-                            Copy-Item -LiteralPath $backupPath -Destination $target -Force -ErrorAction Stop
+                            Invoke-WardogsFileOperation { Copy-Item -LiteralPath $backupPath -Destination $target -Force -ErrorAction Stop }
                         }
                         if ((Get-WardogsFileHash $target) -ine
                                 (Get-WardogsFileHash $backupPath)) { throw 'Restored backup hash does not match.' }
                     } elseif (Test-Path -LiteralPath $target -PathType Leaf) {
-                        Remove-Item -LiteralPath $target -Force -ErrorAction Stop
+                        Invoke-WardogsFileOperation { Remove-Item -LiteralPath $target -Force -ErrorAction Stop }
                     }
                 } catch { $rollbackFailures.Add("$($entry.path): $($_.Exception.Message)") }
+            }
+            # Kept files had the new payload hash before installation and need
+            # no backup. If another writer changed one meanwhile, do not label
+            # rollback complete or start a damaged/mixed executable.
+            foreach ($file in $keptFiles) {
+                try {
+                    $target = Get-WardogsChildPath $Context.Install $file.path
+                    if (-not (Test-Path -LiteralPath $target -PathType Leaf) -or
+                            (Get-Item -LiteralPath $target).Length -ne $file.length -or
+                            (Get-WardogsFileHash $target) -ine $file.sha256) {
+                        throw 'An unchanged payload file was modified during installation.'
+                    }
+                } catch { $rollbackFailures.Add("$($file.path): $($_.Exception.Message)") }
             }
             $journal.state = if ($rollbackFailures.Count -eq 0) { 'rolled-back' } else { 'rollback-incomplete' }
             $journal.error = $installFailure
@@ -516,6 +640,7 @@ function Invoke-WardogsInstall {
         }
         throw
     } finally { $verified.Zip.Dispose() }
+    if ($installationSucceeded) { Invoke-WardogsSuccessfulCleanup $Context $journal }
 }
 
 if ($MyInvocation.InvocationName -ne '.') {

@@ -95,12 +95,16 @@ jobs:
           Copy-Item source/build/release/wardogs_update_probe.exe $probeDirectory
           $env:QT_PLUGIN_PATH = $probeDirectory
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          & (Join-Path $probeDirectory 'wardogs_update_probe.exe') --live-check "--download=$(Join-Path $probeDirectory 'verified-download.zip')"
+          & (Join-Path $probeDirectory 'wardogs_update_probe.exe') --live-check "--download=$(Join-Path $probeDirectory 'verified-download.zip')" | Tee-Object -FilePath source/build/release/Testing/live-updater.json
           if ($LASTEXITCODE -ne 0) { throw 'Packaged HTTPS release check/download failed.' }
-      - name: Verify full update and real application restart
+      - name: Verify the published updater can install this release
         run: |
           $zip = Get-ChildItem source/out/public-release -Filter '*-win-x64.zip' | Select-Object -First 1
-          ./source/tests/update_restart_smoke.ps1 -ArchivePath $zip.FullName -PreviousArchivePath (Join-Path $env:RUNNER_TEMP 'updater-runtime-probe/verified-download.zip') -EvidenceDirectory (Join-Path $env:GITHUB_WORKSPACE 'source/build/release/Testing/update-restart')
+          ./source/tests/update_restart_smoke.ps1 -ArchivePath $zip.FullName -PreviousArchivePath (Join-Path $env:RUNNER_TEMP 'updater-runtime-probe/verified-download.zip') -HelperMode Installed -EvidenceDirectory (Join-Path $env:GITHUB_WORKSPACE 'source/build/release/Testing/update-restart/published-helper')
+      - name: Verify the hardened updater and real application restart
+        run: |
+          $zip = Get-ChildItem source/out/public-release -Filter '*-win-x64.zip' | Select-Object -First 1
+          ./source/tests/update_restart_smoke.ps1 -ArchivePath $zip.FullName -PreviousArchivePath (Join-Path $env:RUNNER_TEMP 'updater-runtime-probe/verified-download.zip') -HelperMode CurrentCandidate -EvidenceDirectory (Join-Path $env:GITHUB_WORKSPACE 'source/build/release/Testing/update-restart/current-helper')
       - name: Attest the release files
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4

@@ -57,6 +57,8 @@ int run_settings_tests() {
           "the default interface language is Russian");
     check(saved.check_updates_on_start,
           "fresh profiles check GitHub updates on startup");
+    check(!saved.sph2_low_height_model,
+          "fresh profiles use the empirical SPH-2 low table without the approximate height model");
     check(saved.last_game_map == wardogs::GameMap::unselected,
           "a new profile cannot imply a current game map");
     check(saved.region_hotkey == L"Alt+R" && saved.base_hotkey == L"Alt+X" &&
@@ -76,6 +78,34 @@ int run_settings_tests() {
           "loading a missing profile prepares the quick workflow without writing a file");
     check(saved.ghost_arc_hotkey == L"F4",
           "the ghost trajectory shortcut defaults to the unused F4 key");
+    check(!fresh.sph2_low_height_model,
+          "a missing profile keeps the approximate low-height model disabled");
+    {
+        const fs::path height_path = directory / L"sph2-height.ini";
+        AppSettings height_settings;
+        wardogs::save_settings_to(height_path, height_settings);
+        check(!wardogs::load_settings_from(height_path).sph2_low_height_model &&
+                  ini_value(height_path, L"settings", L"sph2_low_height_model") == L"0",
+              "disabled low-height policy is explicitly persisted and restored");
+        height_settings.sph2_low_height_model = true;
+        wardogs::save_settings_to(height_path, height_settings);
+        check(wardogs::load_settings_from(height_path).sph2_low_height_model &&
+                  ini_value(height_path, L"settings", L"sph2_low_height_model") == L"1",
+              "the optional approximate low-height policy round-trips without changing defaults");
+        for (const wchar_t* malformed : {L"true", L"2", L"-1", L"bad", L"999999999999999999999"}) {
+            WritePrivateProfileStringW(L"settings", L"sph2_low_height_model", malformed, height_path.c_str());
+            const auto before = bytes(height_path);
+            check(!wardogs::load_settings_from(height_path).sph2_low_height_model && bytes(height_path) == before,
+                  "malformed low-height policy stays disabled without rewriting the user's profile");
+        }
+        WritePrivateProfileStringW(L"settings", L"sph2_low_height_model", nullptr, height_path.c_str());
+        check(!wardogs::load_settings_from(height_path).sph2_low_height_model,
+              "an existing profile without the new key defaults to the empirical low table");
+        height_settings.sph2_low_height_model = false;
+        wardogs::save_settings_to(height_path, height_settings);
+        check(!wardogs::load_settings_from(height_path).sph2_low_height_model,
+              "the model can be disabled again after a previously enabled profile");
+    }
     check(fresh.game_helpers == wardogs::GameHelpersPreferences{} &&
               !fresh.game_helpers.build.enabled && !fresh.game_helpers.team.enabled && !fresh.game_helpers.reload.enabled &&
               fresh.game_helpers.reload.hotkey == L"F8" && fresh.game_helpers.reload.automatic_region &&

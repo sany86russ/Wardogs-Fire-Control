@@ -97,6 +97,7 @@ class Observation:
     diagnostic: bool
     source: str
     verification_claims: tuple[bool, bool, bool]
+    table_profile: str = "sph2_retained_v1"
 
     @property
     def stronger_provenance(self) -> bool:
@@ -135,6 +136,9 @@ def _observation(fields: dict[str, str], session: str, timestamp: str,
         raise ValueError("invalid correction mode")
     if "diagnostic" in fields and fields["diagnostic"] not in ("0", "1"):
         raise ValueError("diagnostic flag must be 0 or 1")
+    table_profile = fields.get("table_profile", "sph2_retained_v1")
+    if not table_profile.strip():
+        raise ValueError("table profile must not be empty")
     explicit_session = fields.get("session_id", "")
     if explicit_session:
         if session.startswith("id:") and session != "id:" + explicit_session:
@@ -148,7 +152,7 @@ def _observation(fields: dict[str, str], session: str, timestamp: str,
         fields.get("command_source", "unknown"), context_mode,
         diagnostic_path or context_mode == "diagnostic" or fields.get("diagnostic") == "1" or
         source in ("test", "fixture"),
-        source, tuple(fields.get(field) == "1" for field in VERIFICATION_FIELDS))
+        source, tuple(fields.get(field) == "1" for field in VERIFICATION_FIELDS), table_profile)
     distance = math.hypot(observation.target[0] - observation.base[0],
                           observation.target[1] - observation.base[1])
     if not math.isfinite(distance) or distance <= 0:
@@ -284,9 +288,11 @@ def analyze_logs(paths: Iterable[Path], radius_m: float = 10.0) -> dict:
     observations = [item for item in unique.values() if not item.diagnostic]
     grouped: dict[tuple, list[Observation]] = {}
     for item in observations:
-        grouped.setdefault((item.session, item.map, item.base, item.arc, item.mode), []).append(item)
+        grouped.setdefault((item.session, item.map, item.base, item.arc, item.mode,
+                            item.table_profile), []).append(item)
     groups = [{"session": key[0], "map": key[1], "base": list(key[2]),
-               "arc": key[3], "correction_mode": key[4], **_summary(items, radius_m)}
+               "arc": key[3], "correction_mode": key[4], "table_profile": key[5],
+               **_summary(items, radius_m)}
               for key, items in sorted(grouped.items())]
     summary = _summary(observations, radius_m)
     return {"schema_version": 1, "hit_radius_m": radius_m,
@@ -326,11 +332,12 @@ def render_markdown(report: dict) -> str:
              f"Запросов записи в журналах: {report['impact_requests_seen']}; отказов: {report['impact_rejections_seen']}. Эти события не являются счётчиком физических выстрелов.", "",
              "Журнал хранит принятые наблюдения попаданий. Он не доказывает запись каждого выстрела, фактическую наводку и независимость выборки. 99% попаданий этим отчётом не подтверждены.",
              "299 независимых попаданий без промахов дают нижнюю границу выше 99% только при полной и проверенной полевой выборке.", "",
-             "| Сессия | Карта | Орудие X,Y | Дуга | Наблюдения | Попадания | Нижняя граница | p95, м |",
-             "|---|---|---|---|---:|---:|---:|---:|"]
+             "Группы разделены по профилю расчёта; сводка выше объединяет все наблюдения.", "",
+             "| Сессия | Карта | Орудие X,Y | Дуга | Профиль расчёта | Наблюдения | Попадания | Нижняя граница | p95, м |",
+             "|---|---|---|---|---|---:|---:|---:|---:|"]
     for group in report["groups"]:
         safe = lambda value: str(value).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
-        lines.append(f"| {safe(group['session'])} | {safe(group['map'])} | {safe(group['base'])} | {safe(group['arc'])} | {group['count']} | {group['hits']} | {number(group['one_sided_95_percent_lower_bound'] * 100, 4)}% | {number(group['p95_miss_m'])} |")
+        lines.append(f"| {safe(group['session'])} | {safe(group['map'])} | {safe(group['base'])} | {safe(group['arc'])} | {safe(group['table_profile'])} | {group['count']} | {group['hits']} | {number(group['one_sided_95_percent_lower_bound'] * 100, 4)}% | {number(group['p95_miss_m'])} |")
     return "\n".join(lines) + "\n"
 
 

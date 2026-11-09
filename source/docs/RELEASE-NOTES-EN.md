@@ -1,5 +1,76 @@
 # WARDOGS Fire Control — release notes
 
+## 2.17.0 — reload contours and initial low-trajectory baseline · November 9, 2026
+
+[Полный релиз RU/EN / Full release EN/RU](../../docs/releases/v2.17.0.md).
+
+**2.17.0 updates SPH-2 active-reload recognition and initial low-trajectory aiming.** Arrow fills and recovered contours supply directions, while the detected region is reused between reloads. Initial low-trajectory commands now use the retained table without the approximate height correction. The previous model remains separately selectable.
+
+### Initial SPH-2 low-trajectory aiming
+
+- **Table baseline by default:** horizontal range maps to the existing low-trajectory table. No replacement table, fixed 50 MIL addition or unverified game coefficients are introduced.
+- **Settings → General → SPH-2 first shot:** the initially unchecked “Approximate height correction for SPH-2 low trajectory” restores the previous model. Its full explanation is available in a tooltip. Saving another mode resets current ranging corrections.
+- **Actual heights are retained:** target and impact heights remain in calculation context, history and correction-transfer limits. Disabling the low-command height term does not replace terrain observations with zero.
+- **One baseline for aiming and impacts:** the initial command, displayed-command snapshot and Alt+I use the same selected policy. Repeated impact recording does not add an already included correction twice. A mode change clears incompatible corrections and cached analysis.
+- **High trajectory and L81 are preserved.** The approximate terrain arc still uses actual heights and is explicitly separate from the table-based low-trajectory command. It does not reconstruct a projectile's actual flight or certify a hit.
+- Logs and offline impact analysis distinguish `sph2_empirical_low_v1` from the previous `sph2_retained_v1`. Older records without the field retain their legacy interpretation; unlike baselines are not pooled into one analysis group.
+
+The owner reported a successful check of the preceding preview. This is not an independent series across all maps, height differences and gun orientations. Both the approximate height model and the table baseline can be wrong; guaranteed first-shot accuracy and a hit percentage are not claimed.
+
+### Reload recognition and processing
+
+- **Contour and joined-shape recovery** complements arrow-fill reading. It handles dim grey fills, small HUD variants and fragments touching surrounding pixels. Detection does not require a black shell circle, upper ring or rectangular outline.
+- **The detected region is retained between R presses:** after the first successful detection, following snapshots and reloads use a small region. A changed window, geometry or region setting requires another search; a recognition error clears the retained position.
+- Color-mask construction and component extraction are accelerated. This reduces per-frame work without replacing recognition with fixed coordinates or weakening shape checks.
+- The simple **four snapshots → four batches of four keys** cycle is retained. Waiting for R and sending individual keys take no snapshots; animation tracking and waits for green acknowledgements are not added.
+- **F8 → Waiting for R**, the 500 ms delay after R release, **50 / 90 / 750 ms** timing, Humanizer, manual regions and custom shortcuts behave as before. Saved intervals are not overwritten.
+- An unreadable row ends the current cycle instead of guessing a direction. Lost game focus or changed geometry interrupts input and releases the owned key.
+
+### Interface and documentation
+
+- Main and mini-card captions identify the selected low-trajectory baseline; tooltips retain model details.
+- First-shot settings and help switch between RU/EN without restarting. Compact captions do not displace terrain assistance; detailed explanations remain available in tooltips.
+- Updated README, quick start, calculations, ranging and impact analysis, architecture, helpers and language guidance. New native screenshots cover the changed main window and settings; unchanged views retain their explicitly labelled earlier version.
+
+### Update downloads and diagnostics
+
+- Transient DNS, connection, proxy and timeout errors, plus HTTP **408 / 429 / 500 / 502 / 503 / 504**, get up to **three attempts**, separated by 500 and 1000 ms. A numeric `Retry-After` up to 30 seconds is respected; a longer value produces an error without an early retry.
+- HTTP 403 from an expired signed CDN link restarts from the original GitHub URL to obtain a fresh redirect. Every attempt resets the partial file and SHA-256 state; fragments from different downloads are not combined.
+- Metadata allows up to 30 seconds without incoming data and two minutes overall; ZIP downloads allow 90 seconds without data and one hour overall. Slow connections are no longer cut off by the previous short limits, while operations remain bounded.
+- Errors show the **specific stage**, with **Retry** and **Open release** actions. Technical details include HTTP/network code, server host and attempt, without the secret query of a signed URL; session diagnostics are flushed before task cleanup.
+- TLS, authorization, incorrect SHA-256, oversized responses and redirects to foreign hosts are not bypassed by retrying. Requests use the network rather than a cached response.
+- Before preparation and installation, the installed `Update.ps1` is checked for size and SHA-256 against its own manifest. A downloaded script does not replace the trusted installed helper. Preparation is bounded to ten minutes and readiness to three; an early helper exit immediately reports its exit code.
+
+### Installation: fewer rewrites and durable receipts
+
+- Transient file sharing/lock errors get a bounded retry: up to **12 attempts, 250 ms apart**. Access-denied errors, mismatched hashes and invalid data are not hidden by retrying.
+- Preparation, readiness, transaction journal and installation-result receipts are written atomically through a temporary file and replacement. An unfinished write is not exposed as a completed JSON receipt.
+- A file that already matches the candidate manifest's size and SHA-256 is not rewritten or redundantly backed up. Final verification of the entire installed payload remains in place.
+- Strict version, SHA-256, path, personal-settings and `.wdt` guards remain in force, as does rollback of changed and removed files after transaction failure.
+- After successful installation, verification and launch, only the current update's prepared `staged/` and `download.zip` are removed. Changed-file backups, the trusted helper and receipts remain for recovery; preparation data is retained if the external installer fails or is cancelled. Cancelled downloads are removed. An auxiliary cleanup failure records a warning without rolling back an already running new version.
+- **An already installed 2.16.0 uses its old download and installation code to reach 2.17.0.** These improvements apply to subsequent updates from 2.17.0 and cannot retroactively change the old application. If the old Update action fails, download the complete 2.17.0 Windows ZIP to a writable folder and follow the manual-update instructions while preserving personal data.
+
+### Updating and data
+
+From a supported installed version, use **Check for updates → Update**. The updater downloads the full ZIP, verifies SHA-256 and the manifest, and preserves the Windows profile and personal maps. If automatic preparation does not complete, do not replace only the EXE: download this release's full Windows ZIP and follow the [update instructions](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.17.0/docs/UPDATES-EN.md).
+
+Settings, saved points, the impact archive and personal terrain packs are outside the replaced payload. The updater's rollback backup is not a cleanup of personal maps or logs. Free space, write access and the ability to finish the old process remain necessary.
+
+### Validation and limitations
+
+At the owner's request, the local suite was not repeated before release. The GitHub Windows workflow builds the application, runs all CTest suites, checks RU/EN at native display scales, packages the application and tests updating with an actual restart. The specific run's result is available under **Actions**.
+
+Arrows must remain visible and distinguishable; an occluded or ambiguous frame may be rejected. Ordinary `SendInput` does not bypass Windows restrictions, game rules or anti-cheat. Publisher approval is absent; Humanizer does not establish permission to automate. [Rules and limitations](https://github.com/sany86russ/Wardogs-Fire-Control/blob/v2.17.0/source/docs/ANTICHEAT-EN.md).
+
+### Changed views
+
+![Main window 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-main-2.17.0.png)
+![SPH-2 first-shot settings 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-settings-2.17.0.png)
+![SPH-2 mini card 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-vehicle-pinned-helpers-2.17.0.png)
+![Update failure and recovery in 2.17.0](https://github.com/sany86russ/Wardogs-Fire-Control/raw/v2.17.0/docs/screenshots/en-update-error-2.17.0.png)
+
+---
+
 ## 2.16.0 — SPH-2 active reload, Humanizer and new shortcuts · November 9, 2026
 
 [Full release EN/RU and files](../../docs/releases/v2.16.0.md).

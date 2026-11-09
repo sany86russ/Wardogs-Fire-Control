@@ -25,6 +25,8 @@ Extract the **complete** portable package and open **Start.cmd**. Administrator 
 - **Set / MIL** is the command on the game's sight scale.
 - **Table ≈** is a secondary range estimate, which can differ from the in-game RNG. For SPH-2, set the selected arc's MIL.
 
+Since 2.17.0, initial SPH-2 low-trajectory aiming uses the table without a height correction. Enable the previous approximation under **Settings → General → SPH-2 first shot**; changing this mode resets ranging. Heights are retained, and high trajectory and Alt+I work as before. The table cannot guarantee a first hit on every terrain.
+
 If aim is unavailable or coordinates need review, previous values are hidden. Do not use an old command for a new point.
 
 ## If coordinates are not read

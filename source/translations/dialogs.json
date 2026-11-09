@@ -676,6 +676,22 @@
     "en": "Could not install the update. The current version is still running.\n%1"
   },
   {
+    "ru": "Этап: %1",
+    "en": "Stage: %1"
+  },
+  {
+    "ru": "Проверьте подключение, настройки VPN/прокси и права записи. Можно повторить попытку или скачать Windows ZIP со страницы релиза.",
+    "en": "Check the connection, VPN/proxy settings and write permissions. Retry, or download the Windows ZIP from the release page."
+  },
+  {
+    "ru": "Повторить",
+    "en": "Retry"
+  },
+  {
+    "ru": "Диагностика: %1",
+    "en": "Diagnostics: %1"
+  },
+  {
     "ru": "Завершите захват координат перед установкой обновления.",
     "en": "Finish capturing coordinates before installing the update."
   },

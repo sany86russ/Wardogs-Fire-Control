@@ -498,6 +498,91 @@ void target_offsets() {
             "target correction rejects overflow even for initially finite coordinates");
 }
 
+void empirical_command_preserves_actual_trajectory() {
+    using namespace wardogs;
+    constexpr double distance = 2384.190638;
+    constexpr double height = -63.45;
+    auto old_request = request(AnalysisWeapon::sph2, distance);
+    old_request.height_delta_m = height;
+    old_request.sample_step_m = 100;
+    old_request.gravity_mps2 = 9.80665;
+    old_request.terrain = [](Point point) -> std::optional<double> {
+        const double fraction = point.x * 100 / distance;
+        return height * fraction + (fraction > 0.45 && fraction < 0.55 ? 500 : 0);
+    };
+    auto empirical_request = old_request;
+    empirical_request.sph2_height_policy = Sph2HeightPolicy::empirical_flat_low;
+    const auto old = analyze_firing(old_request);
+    const auto empirical = analyze_firing(empirical_request);
+    check(old.nominal_mil && empirical.nominal_mil && old.trajectory && empirical.trajectory,
+          "both command policies retain a separate actual-height trajectory estimate");
+    if (old.nominal_mil && empirical.nominal_mil) {
+        close(*old.nominal_mil, 302.7662207154182,
+              "default analysis keeps the retained downhill command", 1e-7);
+        close(*empirical.nominal_mil, 350.595319,
+              "empirical analysis command agrees with the first-shot table baseline", 1e-7);
+    }
+    check(empirical.height_delta_m && empirical.height_source == HeightSource::explicit_delta,
+          "empirical command keeps the actual height source");
+    if (empirical.height_delta_m)
+        close(*empirical.height_delta_m, height, "actual height is never replaced by effective command zero");
+    if (old.trajectory && empirical.trajectory) {
+        close(empirical.trajectory->elevation_rad, old.trajectory->elevation_rad,
+              "command baseline does not flatten the physical model");
+        close(empirical.trajectory->samples.back().height_above_muzzle_m, height,
+              "physical endpoint still reaches the real target-height plane");
+        check(empirical.trajectory->samples.size() == old.trajectory->samples.size(),
+              "terrain sampling coverage remains independent of command policy");
+        const auto count = std::min(empirical.trajectory->samples.size(), old.trajectory->samples.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            close(empirical.trajectory->samples[i].height_above_muzzle_m,
+                  old.trajectory->samples[i].height_above_muzzle_m,
+                  "each trajectory sample keeps actual-height geometry");
+            check(empirical.trajectory->samples[i].clearance_m == old.trajectory->samples[i].clearance_m,
+                  "command policy cannot erase an actual terrain intersection");
+        }
+    }
+    check(old.clearance.status == TerrainClearanceStatus::blocked &&
+          empirical.clearance.status == old.clearance.status &&
+          empirical.clearance.first_blocked_distance_m == old.clearance.first_blocked_distance_m,
+          "both policies detect the same obstructing ridge");
+    check(old.flight_time && empirical.flight_time, "separate assumed time estimate remains available");
+    if (old.flight_time && empirical.flight_time)
+        close(empirical.flight_time->seconds, old.flight_time->seconds,
+              "empirical low command does not change independently estimated flight time");
+
+    old_request.arc = empirical_request.arc = Arc::high;
+    const auto old_high = analyze_firing(old_request);
+    const auto new_high = analyze_firing(empirical_request);
+    check(old_high.nominal_mil && new_high.nominal_mil && old_high.trajectory && new_high.trajectory,
+          "high analysis remains available under either policy");
+    if (old_high.nominal_mil && new_high.nominal_mil)
+        close(*new_high.nominal_mil, *old_high.nominal_mil, "high nominal command is unchanged");
+    if (old_high.trajectory && new_high.trajectory)
+        close(new_high.trajectory->elevation_rad, old_high.trajectory->elevation_rad,
+              "high physical trajectory is unchanged");
+
+    auto unreachable = request(AnalysisWeapon::sph2, 2500);
+    unreachable.height_delta_m = 1000;
+    unreachable.sph2_height_policy = Sph2HeightPolicy::empirical_flat_low;
+    const auto separate = analyze_firing(unreachable);
+    check(separate.status == FiringAnalysisStatus::available && separate.nominal_mil &&
+          separate.trajectory_status == TrajectoryStatus::unreachable && !separate.trajectory,
+          "unreachable physical estimate cannot suppress an available empirical table command");
+    if (separate.nominal_mil)
+        close(*separate.nominal_mil, sph2_mil_for_distance(2500, Arc::low),
+              "model-unreachable target retains only its labelled table command");
+    auto outside_table = request(AnalysisWeapon::sph2, 2700);
+    outside_table.height_delta_m = -100;
+    outside_table.sph2_height_policy = Sph2HeightPolicy::empirical_flat_low;
+    const auto unsupported = analyze_firing(outside_table);
+    check(unsupported.status == FiringAnalysisStatus::unsupported_range && !unsupported.nominal_mil,
+          "empirical command outside the retained table reports unsupported range");
+    unreachable.sph2_height_policy = static_cast<Sph2HeightPolicy>(77);
+    rejects([&] { (void)analyze_firing(unreachable); },
+            "analysis cannot silently accept an unknown command policy");
+}
+
 }  // namespace
 
 int main() {
@@ -509,6 +594,7 @@ int main() {
         observed_times();
         invalid_inputs();
         target_offsets();
+        empirical_command_preserves_actual_trajectory();
     } catch (const std::exception& error) {
         std::cerr << "Unexpected failure: " << error.what() << '\n';
         return 1;
