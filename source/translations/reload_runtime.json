@@ -1,5 +1,17 @@
 [
   {
+    "ru": "Не удалось сохранить диагностику перезарядки: %1",
+    "en": "Could not save reload diagnostics: %1"
+  },
+  {
+    "ru": "Диагностика перезарядки сохранена. Папка — в настройках помощников.",
+    "en": "Reload diagnostics saved. Open the folder in helper settings."
+  },
+  {
+    "ru": "Не удалось открыть папку диагностики перезарядки.",
+    "en": "Could not open the reload diagnostics folder."
+  },
+  {
     "ru": "Область поиска стрелок слишком велика: до 40 млн пикселей, 16384 по ширине и 8192 по высоте.",
     "en": "Arrow search area is too large: up to 40 million pixels, 16384 wide and 8192 high."
   },

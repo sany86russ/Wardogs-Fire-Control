@@ -245,6 +245,16 @@ GameHelpersDialog::GameHelpersDialog(const wardogs::AppSettings& settings, QWidg
     reload_page->addWidget(paragraph("Humanizer независимо добавляет случайную задержку к каждому нажатию, паузе между клавишами и переходу между комбинациями. По умолчанию выключен: добавка к клавишам 0–30 мс, к переходам 0–200 мс."));
     reload_page->addWidget(paragraph("Один кадр — четыре стрелки — четыре нажатия. Каждое нажатие R запускает четыре комбинации, пока помощник включён."));
     reload_page->addWidget(paragraph("Клавиша СТАРТ / СТОП включает ожидание R. После перезарядки помощник ждёт следующего R. Повторное нажатие выключает режим."));
+    auto* reload_diagnostics = card(reload_page, "Диагностика одного цикла");
+    reload_diagnostics_once_ = new QCheckBox(helper_text("Записать один цикл для диагностики"));
+    reload_diagnostics_once_->setObjectName(QStringLiteral("reloadDiagnosticsOnce"));
+    reload_diagnostics_once_->setChecked(false);
+    reload_diagnostics->addRow(reload_diagnostics_once_);
+    reload_diagnostics->addRow(paragraph("После сохранения настроек включите помощник назначенной клавишей (по умолчанию F8) и перезарядите орудие клавишей R. Будет записан только следующий цикл. Запись сама не запускает перезарядку и не нажимает дополнительные клавиши."));
+    reload_diagnostics->addRow(paragraph("Кадры и результаты распознавания сохраняются на этом компьютере без автоматической отправки. Первый автопоиск снимает всё окно игры; найденная область используется и при следующих перезарядках. Сохранённые кадры можно повторно разбирать без новых выстрелов."));
+    auto* reload_diagnostics_folder = new QPushButton(helper_text("Открыть папку диагностики"));
+    reload_diagnostics_folder->setObjectName(QStringLiteral("reloadDiagnosticsFolder"));
+    reload_diagnostics->addRow(reload_diagnostics_folder);
     reload_page->addStretch();
     connect(reload_select_, &QPushButton::clicked, this, &GameHelpersDialog::select_reload_region);
 
@@ -307,6 +317,10 @@ wardogs::GameHelpersPreferences GameHelpersDialog::preferences() const {
     result.reload.stage_random_min_ms = reload_stage_random_min_->value();
     result.reload.stage_random_max_ms = reload_stage_random_max_->value();
     return result;
+}
+
+bool GameHelpersDialog::reload_diagnostics_requested() const {
+    return reload_diagnostics_once_->isChecked();
 }
 
 void GameHelpersDialog::update_summaries() {

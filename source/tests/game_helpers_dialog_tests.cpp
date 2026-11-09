@@ -277,6 +277,33 @@ void reload_timing_and_humanizer() {
           "cancelling reload timing changes leaves the caller's settings untouched");
 }
 
+void one_cycle_reload_diagnostics() {
+    wardogs::AppSettings settings;
+    const auto before = settings.game_helpers;
+    GameHelpersDialog dialog(settings);
+    check(!dialog.reload_diagnostics_requested() &&
+          !child<QCheckBox>(dialog, "reloadDiagnosticsOnce")->isChecked(),
+          "one-cycle diagnostics is opt-in on every dialog opening");
+    check(!child<QPushButton>(dialog, "reloadDiagnosticsFolder")->text().isEmpty(),
+          "diagnostic files have a discoverable folder action");
+    child<QCheckBox>(dialog, "reloadDiagnosticsOnce")->setChecked(true);
+    check(dialog.reload_diagnostics_requested() && dialog.preferences() == before,
+          "diagnostic selection is independent of saved helper preferences");
+    save(dialog);
+    check(dialog.result() == QDialog::Accepted && dialog.reload_diagnostics_requested() &&
+          settings.game_helpers == before,
+          "saving returns a one-cycle request without changing caller preferences or starting a helper");
+    GameHelpersDialog cancelled(settings);
+    child<QCheckBox>(cancelled, "reloadDiagnosticsOnce")->setChecked(true);
+    child<QDialogButtonBox>(cancelled, "helperDialogButtons")->button(QDialogButtonBox::Cancel)->click();
+    check(cancelled.result() == QDialog::Rejected && cancelled.preferences() == before &&
+          settings.game_helpers == before,
+          "cancelling diagnostics leaves saved helper configuration untouched");
+    GameHelpersDialog reopened(settings);
+    check(!reopened.reload_diagnostics_requested(),
+          "diagnostics is not restored from either a saved or cancelled dialog");
+}
+
 void reload_region_selection() {
     wardogs::AppSettings settings;
     GameHelpersDialog* opened{};
@@ -365,10 +392,16 @@ void translation_and_layout(const QString& evidence) {
         }
     };
     capture(QStringLiteral("ru"));
+    child<QCheckBox>(dialog, "reloadDiagnosticsOnce")->setChecked(true);
     wardogs::i18n::set_language(wardogs::UiLanguage::english);
     QApplication::processEvents(QEventLoop::AllEvents, 40);
     check(dialog.windowTitle() == QStringLiteral("Helpers · WARDOGS"), "open dialog translates its title live");
     check(tabs->tabText(2) == QStringLiteral("SPH-2 · reload"), "reload tab title translates in an open dialog");
+    check(child<QCheckBox>(dialog, "reloadDiagnosticsOnce")->text() ==
+          QStringLiteral("Record one cycle for diagnostics") && dialog.reload_diagnostics_requested(),
+          "diagnostic opt-in translates live while preserving the current selection");
+    check(child<QPushButton>(dialog, "reloadDiagnosticsFolder")->text() ==
+          QStringLiteral("Open diagnostics folder"), "diagnostic folder action translates live");
     for (auto* label : dialog.findChildren<QLabel*>()) {
         if (cyrillic(label->text()))
             std::cerr << "UNTRANSLATED LABEL: " << label->objectName().toStdString()
@@ -417,6 +450,7 @@ int main(int argc, char* argv[]) {
         wardogs::i18n::set_language(wardogs::UiLanguage::russian);
         defaults_and_editing();
         reload_timing_and_humanizer();
+        one_cycle_reload_diagnostics();
         validation();
         reload_region_selection();
         translation_and_layout(evidence);

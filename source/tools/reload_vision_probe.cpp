@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QString>
 
 #include <algorithm>
@@ -34,6 +35,7 @@ using namespace std::chrono_literals;
 
 struct Options {
     std::filesystem::path image;
+    std::filesystem::path session;
     std::filesystem::path output;
     std::optional<wardogs::ImageRect> crop;
     bool capture_game{};
@@ -88,6 +90,9 @@ Options parse(int argc, wchar_t** argv) {
         } else if (argument == L"--image") {
             if (!result.image.empty()) throw std::invalid_argument("Duplicate image option");
             result.image = next();
+        } else if (argument == L"--session") {
+            if (!result.session.empty()) throw std::invalid_argument("Duplicate session option");
+            result.session = next();
         } else if (argument == L"--output") {
             if (!result.output.empty()) throw std::invalid_argument("Duplicate output option");
             result.output = next();
@@ -103,8 +108,11 @@ Options parse(int argc, wchar_t** argv) {
         } else throw std::invalid_argument("Unknown option; use --help");
     }
     if (result.help) return result;
-    if (result.capture_game == !result.image.empty())
-        throw std::invalid_argument("Choose exactly one mode: --image or --capture-game");
+    if (static_cast<int>(result.capture_game) + static_cast<int>(!result.image.empty()) +
+            static_cast<int>(!result.session.empty()) != 1)
+        throw std::invalid_argument("Choose exactly one mode: --image, --session or --capture-game");
+    if (!result.session.empty() && result.crop)
+        throw std::invalid_argument("--session replays each saved frame as captured; --crop is not supported");
     if (result.capture_game && result.output.empty())
         throw std::invalid_argument("--capture-game requires an explicit --output directory");
     if (!result.capture_game && (!result.output.empty() || frames_set || interval_set || result.wait_for_arrows))
@@ -183,13 +191,23 @@ wardogs::Image load_probe_image(const std::filesystem::path& path) {
 QJsonObject analyze(const wardogs::Image& original, const std::optional<wardogs::ImageRect>& crop) {
     const auto start = Clock::now();
     const auto image = crop ? cropped(original, *crop) : original;
-    const auto observation = wardogs::detect_reload_sequence(image);
+    wardogs::ReloadVisionDiagnostics diagnostics;
+    const auto observation = wardogs::detect_reload_sequence(image, &diagnostics);
     const int offset_x = crop ? crop->left : 0, offset_y = crop ? crop->top : 0;
     QJsonObject output{{"event", "analysis"},
         {"originalCaptureSize", QJsonArray{original.width, original.height}},
         {"analyzedSize", QJsonArray{image.width, image.height}},
         {"crop", crop ? QJsonValue(rectangle(*crop)) : QJsonValue(QJsonValue::Null)},
-        {"rawDetected", observation.has_value()}};
+        {"rawDetected", observation.has_value()},
+        {"failure", QString::fromLatin1(wardogs::reload_detection_failure_name(diagnostics.failure))},
+        {"components", static_cast<qint64>(diagnostics.components)},
+        {"glyphs", static_cast<qint64>(diagnostics.glyphs)},
+        {"rows", static_cast<qint64>(diagnostics.rows)},
+        {"joined_recovery_rois", static_cast<qint64>(diagnostics.joined_recovery_rois)},
+        {"contour_glyphs", static_cast<qint64>(diagnostics.contour_glyphs)},
+        {"contour_passes", static_cast<qint64>(diagnostics.contour_passes)},
+        {"algorithm_revision", QString::fromLatin1(wardogs::reload_vision_revision)},
+        {"recovery_budget_exhausted", diagnostics.recovery_budget_exhausted}};
     if (observation) {
         output.insert("bounds", rectangle(translated(observation->bounds, offset_x, offset_y)));
         output.insert("boundsKind", "glyphrow");
@@ -203,12 +221,97 @@ QJsonObject analyze(const wardogs::Image& original, const std::optional<wardogs:
             case wardogs::ReloadDirection::down: direction = "down"; break;
             case wardogs::ReloadDirection::left: direction = "left"; break;
             }
-            arrows.append(QJsonObject{{"direction", direction}});
+            arrows.append(QJsonObject{{"direction", direction}, {"accepted", arrow.accepted}});
         }
         output.insert("arrows", arrows);
     }
     output.insert("analysisMs", std::chrono::duration<double, std::milli>(Clock::now() - start).count());
     return output;
+}
+
+std::filesystem::path session_frame_path(const std::filesystem::path& directory,
+                                        const QString& name, int frame) {
+    // Recorder v1 stores raw captures directly in its session directory. An
+    // exact basename rejects absolute paths, ADS, traversal and mask files.
+    if (name != QStringLiteral("frame-%1.png").arg(frame))
+        throw std::invalid_argument("Session image must use its expected frame-N.png basename");
+    const auto path = directory / name.toStdWString();
+    const auto attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        (attributes & FILE_ATTRIBUTE_DIRECTORY))
+        throw std::invalid_argument("Session image must be an existing regular file without a reparse point");
+    const auto canonical = std::filesystem::canonical(path);
+    if (canonical.parent_path() != directory || !std::filesystem::is_regular_file(canonical))
+        throw std::invalid_argument("Session image must remain inside the session directory");
+    return canonical;
+}
+
+void replay_session(const std::filesystem::path& source) {
+    const auto started = Clock::now();
+    const auto manifest = std::filesystem::canonical(source);
+    const auto directory = manifest.parent_path();
+    QFile input(QString::fromStdWString(manifest.native()));
+    constexpr qint64 maximum_metadata_bytes = 1024 * 1024;
+    if (!std::filesystem::is_regular_file(manifest) || !input.open(QIODevice::ReadOnly) ||
+        input.size() <= 0 || input.size() > maximum_metadata_bytes)
+        throw std::invalid_argument("Session metadata must be a readable JSON file no larger than 1 MiB");
+    const auto bytes = input.read(maximum_metadata_bytes + 1);
+    if (input.error() != QFileDevice::NoError || bytes.size() > maximum_metadata_bytes)
+        throw std::runtime_error("Cannot read bounded session metadata");
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(bytes, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+        throw std::invalid_argument("Session metadata is not a valid JSON object");
+    const auto session = document.object();
+    if (session.value("format_version").toInt(-1) != 1 || !session.value("frames").isArray())
+        throw std::invalid_argument("Only reload diagnostic session format_version 1 is supported");
+    const auto frames = session.value("frames").toArray();
+    if (frames.size() > 4)
+        throw std::invalid_argument("A version 1 reload diagnostic cycle contains at most four frames");
+    int analyzed{}, detected{}, skipped{};
+    for (int index = 0; index < frames.size(); ++index) {
+        if (!frames[index].isObject())
+            throw std::invalid_argument("Each session frame must be an object");
+        const auto record = frames[index].toObject();
+        const int frame = record.value("frame").toInt(-1);
+        if (frame != index + 1)
+            throw std::invalid_argument("Session frames must have consecutive one-based indices");
+        const auto status = record.value("image_status").toString();
+        if (status != QStringLiteral("stored")) {
+            if ((status != QStringLiteral("memory_budget_exceeded") && status != QStringLiteral("invalid_image")) ||
+                record.contains("image"))
+                throw std::invalid_argument("Session frame has an invalid image status");
+            ++skipped;
+            output_json({{"event", "skippedSessionFrame"}, {"frame", frame}, {"reason", status},
+                         {"recordedFound", record.value("found")},
+                         {"recordedFailure", record.value("failure")}, {"readOnly", true}});
+            continue;
+        }
+        const auto path = session_frame_path(directory, record.value("image").toString(), frame);
+        const auto image = load_probe_image(path);
+        const auto size = record.value("size_px").toArray();
+        if (size.size() != 2 || size[0].toInt(-1) != image.width || size[1].toInt(-1) != image.height)
+            throw std::invalid_argument("Session image dimensions differ from recorded size_px");
+        auto report = analyze(image, std::nullopt);
+        ++analyzed;
+        if (report.value("rawDetected").toBool()) ++detected;
+        report.insert("event", "replayedFrame");
+        report.insert("frame", frame);
+        report.insert("image", record.value("image"));
+        report.insert("client_area_px", record.value("client_area_px"));
+        report.insert("recordedFound", record.value("found"));
+        report.insert("recordedFailure", record.value("failure"));
+        report.insert("recordedRecognitionMs", record.value("recognition_ms"));
+        report.insert("recordedElapsedMs", record.value("elapsed_ms"));
+        report.insert("readOnly", true);
+        output_json(report);
+    }
+    output_json({{"event", "sessionReplayed"}, {"frames", frames.size()},
+        {"analyzedFrames", analyzed}, {"detectedFrames", detected}, {"skippedFrames", skipped},
+        {"recordedAlgorithmRevision", session.value("algorithm_revision")},
+        {"recordedOutcome", session.value("outcome")},
+        {"elapsedMs", std::chrono::duration<double, std::milli>(Clock::now() - started).count()},
+        {"readOnly", true}});
 }
 
 QJsonObject analyze_capture(const wardogs::Image& image, wardogs::ImageRect saved_region,
@@ -358,6 +461,7 @@ int wmain(int argc, wchar_t** argv) {
         if (options.help) {
             std::cout << "Read-only SPH-2 reload vision diagnostics; never sends input or activates windows.\n"
                 "  --image PATH [--crop left,top,right,bottom]\n"
+                "  --session PATH_TO_SESSION_JSON\n"
                 "  --capture-game --output DIRECTORY [--frames 1..500] [--interval-ms 10..10000]\n"
                 "                 [--crop left,top,right,bottom] [--wait-for-arrows]\n"
                 "Capture waits up to 30 seconds for the existing game to receive focus.\n"
@@ -366,13 +470,16 @@ int wmain(int argc, wchar_t** argv) {
                 "Without an explicit --crop, capture is limited to 100 frames and intervals of at least 50 ms.\n"
                 "--wait-for-arrows waits up to 30 seconds after foreground for raw recognition,\n"
                 "without saving or counting earlier frames.\n"
-                "JSON bounds are physical pixels in the original source image.\n";
+                "--session replays up to four saved runtime frames without opening the game.\n"
+                "Each JSON analysis includes failure and component/glyph/row/recovery counts.\n"
+                "JSON bounds are physical pixels in the original source image; session bounds are frame-relative.\n";
             return 0;
         }
         if (options.capture_game) {
             SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             capture(options);
-        } else output_json(analyze(load_probe_image(options.image), options.crop));
+        } else if (!options.session.empty()) replay_session(options.session);
+        else output_json(analyze(load_probe_image(options.image), options.crop));
         return 0;
     } catch (const std::exception& error) {
         output_json({{"event", "error"}, {"message", QString::fromUtf8(error.what())}, {"readOnly", true}});
