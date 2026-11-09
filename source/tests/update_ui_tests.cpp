@@ -432,6 +432,7 @@ void failed_prepare_start_test() {
             QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             observed = true;
             message->reject();
+            return; // Other top-level widgets in the copied list may have been deleted above.
         }
     });
     dismiss.start();
