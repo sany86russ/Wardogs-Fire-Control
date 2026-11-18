@@ -6,7 +6,7 @@
 
 namespace wardogs {
 
-enum class GameMap { unselected, bakurani, ozeti, zestafona, training, other };
+enum class GameMap { unselected, bakurani, ozeti, zestafona, training, other, sabatulo };
 
 constexpr std::wstring_view game_map_key(GameMap map) {
     switch (map) {
@@ -14,6 +14,7 @@ constexpr std::wstring_view game_map_key(GameMap map) {
     case GameMap::bakurani: return L"bakurani";
     case GameMap::ozeti: return L"ozeti";
     case GameMap::zestafona: return L"zestafona";
+    case GameMap::sabatulo: return L"sabatulo";
     case GameMap::training: return L"training";
     case GameMap::other: return L"other";
     }
@@ -21,7 +22,7 @@ constexpr std::wstring_view game_map_key(GameMap map) {
 }
 
 constexpr GameMap game_map_from_key(std::wstring_view key) {
-    for (const auto map : {GameMap::bakurani, GameMap::ozeti, GameMap::zestafona,
+    for (const auto map : {GameMap::bakurani, GameMap::ozeti, GameMap::zestafona, GameMap::sabatulo,
                            GameMap::training, GameMap::other})
         if (game_map_key(map) == key) return map;
     return GameMap::unselected;

@@ -485,6 +485,7 @@ int run_settings_tests() {
           "the last explicit game map survives the profile round trip");
     for (const auto map : {wardogs::GameMap::unselected, wardogs::GameMap::bakurani,
                            wardogs::GameMap::ozeti, wardogs::GameMap::zestafona,
+                           wardogs::GameMap::sabatulo,
                            wardogs::GameMap::training, wardogs::GameMap::other}) {
         check(wardogs::game_map_from_key(wardogs::game_map_key(map)) == map,
               "all supported map choices have stable settings identifiers");
@@ -492,6 +493,12 @@ int run_settings_tests() {
     check(wardogs::game_map_from_key(L"unexpected-map") == wardogs::GameMap::unselected &&
               !wardogs::game_map_has_terrain(wardogs::GameMap::training),
           "unknown map identifiers never select another map's terrain");
+    auto sabatulo = saved;
+    sabatulo.last_game_map = wardogs::GameMap::sabatulo;
+    wardogs::save_settings_to(directory / L"sabatulo.ini", sabatulo);
+    check(wardogs::load_settings_from(directory / L"sabatulo.ini").last_game_map == wardogs::GameMap::sabatulo &&
+              !wardogs::game_map_has_terrain(wardogs::GameMap::sabatulo),
+          "Sabatulo persists as a separate map without a terrain package");
     check(!loaded.automatic_chat_region && loaded.capture_region &&
               loaded.capture_region->monitor_size.cx == 2560 &&
               loaded.capture_region->monitor_size.cy == 1440,

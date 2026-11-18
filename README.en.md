@@ -235,6 +235,7 @@ Input uses standard Windows `SendInput` and is tied to the original foreground w
 ## Maps and elevations
 
 - **Bakurani, Ozeti, Zestafona:** corresponding compatible local `.wdt` packs.
+- **Sabatulo:** a separate map choice. Until an elevation pack is available, calculations assume equal gun and target elevations.
 - **Training ground / unknown map:** an explicitly selected **no-height mode**, assuming equal gun and target elevations.
 - **Terrain is not included in the public ZIP or repository** and is not downloaded automatically. Import only local data you have the necessary rights to use.
 - Import checks SHA-256, map identity and geometry; reading checks block sizes and CRC. Missing coverage is not replaced with zero elevation.
