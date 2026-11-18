@@ -85,7 +85,7 @@ To transfer to another PC, copy the profile while the application is closed. Mai
 
 ## Limits to keep in mind
 
-Bakurani, Ozeti and Zestafona require their own elevation packs. Training and unknown maps use an explicitly selected mode without elevations. Terrain describes the ground, not roofs, bridges, trees or barrel height. Third-party map data is not included in the distributed ZIP. [Map provenance and limits](../TERRAIN_DATA_NOTICE.md).
+Bakurani, Ozeti and Zestafona require their own elevation packs. Sabatulo, the training ground and unknown maps use no-height mode, which assumes equal gun and target elevations. Terrain describes the ground, not roofs, bridges, trees or barrel height. Third-party map data is not included in the distributed ZIP. [Map provenance and limits](../TERRAIN_DATA_NOTICE.md).
 
 Community tables and the geometric model may differ from the current game physics. L81 retains the **132–684 m** supported range; SPH-2 has two arcs whose availability depends on range and elevations. OCR speed, software tests and consistent observations alone do not establish a 99% hit rate in matches. Use borderless mode for overlays; exclusive fullscreen needs separate validation.
 

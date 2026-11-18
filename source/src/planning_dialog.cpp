@@ -827,7 +827,7 @@ void PlanningDialog::refresh() {
         request.terrain = s.context.terrain;
         request.ammunition_id = l81 ? "l81-standard" : "sph2-standard";
         request.game_version = s.version->text().trimmed().toStdString();
-        if (s.context.map == wardogs::GameMap::training || s.context.map == wardogs::GameMap::other)
+        if (s.context.map != wardogs::GameMap::unselected && !wardogs::game_map_has_terrain(s.context.map))
             request.height_delta_m = 0.0;
         // Named terrain maps without installed data must not silently become
         // level-terrain solutions. For L81 the sight table remains horizontal.

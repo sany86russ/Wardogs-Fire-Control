@@ -10,7 +10,7 @@ This guide describes the current workflow: map, gun, target and optional ranging
 
 1. Select and confirm the current map. **Confirm map and enter game** explicitly confirms it and enters game mode; afterwards, the button reads **To game**. Select a map first when none is chosen; missing required elevations block entry. After restarting, the saved name requires confirmation.
 2. Select L81 or SPH-2.
-3. SPH-2 on Bakurani, Ozeti or Zestafona requires verified local elevations for that map. For the training ground or an unknown map, explicitly select no-height mode. Another map cannot replace missing terrain.
+3. SPH-2 on Bakurani, Ozeti or Zestafona requires verified local elevations for that map. On Sabatulo, the training ground and unknown maps, calculations assume equal gun and target elevations. Another map cannot replace missing terrain.
 4. Use borderless windowed mode for overlays. The app does not obtain the map or coordinates from game memory.
 
 Changing maps clears current coordinates and corrections. A restored record does not confirm the map for you or restore earlier ranging corrections.

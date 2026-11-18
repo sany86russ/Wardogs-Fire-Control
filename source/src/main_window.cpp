@@ -2434,11 +2434,15 @@ public:
         base_capture_pending_ = true;
         finish_ocr(pending_base_for_map_change);
         check("map_change_fixture_has_an_unconfirmed_new_gun", pending_ocr_ && ocr_hold_ && base_capture_pending_);
-        terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::other)));
+        terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::sabatulo)));
         finish_ocr(before_map_change);
         check("changing_game_map_clears_coordinates_history_guidance_and_stale_impact", map_confirmed_ &&
               !base_set_ && !target_ && history_.empty() && !continuous_calibration_ && !low_result_ && !high_result_ &&
               !copy_button_->isEnabled() && !pending_ocr_ && !ocr_hold_ && !base_capture_pending_);
+        check("sabatulo_is_a_separate_map_without_heights", current_game_map_ == wardogs::GameMap::sabatulo &&
+              settings_.last_game_map == current_game_map_ && !terrain_ && !terrain_map_ &&
+              terrain_selector_->currentText() == wardogs::i18n::text(QStringLiteral("Сабатуло / Sabatulo · высот нет")) &&
+              terrain_height({80, 80}) == 0.0);
         terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(wardogs::GameMap::training)));
         base_input_->setText(QStringLiteral("80 80")); manual_base();
         target_input_->setText(QStringLiteral("92 90")); manual_target();
@@ -4656,6 +4660,7 @@ private:
         terrain_selector_->setObjectName(QStringLiteral("gameMapSelector"));
         for (const auto map : {wardogs::GameMap::unselected, wardogs::GameMap::bakurani,
                                wardogs::GameMap::ozeti, wardogs::GameMap::zestafona,
+                               wardogs::GameMap::sabatulo,
                                wardogs::GameMap::training, wardogs::GameMap::other})
             terrain_selector_->addItem(game_map_name(map), static_cast<int>(map));
         terrain_selector_->setCurrentIndex(terrain_selector_->findData(static_cast<int>(settings_.last_game_map)));
@@ -5038,6 +5043,7 @@ private:
         case wardogs::GameMap::bakurani: return wardogs::i18n::text(QStringLiteral("Бакурани / Bakurani"));
         case wardogs::GameMap::ozeti: return wardogs::i18n::text(QStringLiteral("Озети / Ozeti"));
         case wardogs::GameMap::zestafona: return wardogs::i18n::text(QStringLiteral("Зестафона / Zestafona"));
+        case wardogs::GameMap::sabatulo: return wardogs::i18n::text(QStringLiteral("Сабатуло / Sabatulo · высот нет"));
         case wardogs::GameMap::training: return wardogs::i18n::text(QStringLiteral("Стрельбище · высот нет"));
         case wardogs::GameMap::other: return wardogs::i18n::text(QStringLiteral("Другая карта · высот нет"));
         }
@@ -5047,6 +5053,8 @@ private:
     static QString game_map_card_name(wardogs::GameMap map) {
         // The selector explains height availability; the mini card has its own
         // current height state and should name the map without duplicating it.
+        if (map == wardogs::GameMap::sabatulo)
+            return wardogs::i18n::text(QStringLiteral("Сабатуло / Sabatulo"));
         if (map == wardogs::GameMap::training)
             return wardogs::i18n::text(QStringLiteral("Стрельбище"));
         if (map == wardogs::GameMap::other)
@@ -5081,7 +5089,7 @@ private:
         }
         if (!terrain_map_) {
             terrain_summary_->setText(wardogs::i18n::text(QStringLiteral("Карта подтверждена · без высот")));
-            terrain_summary_->setToolTip(game_map_name(current_game_map_) +
+            terrain_summary_->setToolTip(game_map_card_name(current_game_map_) +
                 wardogs::i18n::text(QStringLiteral(". Рельеф не учтён: высоты орудия и цели считаются равными.")));
             terrain_selector_->setToolTip(terrain_summary_->toolTip());
             return;
@@ -5213,7 +5221,7 @@ private:
                        (different_map ? wardogs::i18n::text(QStringLiteral(" · заново задайте орудие и цель"))
                                       : wardogs::i18n::text(QStringLiteral(" · SPH-2 учитывает перепад высоты"))));
         else
-            set_status(game_map_name(selected) + wardogs::i18n::text(QStringLiteral(" · рельеф не учтён")) +
+            set_status(game_map_card_name(selected) + wardogs::i18n::text(QStringLiteral(" · рельеф не учтён")) +
                        (had_data ? wardogs::i18n::text(QStringLiteral(" · прежние поправки сброшены"))
                                  : QString{}));
     }
